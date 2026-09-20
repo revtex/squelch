@@ -81,7 +81,7 @@ Packaged workflows live in `.claude/skills/` and are invoked as `/<name>`:
 
 **Server state & realtime.** All server data flows through a **single shared RTK Query `api` object** (`src/app/api.ts`); feature endpoints attach via `api.injectEndpoints`. WebSocket frames are parsed by the WS client + middleware and dispatched into Redux — **components never parse WS messages**. JWT access tokens live in **Redux memory only** (never localStorage/sessionStorage); the refresh token is an httpOnly cookie scoped to `/api`.
 
-**Two WebSocket channels:** `/ws` for listener call streaming, `/api/admin/ws` for live admin operations.
+**Two WebSocket channels:** `/api/v1/ws/listener` for listener call streaming, `/api/v1/ws/admin` for live admin operations — both JSON-object frames with a `type` discriminator (`backend/internal/ws/messages_v1.go`), and both what the frontend connects to (`src/shared/services/ws/client.ts`, `adminClient.ts`). The legacy `/ws`, `/api/ws` and `/api/admin/ws` aliases still serve the deprecated 3-letter array framing; don't build on them.
 
 **Two HTTP API surfaces.** The canonical surface is **`/api/v1/*`** (what the frontend uses — see `src/app/api.ts`). A **deprecated legacy `/api/*`** surface is kept only for rdio-scanner upload compatibility; it emits RFC 8594 `Deprecation`/`Sunset` headers via `middleware.Deprecated` (see `backend/internal/middleware/deprecation.go` + `v1.go`). New endpoints go on v1 only. The v1 error envelope is `{"error":{"code","message","details"}}` with stable string codes; legacy `{"error":"<string>"}` bodies are auto-rewritten by `middleware.V1ErrorEnvelope`. Silent token refresh is single-flighted through `refreshSession()` in `src/app/api.ts` — don't add a second refresh path.
 
