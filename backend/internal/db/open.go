@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +19,9 @@ import (
 // foreign keys, applies any pending embedded migrations, and returns the
 // *sql.DB ready for use.
 func Open(path string) (*sql.DB, error) {
+	if err := restrictFileModes(path); err != nil {
+		return nil, err
+	}
 	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 	sqlDB, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -34,6 +39,35 @@ func Open(path string) (*sql.DB, error) {
 	}
 
 	return sqlDB, nil
+}
+
+// restrictFileModes makes the database owner-only before it is opened. The
+// database holds secrets (the JWT signing key when no encryption key is set,
+// password hashes), so it must not inherit a world-readable umask default.
+// SQLite gives the -wal and -shm files the main file's mode when it creates
+// them; existing ones are tightened here too.
+func restrictFileModes(path string) error {
+	if runtime.GOOS == "windows" || path == "" || path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("open sqlite %q: %w", path, err)
+	}
+	_ = f.Close()
+	for _, name := range []string{path, path + "-wal", path + "-shm"} {
+		info, err := os.Stat(name)
+		if err != nil {
+			continue
+		}
+		if mode := info.Mode().Perm(); mode&0o077 != 0 {
+			if err := os.Chmod(name, mode&^0o077); err != nil {
+				return fmt.Errorf("restrict permissions on %q: %w", name, err)
+			}
+			slog.Info("db: restricted file permissions to owner only", "file", name, "was", mode.String())
+		}
+	}
+	return nil
 }
 
 // applyMigrations creates the schema_migrations tracking table if needed and

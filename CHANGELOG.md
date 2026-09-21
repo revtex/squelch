@@ -42,6 +42,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   They now return a clean 404. Client-side routes such as `/call/<token>`
   are unaffected.
 
+### Security
+
+- **Hardening from an internal security review.** Access checks, session
+  handling and file handling were tightened across the server. The changes
+  operators may notice:
+  - **System restrictions are applied everywhere.** Per-listener, per-API-key
+    and per-downstream system selections made in the admin UI now govern
+    every path that serves or accepts calls — search, transcripts, share
+    links, bookmarks, the audio stream, the live feed and the scanner's
+    system list. A listener restricted to some systems may see less than
+    before; an API key limited to some systems gets `403` when it uploads to
+    any other, and can no longer auto-create systems. Keys and users with no
+    selection are unaffected.
+  - **New `--trusted-proxies` / `SQUELCH_TRUSTED_PROXIES` option.**
+    `X-Forwarded-For` is honoured only from trusted proxies — by default
+    loopback and private addresses, which covers a reverse proxy on the same
+    host, LAN or Docker network. List your proxy if it connects from
+    anywhere else, or set `none` when Squelch faces clients directly.
+  - **`--admin-password` / `SQUELCH_ADMIN_PASSWORD` now resets the first
+    admin's password**, as documented, and signs that account out
+    everywhere. Remove it again after use.
+  - **The database and log file are created owner-only**, and existing ones
+    are tightened on startup. A backup job that reads the database as a
+    different user will need its permissions adjusted.
+  - After a restart, clients silently refresh their session once.
+  - Talkgroup selections are capped at 50,000 entries per list.
+
 ## [3.0.0] — 2026-09-19
 
 ### Fixed

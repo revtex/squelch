@@ -193,3 +193,65 @@ func TestSensitiveSettingKeys_Documented(t *testing.T) {
 		t.Errorf("SensitiveSettingKeys size = %d, want %d — if a new sensitive key was added, update this test", got, want)
 	}
 }
+
+// The JWT signing key lets its holder mint tokens for any user and outlives
+// the admin's own revocation, so no admin read path may return it.
+func TestConfigGetAndExport_OmitJWTSecret(t *testing.T) {
+	for _, encKey := range []string{"", "test-encryption-key"} {
+		ops, queries := newTestOperations(t, encKey)
+		ctx := context.Background()
+		const secret = "c2VjcmV0LXNpZ25pbmcta2V5LWRvLW5vdC1sZWFr"
+		if err := queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: auth.JWTSecretKeyName, Value: secret}); err != nil {
+			t.Fatal(err)
+		}
+		for name, op := range map[string]func(context.Context, json.RawMessage, int64) (any, error){
+			"config.get": ops.ConfigGet, "config.export": ops.ExportConfig,
+		} {
+			res, err := op(ctx, nil, 1)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			out, _ := json.Marshal(res)
+			if strings.Contains(string(out), secret) || strings.Contains(string(out), `"`+auth.JWTSecretKeyName+`"`) {
+				t.Errorf("%s (encKey=%q) returned the JWT secret", name, encKey)
+			}
+		}
+	}
+}
+
+type anonSink struct {
+	anonDisconnects int
+}
+
+func (s *anonSink) BroadcastAdminEvent(string, any) {}
+func (s *anonSink) BroadcastCFG(context.Context)    {}
+func (s *anonSink) DisconnectByUser(int64)          {}
+func (s *anonSink) ClientCount() int                { return 0 }
+func (s *anonSink) DisconnectAnonymous()            { s.anonDisconnects++ }
+
+// Turning public access off must drop the anonymous listeners it admitted.
+func TestConfigUpdate_PublicAccessOffDisconnectsAnonymous(t *testing.T) {
+	ops, _ := newTestOperations(t, "")
+	sink := &anonSink{}
+	ops.Events = sink
+	ctx := context.Background()
+
+	set := func(v string) {
+		t.Helper()
+		params, _ := json.Marshal(map[string]any{
+			"settings": []map[string]string{{"key": "publicAccess", "value": v}},
+		})
+		if _, err := ops.ConfigUpdate(ctx, params, 1); err != nil {
+			t.Fatalf("ConfigUpdate(%s): %v", v, err)
+		}
+	}
+
+	set("true")
+	if sink.anonDisconnects != 0 {
+		t.Fatalf("enabling public access disconnected anonymous listeners")
+	}
+	set("false")
+	if sink.anonDisconnects != 1 {
+		t.Fatalf("anonymous disconnects = %d after disabling public access, want 1", sink.anonDisconnects)
+	}
+}

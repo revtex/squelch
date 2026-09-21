@@ -50,16 +50,13 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 }
 
 const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
-DELETE FROM refresh_tokens WHERE expires_at < ? OR (revoked = 1 AND created_at < ?)
+DELETE FROM refresh_tokens WHERE expires_at < ?
 `
 
-type DeleteExpiredRefreshTokensParams struct {
-	ExpiresAt int64 `db:"expires_at" json:"expires_at"`
-	CreatedAt int64 `db:"created_at" json:"created_at"`
-}
-
-func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, arg DeleteExpiredRefreshTokensParams) error {
-	_, err := q.db.ExecContext(ctx, deleteExpiredRefreshTokens, arg.ExpiresAt, arg.CreatedAt)
+// Revoked rows are kept until they expire: they are the tombstones that let
+// a replayed, already-rotated token be detected as reuse.
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredRefreshTokens, expiresAt)
 	return err
 }
 

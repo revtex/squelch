@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -95,9 +96,21 @@ func TestParseGrants(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:    "invalid JSON",
-			input:   sql.NullString{Valid: true, String: "not-json"},
+			name:    "empty array",
+			input:   sql.NullString{Valid: true, String: "[]"},
 			wantNil: true,
+		},
+		{
+			// A corrupt grant must deny, not widen to all systems.
+			name:    "invalid JSON denies all",
+			input:   sql.NullString{Valid: true, String: "not-json"},
+			wantNil: false,
+		},
+		{
+			// The admin UI stores a flat array of system IDs.
+			name:    "flat id array",
+			input:   sql.NullString{Valid: true, String: "[2,3]"},
+			wantNil: false,
 		},
 		{
 			name:    "valid JSON",
@@ -739,7 +752,7 @@ func TestRunPusher_MatchingGrant_Pushed(t *testing.T) {
 		ApiKey: "k",
 		SystemsJson: sql.NullString{
 			Valid:  true,
-			String: fmt.Sprintf(`[{"id":%d,"talkgroups":[%d]}]`, event.SystemID, event.TalkgroupID),
+			String: fmt.Sprintf(`[{"id":%d,"talkgroups":[%d]}]`, event.System, event.Talkgroup),
 		},
 	}
 
@@ -793,7 +806,7 @@ func TestRunPusher_NonMatchingGrant_Skipped(t *testing.T) {
 		ApiKey: "k",
 		SystemsJson: sql.NullString{
 			Valid:  true,
-			String: `[{"id":999,"talkgroups":[888]}]`, // won't match event's SystemID=100
+			String: `[{"id":999,"talkgroups":[888]}]`, // won't match event's System=1
 		},
 	}
 
@@ -808,8 +821,8 @@ func TestRunPusher_NonMatchingGrant_Skipped(t *testing.T) {
 
 	// Send a second event (matching) to prove the pusher is alive and processing.
 	matchingEvent := sampleEvent()
-	matchingEvent.SystemID = 999
-	matchingEvent.TalkgroupID = 888
+	matchingEvent.System = 999
+	matchingEvent.Talkgroup = 888
 	matchingEvent.AudioPath = "2026/04/11/match.wav"
 	matchingEvent.AudioName = "match.wav"
 	writeTestAudio(t, tmpDir, matchingEvent.AudioPath)
@@ -856,5 +869,83 @@ func TestRunPusher_ContextCancellation_ExitsCleanly(t *testing.T) {
 		// OK — goroutine exited.
 	case <-time.After(3 * time.Second):
 		t.Fatal("runPusher did not exit after context cancellation")
+	}
+}
+
+// The admin UI stores a downstream's systems as a flat array of system
+// primary keys. A call on another system must not be forwarded.
+func TestRunPusher_FlatSystemsJSON_FiltersByDBID(t *testing.T) {
+	_, queries := newTestDB(t)
+	processor, tmpDir := newTestProcessor(t)
+
+	var mu sync.Mutex
+	var got []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := ""
+		if _, fh, err := r.FormFile("audio"); err == nil {
+			name = fh.Filename
+		}
+		mu.Lock()
+		got = append(got, name)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	svc := NewService(queries, processor, "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := make(chan CallEvent, 10)
+	ds := db.Downstream{
+		ID:          1,
+		Url:         ts.URL,
+		ApiKey:      "k",
+		SystemsJson: sql.NullString{Valid: true, String: "[1]"},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		svc.runPusher(ctx, ds, ch)
+	}()
+
+	// Other system: DB id 2, but radio id 1 — must not match on radio id.
+	other := sampleEvent()
+	other.System, other.SystemID = 2, 1
+	other.AudioPath, other.AudioName = "2026/04/11/other.wav", "other.wav"
+	writeTestAudio(t, tmpDir, other.AudioPath)
+	ch <- other
+
+	granted := sampleEvent()
+	granted.AudioPath, granted.AudioName = "2026/04/11/granted.wav", "granted.wav"
+	writeTestAudio(t, tmpDir, granted.AudioPath)
+	ch <- granted
+
+	// Pushes are processed in order, so once the granted call arrives the
+	// other system's call has already been either pushed or filtered.
+	deadline := time.After(5 * time.Second)
+	for {
+		mu.Lock()
+		done := slices.Contains(got, "granted.wav")
+		mu.Unlock()
+		if done {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for the granted push")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	cancel()
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.Contains(got, "other.wav") {
+		t.Fatalf("pushes = %v: call on an ungranted system was forwarded", got)
 	}
 }

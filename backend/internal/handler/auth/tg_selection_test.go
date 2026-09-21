@@ -171,3 +171,32 @@ func TestGetTGSelection_VersionStableAcrossReads(t *testing.T) {
 		t.Errorf("version changed without a write: %q then %q", first.Version, second.Version)
 	}
 }
+
+// Oversized selections are refused rather than stored.
+func TestPutTGSelection_RejectsOversizedSelections(t *testing.T) {
+	engine, _ := authFixture(t)
+	bearer := bearerAlice(t, engine)
+
+	tooMany := make([]int64, 50001)
+	for i := range tooMany {
+		tooMany[i] = int64(i)
+	}
+	if w := putTGSelection(t, engine, bearer, map[string]any{"disabledTGs": tooMany}); w.Code != http.StatusBadRequest {
+		t.Errorf("over-count selection: status = %d, want 400", w.Code)
+	}
+
+	huge := make([]int64, 200000)
+	for i := range huge {
+		huge[i] = 1_000_000_000 + int64(i)
+	}
+	if w := putTGSelection(t, engine, bearer, map[string]any{"disabledTGs": huge}); w.Code == http.StatusOK {
+		t.Errorf("body over 1 MiB was accepted")
+	}
+
+	if got := getTGSelection(t, engine, bearer); len(got.DisabledTGs) != 0 {
+		t.Errorf("rejected selections were stored: %d entries", len(got.DisabledTGs))
+	}
+	if w := putTGSelection(t, engine, bearer, map[string]any{"disabledTGs": []int64{1, 2}}); w.Code != http.StatusOK {
+		t.Errorf("normal selection: status = %d, want 200", w.Code)
+	}
+}

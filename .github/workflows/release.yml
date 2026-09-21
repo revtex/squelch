@@ -4,8 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+# Read-only by default; only the job that publishes the release can write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -27,6 +28,8 @@ jobs:
             goarch: amd64
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v5
         with:
@@ -42,7 +45,7 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@latest
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
       - name: Build frontend
         working-directory: frontend
@@ -191,6 +194,8 @@ jobs:
     name: Attach to release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:

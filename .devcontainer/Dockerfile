@@ -38,7 +38,7 @@ RUN curl -sSL "https://github.com/golang-migrate/migrate/releases/download/v${MI
 RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # swag (Swagger doc generator)
-RUN GOBIN=/usr/local/bin go install github.com/swaggo/swag/cmd/swag@latest
+RUN GOBIN=/usr/local/bin go install github.com/swaggo/swag/cmd/swag@v1.16.4
 
 # air (Go hot-reload)
 RUN GOBIN=/usr/local/bin go install github.com/air-verse/air@latest

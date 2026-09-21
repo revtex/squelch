@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/revtex/squelch/internal/audio"
+	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/downstream"
 	"github.com/revtex/squelch/internal/handler/shared"
@@ -51,6 +52,7 @@ import (
 //	@Success		200	{object}	object{id=int64}			"Call ingested successfully"
 //	@Failure		400	{object}	ErrorResponse			"Bad request"
 //	@Failure		401	{object}	ErrorResponse			"API key required"
+//	@Failure		403	{object}	ErrorResponse			"API key not permitted for this system"
 //	@Failure		429	{object}	ErrorResponse			"Rate limit exceeded"
 //	@Failure		500	{object}	ErrorResponse			"Internal server error"
 //	@Router			/call-upload [post]
@@ -267,12 +269,17 @@ func (h *Handler) PostCallUpload(c *gin.Context) {
 
 	// Resolve system by its radio system_id.
 	system, err := h.queries.GetSystemBySystemID(ctx, systemIDRaw)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		slog.Error("failed to query system", "system_id", systemIDRaw, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if !apiKeyMayUpload(c, err == nil, system.ID) {
+		slog.Warn("call-upload: system outside API key scope", "system_id", systemIDRaw)
+		c.JSON(http.StatusForbidden, gin.H{"error": "API key not permitted for this system"})
+		return
+	}
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			slog.Error("failed to query system", "system_id", systemIDRaw, "error", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-			return
-		}
 		if !autoPopulateSystems {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "system not found"})
 			return
@@ -801,4 +808,19 @@ func aggregateErrorSpikeCounts(raw string) (sql.NullInt64, sql.NullInt64) {
 	}
 	return sql.NullInt64{Int64: totalErrors, Valid: true},
 		sql.NullInt64{Int64: totalSpikes, Valid: true}
+}
+
+// apiKeyMayUpload reports whether the authenticated API key may upload to a
+// system. Unscoped keys may upload anywhere; a scoped key may upload only to
+// an existing system in its scope, so it can never auto-create one.
+func apiKeyMayUpload(c *gin.Context, systemExists bool, systemDBID int64) bool {
+	v, scoped := c.Get(auth.APIKeySystemsContextKey)
+	if !scoped {
+		return true
+	}
+	grants, _ := v.([]auth.SystemGrant)
+	if grants == nil {
+		grants = auth.DenyAllGrants()
+	}
+	return systemExists && auth.GrantsIncludeSystem(grants, systemDBID)
 }

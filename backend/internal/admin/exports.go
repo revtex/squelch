@@ -7,14 +7,22 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/revtex/squelch/internal/db"
 )
 
 // ExportConfig returns the full config (settings, systems, talkgroups, …)
 // shaped for import.go to round-trip.
 func (o *Operations) ExportConfig(ctx context.Context, _ json.RawMessage, _ int64) (any, error) {
-	settings, err := o.Queries.ListSettings(ctx)
+	allSettings, err := o.Queries.ListSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to export settings: %w", err)
+	}
+	settings := make([]db.Setting, 0, len(allSettings))
+	for _, s := range allSettings {
+		if !serverOnlySettingKeys[s.Key] {
+			settings = append(settings, s)
+		}
 	}
 	users, err := o.Queries.ListUsers(ctx)
 	if err != nil {

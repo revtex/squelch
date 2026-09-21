@@ -26,8 +26,8 @@ func TestCanReceive_NoGrants(t *testing.T) {
 	}
 
 	c2 := &Client{grants: []systemGrant{}}
-	if !c2.CanReceive(1, 100) {
-		t.Error("empty grants should allow all; CanReceive returned false")
+	if c2.CanReceive(1, 100) {
+		t.Error("empty non-nil grants (unparseable systems_json) should deny all; CanReceive returned true")
 	}
 }
 

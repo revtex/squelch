@@ -140,6 +140,14 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		return
 	}
 
+	// Reserve the attempt before any password check so a burst of parallel
+	// requests cannot outrun the lockout.
+	if !h.rateLimiter.TryBegin(ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many failed attempts, try again later"})
+		return
+	}
+	defer h.rateLimiter.End(ip)
+
 	user, err := h.queries.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		// Always run bcrypt to normalise response time and prevent username
@@ -734,6 +742,10 @@ func (h *Handler) GetTGSelection(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// maxTGSelectionEntries bounds each list in a stored talkgroup selection.
+// It sits well above any real system's talkgroup count.
+const maxTGSelectionEntries = 50000
+
 // PutTGSelection handles PUT /api/auth/tg-selection (JWT required).
 // Saves the list of talkgroup IDs the user wants disabled.
 //
@@ -760,6 +772,13 @@ func (h *Handler) PutTGSelection(c *gin.Context) {
 	var req tgSelectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	if len(req.DisabledTGs) > maxTGSelectionEntries || len(req.AvoidList) > maxTGSelectionEntries {
+		shared.WriteAPIError(c, http.StatusBadRequest, shared.CodeValidationFailed,
+			"talkgroup selection has too many entries",
+			map[string]any{"max": maxTGSelectionEntries})
 		return
 	}
 

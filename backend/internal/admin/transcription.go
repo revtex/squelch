@@ -9,7 +9,15 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/revtex/squelch/internal/safehttp"
 )
+
+// transcriptionHTTP talks to go-whisper for the admin transcription
+// operations. Like the transcription worker, it goes through safehttp so
+// SQUELCH_BLOCK_INTERNAL_HTTP and the no-redirect policy apply here too.
+// Each call bounds itself with a context deadline.
+var transcriptionHTTP = safehttp.Client(0)
 
 // transcriptionBaseURL reads the transcriptionUrl setting from DB.
 func (o *Operations) transcriptionBaseURL(ctx context.Context) (string, error) {
@@ -54,7 +62,7 @@ func (o *Operations) TranscriptionStatus(ctx context.Context, _ json.RawMessage,
 		defer cancel()
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, trimmed+"/api/whisper/model", nil)
 		if err == nil {
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := transcriptionHTTP.Do(req)
 			if err == nil {
 				resp.Body.Close()
 				connected = resp.StatusCode >= 200 && resp.StatusCode < 400
@@ -88,7 +96,7 @@ func (o *Operations) TranscriptionModels(ctx context.Context, _ json.RawMessage,
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := transcriptionHTTP.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("go-whisper unreachable: %w", err)
 	}
@@ -151,7 +159,7 @@ func (o *Operations) TranscriptionDownload(ctx context.Context, params json.RawM
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := transcriptionHTTP.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("go-whisper unreachable: %w", err)
 	}
@@ -206,7 +214,7 @@ func (o *Operations) TranscriptionDelete(ctx context.Context, params json.RawMes
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := transcriptionHTTP.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("go-whisper unreachable: %w", err)
 	}

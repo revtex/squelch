@@ -139,10 +139,10 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	authRequired.Use(middleware.JWTAuth())
 	{
 		authRequired.POST("/logout", dep("/api/v1/auth/logout"), middleware.MaxBodySize(1<<20), authH.PostLogout)
-		authRequired.PUT("/password", dep("/api/v1/auth/password"), authH.PutPassword)
+		authRequired.PUT("/password", dep("/api/v1/auth/password"), middleware.MaxBodySize(1<<20), authH.PutPassword)
 		authRequired.GET("/me", dep("/api/v1/auth/me"), authH.GetMe)
 		authRequired.GET("/tg-selection", dep("/api/v1/listener/tg-selection"), authH.GetTGSelection)
-		authRequired.PUT("/tg-selection", dep("/api/v1/listener/tg-selection"), authH.PutTGSelection)
+		authRequired.PUT("/tg-selection", dep("/api/v1/listener/tg-selection"), middleware.MaxBodySize(1<<20), authH.PutTGSelection)
 	}
 
 	// Call search — public access with optional auth for bookmarks.
@@ -264,12 +264,12 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	v1Auth.Use(middleware.JWTAuth())
 	{
 		v1Auth.POST("/auth/logout", middleware.MaxBodySize(1<<20), authH.PostLogout)
-		v1Auth.PUT("/auth/password", authH.PutPassword)
+		v1Auth.PUT("/auth/password", middleware.MaxBodySize(1<<20), authH.PutPassword)
 		v1Auth.GET("/auth/me", authH.GetMe)
 		// /api/auth/tg-selection is renamed to /api/v1/listener/tg-selection
 		// per plan §4.1; the handler body is reused unchanged.
 		v1Auth.GET("/listener/tg-selection", authH.GetTGSelection)
-		v1Auth.PUT("/listener/tg-selection", authH.PutTGSelection)
+		v1Auth.PUT("/listener/tg-selection", middleware.MaxBodySize(1<<20), authH.PutTGSelection)
 		v1Auth.POST("/calls/:id/share", shareHandler.PostShareCall)
 		v1Auth.DELETE("/calls/:id/share", shareHandler.DeleteShareCall)
 		v1Auth.GET("/calls/:id/share", shareHandler.GetCallShare)

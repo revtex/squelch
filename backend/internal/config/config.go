@@ -33,6 +33,7 @@ type Config struct {
 	EncryptionKeyFile string // Path to file containing encryption key
 	AdminPassword     string // Reset first admin user's password on startup
 	Timezone          string // IANA timezone for recorder timestamps (default: TZ env or "UTC")
+	TrustedProxies    string // Comma-separated proxy IPs/CIDRs whose X-Forwarded-For is honoured; "none" disables
 	ConfigFile        string // Path to JSON config file (default "squelch.json")
 	ConfigSave        bool   // Write current flags to JSON config file and exit
 	ShowVersion       bool   // Print version and exit
@@ -51,6 +52,8 @@ type jsonFileConfig struct {
 	SSLKey        string `json:"ssl_key_file"`
 	SSLAutoCert   string `json:"ssl_auto_cert"`
 	Timezone      string `json:"timezone"`
+	// TrustedProxies is a comma-separated list; see Config.TrustedProxies.
+	TrustedProxies string `json:"trusted_proxies,omitempty"`
 
 	// LegacyEncryptionKey captures the deprecated "encryption_key" field to
 	// detect and refuse startup on legacy config files that leaked the key to disk.
@@ -80,6 +83,7 @@ func Load() (*Config, error) {
 	flag.StringVar(&cfg.EncryptionKeyFile, "encryption-key-file", "", "Path to file containing encryption key")
 	flag.StringVar(&cfg.AdminPassword, "admin-password", "", "Reset first admin user's password on startup")
 	flag.StringVar(&cfg.Timezone, "timezone", "", "IANA timezone for recorder timestamps (e.g. America/New_York)")
+	flag.StringVar(&cfg.TrustedProxies, "trusted-proxies", "", "Comma-separated proxy IPs/CIDRs allowed to set X-Forwarded-For (default: loopback and private ranges; \"none\" to disable)")
 	flag.StringVar(&cfg.ConfigFile, "config", "squelch.json", "Path to JSON config file")
 	flag.BoolVar(&cfg.ConfigSave, "config-save", false, "Write current flags to JSON config file and exit")
 	flag.BoolVar(&cfg.ShowVersion, "version", false, "Print version and exit")
@@ -155,6 +159,9 @@ func loadJSON(cfg *Config) {
 	if v := fileCfg.Timezone; v != "" {
 		cfg.Timezone = v
 	}
+	if v := fileCfg.TrustedProxies; v != "" {
+		cfg.TrustedProxies = v
+	}
 }
 
 // applyEnv applies environment variable overrides.
@@ -188,6 +195,9 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SQUELCH_ADMIN_PASSWORD"); v != "" {
 		cfg.AdminPassword = v
+	}
+	if v := os.Getenv("SQUELCH_TRUSTED_PROXIES"); v != "" {
+		cfg.TrustedProxies = v
 	}
 	if v := os.Getenv("SQUELCH_TIMEZONE"); v != "" {
 		cfg.Timezone = v
@@ -232,6 +242,39 @@ func restoreExplicitFlags(cfg *Config, explicit map[string]string) {
 	if v, ok := explicit["timezone"]; ok {
 		cfg.Timezone = v
 	}
+	if v, ok := explicit["trusted-proxies"]; ok {
+		cfg.TrustedProxies = v
+	}
+}
+
+// DefaultTrustedProxies are the peers whose X-Forwarded-For is honoured when
+// no list is configured: loopback and private ranges, which covers a reverse
+// proxy on the same host, LAN, or container network. A client connecting
+// directly from a public address can never choose its own client IP.
+var DefaultTrustedProxies = []string{
+	"127.0.0.0/8", "::1/128",
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"fc00::/7",
+}
+
+// TrustedProxyList returns the proxies to pass to gin's SetTrustedProxies.
+// An empty setting yields DefaultTrustedProxies; "none" yields nil, so the
+// client IP is always the TCP peer.
+func (c *Config) TrustedProxyList() []string {
+	v := strings.TrimSpace(c.TrustedProxies)
+	switch strings.ToLower(v) {
+	case "":
+		return DefaultTrustedProxies
+	case "none":
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // SaveJSON writes the current configuration to the JSON config file.
@@ -246,6 +289,8 @@ func (c *Config) SaveJSON() error {
 		SSLKey:        c.SSLKey,
 		SSLAutoCert:   c.SSLAutoCert,
 		Timezone:      c.Timezone,
+
+		TrustedProxies: c.TrustedProxies,
 	}
 
 	data, err := json.MarshalIndent(fileCfg, "", "  ")
@@ -367,6 +412,8 @@ Server Flags:
   --db-file <path>        SQLite database file path (default "squelch.db")
   --recordings-dir <dir>  Directory for call audio recordings
   --timezone <tz>         IANA timezone (e.g. America/New_York)
+  --trusted-proxies <list> Proxy IPs/CIDRs allowed to set X-Forwarded-For
+                          (default: loopback + private ranges; "none" = off)
   --config <path>         Path to JSON config file (default "squelch.json")
   --config-save           Write current flags to JSON config file and exit
   --version               Print version and exit
@@ -401,6 +448,7 @@ Environment Variables:
   SQUELCH_ENCRYPTION_KEY_FILE  Equivalent to --encryption-key-file
   SQUELCH_ADMIN_PASSWORD  Equivalent to --admin-password
   SQUELCH_TIMEZONE        Equivalent to --timezone
+  SQUELCH_TRUSTED_PROXIES Equivalent to --trusted-proxies
   SQUELCH_SERVER          Server URL for CLI commands
   TZ                          Fallback timezone
 

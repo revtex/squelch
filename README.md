@@ -214,6 +214,7 @@ from the command line, environment, or a JSON config file:
 | `--encryption-key` | `SQUELCH_ENCRYPTION_KEY` | Key for encrypting secrets at rest |
 | `--encryption-key-file` | `SQUELCH_ENCRYPTION_KEY_FILE` | Read that key from a file instead |
 | `--timezone` | `SQUELCH_TIMEZONE` / `TZ` | IANA timezone for recorder timestamps |
+| `--trusted-proxies` | `SQUELCH_TRUSTED_PROXIES` | Proxies allowed to set `X-Forwarded-For` (default: loopback and private ranges; `none` to disable) |
 
 The full reference is in the
 [Deployment Guide](docs/deployment-guide.md#configuration-reference).

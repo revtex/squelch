@@ -36,7 +36,9 @@ type Querier interface {
 	DeleteCallBatch(ctx context.Context, id int64) error
 	DeleteDirMonitor(ctx context.Context, id int64) error
 	DeleteDownstream(ctx context.Context, id int64) error
-	DeleteExpiredRefreshTokens(ctx context.Context, arg DeleteExpiredRefreshTokensParams) error
+	// Revoked rows are kept until they expire: they are the tombstones that let
+	// a replayed, already-rotated token be detected as reuse.
+	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error
 	DeleteGroup(ctx context.Context, id int64) error
 	DeleteSharedLink(ctx context.Context, id int64) error
 	DeleteSharedLinkByCallID(ctx context.Context, callID int64) error

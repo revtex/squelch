@@ -36,11 +36,18 @@ import (
 //	@Param			transcript		query	string	false	"Filter by transcript text (partial match)"
 //	@Success		200	{object}	CallSearchResponse	"Paginated call results"
 //	@Failure		400	{object}	ErrorResponse		"Invalid query parameter"
+//	@Failure		401	{object}	ErrorResponse		"Authentication required (publicAccess disabled)"
 //	@Failure		500	{object}	ErrorResponse		"Internal server error"
 //	@Router			/calls [get]
 //	@Router			/v1/calls [get]
 func (h *Handler) GetCalls(c *gin.Context) {
 	ctx := c.Request.Context()
+
+	// Anonymous search is allowed only in public-access mode, the same rule
+	// as call audio and transcripts.
+	if !shared.RequireUserOrPublicAccess(c, h.queries) {
+		return
+	}
 
 	parseCSVInt64 := func(raw string) ([]int64, error) {
 		if strings.TrimSpace(raw) == "" {

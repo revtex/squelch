@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -173,5 +174,23 @@ func TestSaveJSON_RoundTrip(t *testing.T) {
 	}
 	if parsed["timezone"] != "America/New_York" {
 		t.Errorf("timezone not persisted; got %v", parsed["timezone"])
+	}
+}
+
+func TestTrustedProxyList(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", config.DefaultTrustedProxies},
+		{"none", nil},
+		{" NONE ", nil},
+		{"10.1.2.3, 172.18.0.0/16", []string{"10.1.2.3", "172.18.0.0/16"}},
+	}
+	for _, tc := range cases {
+		got := (&config.Config{TrustedProxies: tc.in}).TrustedProxyList()
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("TrustedProxyList(%q) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
 }

@@ -29,7 +29,7 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			c.AbortWithStatusJSON(401, gin.H{"error": "token has been revoked"})
 			return
 		}
@@ -67,7 +67,7 @@ func OptionalJWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			c.Next()
 			return
 		}
@@ -99,7 +99,7 @@ func applyClaimsToContext(c *gin.Context, claims *auth.Claims) {
 // checks as JWTAuth/OptionalJWTAuth. Returns true when the token can be used
 // to identify the user.
 func claimsValid(claims *auth.Claims) bool {
-	if auth.Tokens.IsRevoked(claims.ID) {
+	if auth.Tokens.Rejects(claims) {
 		return false
 	}
 	if claims.AccountExp > 0 && time.Now().Unix() > claims.AccountExp {
@@ -285,6 +285,11 @@ func APIKeyAuth(queries *db.Queries) gin.HandlerFunc {
 		}
 
 		c.Set("apiKeyID", apiKey.ID)
+		// A scoped key may only upload to its listed systems. An unparseable
+		// scope yields an empty (deny-all) list rather than no restriction.
+		if grants := auth.ParseSystemGrants(apiKey.SystemsJson); grants != nil {
+			c.Set(auth.APIKeySystemsContextKey, grants)
+		}
 		if apiKey.Ident.Valid {
 			c.Set("apiKeyIdent", apiKey.Ident.String)
 		}

@@ -345,6 +345,23 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 		}
 	}
 
+	// Security: the parser may have picked companion files (the audio next to
+	// a sidecar, or the sidecar next to audio) that were not the triggering
+	// path. Each must resolve inside the watched directory too, or a symlink
+	// dropped next to a sidecar could publish any readable file as a call.
+	for _, p := range []string{parsed.AudioFilePath, parsed.SidecarPath} {
+		if p == "" {
+			continue
+		}
+		f, err := openWithinDir(dw.Directory, p)
+		if err != nil {
+			slog.Warn("dirmonitor: companion file outside watched directory, rejected",
+				"id", dw.ID, "file", p, "error", err)
+			return
+		}
+		_ = f.Close()
+	}
+
 	// File size validation: reject files smaller than a valid audio header
 	// (44 bytes is the minimum WAV header size).
 	const minAudioBytes = 44
@@ -580,7 +597,12 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 	convPreset := audio.ParseEncodingPreset(getSetting("audioEncodingPreset"))
 
 	// ── Store audio ─────────────────────────────────────────────────────────────────────────
-	relPath, err := s.processor.StoreFile(ctx, parsed.AudioFilePath, convMode, convPreset)
+	audioFile, err := openWithinDir(dw.Directory, parsed.AudioFilePath)
+	if err != nil {
+		return fmt.Errorf("open audio: %w", err)
+	}
+	defer audioFile.Close()
+	relPath, err := s.processor.StoreReader(ctx, audioFile, filepath.Base(parsed.AudioFilePath), convMode, convPreset)
 	if err != nil {
 		return fmt.Errorf("store audio: %w", err)
 	}
@@ -946,4 +968,37 @@ func upsertUnitsFromSources(ctx context.Context, q *db.Queries, systemDBID int64
 				"unit_id", int64(srcFloat), "tag", tag, "error", err)
 		}
 	}
+}
+
+// openWithinDir opens path for reading only if it is a regular file that
+// resolves inside dir. Symlinks are resolved first and the resolved path is
+// opened through os.Root, so a file swapped for an escaping symlink after
+// the check is still refused.
+func openWithinDir(dir, path string) (*os.File, error) {
+	base, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		return nil, err
+	}
+	real, err := filepath.EvalSymlinks(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+	rel, err := filepath.Rel(base, real)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return nil, fmt.Errorf("%s resolves outside %s", path, dir)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	f, err := root.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("%s is not a regular file", path)
+	}
+	return f, nil
 }

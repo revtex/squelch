@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -52,11 +51,10 @@ type CallEvent struct {
 	TalkerAlias    string // DMR/P25 talker alias
 }
 
-// systemGrant describes which talkgroups are permitted for a given radio system.
-type systemGrant struct {
-	ID         int64   `json:"id"`
-	Talkgroups []int64 `json:"talkgroups"`
-}
+// systemGrant describes which talkgroups are permitted for a system. IDs are
+// database primary keys (systems.id / talkgroups.id), matching what the admin
+// UI and config import store.
+type systemGrant = auth.SystemGrant
 
 // pusherEntry pairs a downstream config with its dedicated event channel.
 type pusherEntry struct {
@@ -183,7 +181,7 @@ func (s *Service) runPusher(ctx context.Context, ds db.Downstream, ch <-chan Cal
 			slog.Info("downstream: pusher stopped", "id", ds.ID)
 			return
 		case event := <-ch:
-			if !isGranted(grants, event.SystemID, event.TalkgroupID) {
+			if !isGranted(grants, event.System, event.Talkgroup) {
 				slog.Debug("downstream: call filtered by grants",
 					"downstream_id", ds.ID, "call_id", event.CallID,
 					"system", event.SystemID, "talkgroup", event.TalkgroupID)
@@ -195,40 +193,17 @@ func (s *Service) runPusher(ctx context.Context, ds db.Downstream, ch <-chan Cal
 	}
 }
 
-// parseGrants decodes the systems_json column into a grant list.
-// Returns nil if the column is NULL or empty, meaning all calls pass.
+// parseGrants decodes the systems_json column into a grant list. It returns
+// nil (all calls pass) only for NULL, blank or empty; an unparseable value
+// yields a deny-all list.
 func parseGrants(sj sql.NullString) []systemGrant {
-	if !sj.Valid || strings.TrimSpace(sj.String) == "" {
-		return nil
-	}
-	var grants []systemGrant
-	if err := json.Unmarshal([]byte(sj.String), &grants); err != nil {
-		slog.Error("downstream: failed to parse systems_json", "error", err)
-		return nil
-	}
-	return grants
+	return auth.ParseSystemGrants(sj)
 }
 
-// isGranted checks whether a call matches the grant filter.
-// A nil grant list means everything is allowed.
+// isGranted checks whether a call matches the grant filter. systemID and
+// talkgroupID are database primary keys.
 func isGranted(grants []systemGrant, systemID, talkgroupID int64) bool {
-	if grants == nil {
-		return true
-	}
-	for _, g := range grants {
-		if g.ID != systemID {
-			continue
-		}
-		if len(g.Talkgroups) == 0 {
-			return true
-		}
-		for _, tg := range g.Talkgroups {
-			if tg == talkgroupID {
-				return true
-			}
-		}
-	}
-	return false
+	return auth.HasSystemAccess(grants, systemID, talkgroupID)
 }
 
 const maxRetries = 5

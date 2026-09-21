@@ -50,17 +50,14 @@ const (
 )
 
 // systemGrant represents a system-level grant with optional talkgroup filtering.
-type systemGrant struct {
-	ID         int64   `json:"id"`
-	Talkgroups []int64 `json:"talkgroups,omitempty"`
-}
+type systemGrant = auth.SystemGrant
 
 // Client represents a single WebSocket connection.
 type Client struct {
 	hub     *Hub
 	conn    *websocket.Conn
 	send    chan []byte
-	grants  []systemGrant // nil/empty = receive all
+	grants  []systemGrant // nil = receive all; empty non-nil = receive nothing
 	isAdmin bool
 	userID  int64
 	jti     string      // JWT token ID, for single-session disconnect
@@ -134,39 +131,15 @@ func (c *Client) encodeSessionExpired() []byte {
 }
 
 // CanReceive reports whether this client is authorized to receive a call for
-// the given system and talkgroup. If grants is nil/empty, everything is allowed.
+// the given system and talkgroup. Nil grants allow everything; an empty
+// non-nil list (unparseable systems_json) allows nothing.
 func (c *Client) CanReceive(systemID, talkgroupID int64) bool {
-	if len(c.grants) == 0 {
-		return true
-	}
-	for _, g := range c.grants {
-		if g.ID != systemID {
-			continue
-		}
-		// No TG filter → all TGs in this system.
-		if len(g.Talkgroups) == 0 {
-			return true
-		}
-		for _, tg := range g.Talkgroups {
-			if tg == talkgroupID {
-				return true
-			}
-		}
-	}
-	return false
+	return auth.HasSystemAccess(c.grants, systemID, talkgroupID)
 }
 
 // parseGrants parses systems_json into a slice of systemGrant.
 func parseGrants(systemsJSON sql.NullString) []systemGrant {
-	if !systemsJSON.Valid || systemsJSON.String == "" {
-		return nil
-	}
-	var grants []systemGrant
-	if err := json.Unmarshal([]byte(systemsJSON.String), &grants); err != nil {
-		slog.Warn("ws: failed to parse systems_json", "error", err)
-		return nil
-	}
-	return grants
+	return auth.ParseSystemGrants(systemsJSON)
 }
 
 func wsAcceptOptions(r *http.Request) *websocket.AcceptOptions {
@@ -265,7 +238,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 		if publicAccess {
 			slog.Debug("ws: listener authenticated via public access")
 			// Public access — no auth required, receive all.
-			if err := sendWelcome(ctx, conn, hub, queries, isV1); err != nil {
+			if err := sendWelcome(ctx, conn, hub, queries, nil, isV1); err != nil {
 				slog.Error("ws: failed to send welcome", "error", err)
 				conn.Close(websocket.StatusInternalError, "")
 				return
@@ -303,7 +276,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
 		}
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			slog.Info("ws: revoked JWT on listener WS", "jti", claims.ID)
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
@@ -340,7 +313,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 		client.grants = parseGrants(user.SystemsJson)
 		slog.Debug("ws: listener authenticated via jwt", "user_id", user.ID, "grants", len(client.grants), "v1", isV1)
 
-		if err := sendWelcome(ctx, conn, hub, queries, isV1); err != nil {
+		if err := sendWelcome(ctx, conn, hub, queries, client.grants, isV1); err != nil {
 			slog.Error("ws: failed to send welcome", "error", err)
 			conn.Close(websocket.StatusInternalError, "")
 			return
@@ -433,7 +406,7 @@ func handleAdminWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc {
 		}
 
 		claims, err := auth.ParseToken(tokenStr)
-		if err != nil || auth.Tokens.IsRevoked(claims.ID) {
+		if err != nil || auth.Tokens.Rejects(claims) {
 			slog.Info("ws: invalid or revoked JWT on admin WS")
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
@@ -819,7 +792,8 @@ func sendExpiredAndClose(ctx context.Context, conn *websocket.Conn, isV1 bool) {
 
 // sendWelcome sends the post-auth welcome frames (legacy VER+CFG, native
 // connection.welcome + scanner.config) on the given connection.
-func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *db.Queries, isV1 bool) error {
+// grants scopes the systems and talkgroups in the config; nil sends all.
+func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *db.Queries, grants []systemGrant, isV1 bool) error {
 	slog.Debug("ws: sending welcome", "v1", isV1)
 	branding := ""
 	if s, err := queries.GetSetting(ctx, "branding"); err == nil {
@@ -844,7 +818,7 @@ func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *d
 		return err
 	}
 
-	legacyCFG, v1CFG, err := buildCFGFrames(ctx, queries)
+	legacyCFG, v1CFG, err := buildCFGFrames(ctx, queries, grants)
 	if err != nil {
 		return err
 	}
@@ -854,11 +828,25 @@ func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *d
 	return conn.Write(ctx, websocket.MessageText, legacyCFG)
 }
 
+// systemInGrants reports whether any grant covers systemID. Nil grants cover
+// every system.
+func systemInGrants(grants []systemGrant, systemID int64) bool {
+	if grants == nil {
+		return true
+	}
+	for _, g := range grants {
+		if g.ID == systemID {
+			return true
+		}
+	}
+	return false
+}
+
 // buildCFGFrames returns the legacy and native (v1) CFG frames for the
 // current database state. Both frames carry the same config payload, only
 // the wire envelope differs.
-func buildCFGFrames(ctx context.Context, queries *db.Queries) (legacy, v1 []byte, err error) {
-	payload, err := buildCFGPayload(ctx, queries)
+func buildCFGFrames(ctx context.Context, queries *db.Queries, grants []systemGrant) (legacy, v1 []byte, err error) {
+	payload, err := buildCFGPayload(ctx, queries, grants)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -875,7 +863,8 @@ func buildCFGFrames(ctx context.Context, queries *db.Queries) (legacy, v1 []byte
 
 // buildCFGPayload constructs the CFG payload (without any framing) from
 // the current database state (systems, talkgroups, groups, tags, settings).
-func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, error) {
+// Systems and talkgroups outside grants are left out; nil grants include all.
+func buildCFGPayload(ctx context.Context, queries *db.Queries, grants []systemGrant) (map[string]any, error) {
 	// Resolve group and tag labels first so talkgroups carry string labels,
 	// matching the TalkgroupConfig type expected by the frontend.
 	groups, _ := queries.ListGroups(ctx)
@@ -913,6 +902,9 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, 
 	}
 	sysCfgs := []sysCfg{} // never nil — serialises as [] not null
 	for _, s := range systems {
+		if !systemInGrants(grants, s.ID) {
+			continue
+		}
 		sc := sysCfg{ID: s.ID, SystemID: s.SystemID, Label: s.Label, Talkgroups: []tgCfg{}}
 		if s.Led.Valid {
 			sc.LedColor = s.Led.String
@@ -922,6 +914,9 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, 
 			return nil, err
 		}
 		for _, tg := range tgs {
+			if !auth.HasSystemAccess(grants, s.ID, tg.ID) {
+				continue
+			}
 			t := tgCfg{ID: tg.ID, TalkgroupID: tg.TalkgroupID}
 			if tg.Label.Valid {
 				t.Label = tg.Label.String

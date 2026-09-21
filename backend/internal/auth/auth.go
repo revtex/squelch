@@ -270,6 +270,7 @@ type TokenTracker struct {
 	MaxTokens  int
 	userTokens map[int64][]tokenEntry
 	denied     map[string]time.Time // JTI → expiry time
+	validFrom  int64                // unix seconds; tokens issued earlier are rejected
 }
 
 type tokenEntry struct {
@@ -284,6 +285,7 @@ func NewTokenTracker() *TokenTracker {
 		MaxTokens:  MaxRefreshFamilies,
 		userTokens: make(map[int64][]tokenEntry),
 		denied:     make(map[string]time.Time),
+		validFrom:  time.Now().Unix(),
 	}
 }
 
@@ -322,6 +324,20 @@ func (tt *TokenTracker) IsRevoked(jti string) bool {
 	}
 	slog.Debug("auth: revocation check", "jti", jti, "revoked", true)
 	return true
+}
+
+// Rejects reports whether an access token must not be honoured: its JTI was
+// revoked, or it was issued before this tracker (and so this process)
+// started. Revocations live only in memory, so without the second rule a
+// token from an earlier run would survive a disable, demotion, deletion,
+// password change or logout that straddled a restart. Clients recover by
+// refreshing, and refresh re-checks the account in the database.
+func (tt *TokenTracker) Rejects(claims *Claims) bool {
+	if claims.IssuedAt == nil || claims.IssuedAt.Unix() < tt.validFrom {
+		slog.Debug("auth: token predates this process", "jti", claims.ID)
+		return true
+	}
+	return tt.IsRevoked(claims.ID)
 }
 
 // Revoke adds a single JTI to the deny list with an AccessTokenExpiry expiry.

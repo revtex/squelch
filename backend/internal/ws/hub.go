@@ -3,6 +3,7 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -51,6 +52,17 @@ type Hub struct {
 	// path having to know about it. Never nil-checked by callers; see
 	// notifyCall.
 	callNotifier func(context.Context, int64)
+
+	// sessionRevoker, when set, ends non-WebSocket sessions (the
+	// continuous audio stream) whenever the hub disconnects a user or a
+	// token, so every revocation path covers both transports.
+	sessionRevoker SessionRevoker
+}
+
+// SessionRevoker ends live sessions that are not WebSocket clients.
+type SessionRevoker interface {
+	DisconnectUser(userID int64)
+	DisconnectJTI(jti string)
 }
 
 const lscDebounceDuration = 3 * time.Second
@@ -197,6 +209,12 @@ func (h *Hub) SendStreamCue(userID int64, sid string, callID int64, offset float
 	})
 }
 
+// SetSessionRevoker registers a revoker that DisconnectByUser and
+// DisconnectByJTI also call. Set once at startup.
+func (h *Hub) SetSessionRevoker(r SessionRevoker) {
+	h.sessionRevoker = r
+}
+
 // SetCallNotifier registers a sink for newly ingested calls. Safe to leave
 // unset, in which case new calls are only fanned out over WebSocket.
 func (h *Hub) SetCallNotifier(fn func(context.Context, int64)) {
@@ -236,12 +254,43 @@ func (h *Hub) BroadcastCFG(ctx context.Context) {
 		return
 	}
 	slog.Debug("ws: rebuilding and broadcasting CFG")
-	legacy, v1, err := buildCFGFrames(ctx, h.queries)
+	legacy, v1, err := buildCFGFrames(ctx, h.queries, nil)
 	if err != nil {
 		slog.Error("ws: failed to build CFG for broadcast", "error", err)
 		return
 	}
-	h.broadcastBoth(legacy, v1, nil)
+	h.broadcastBoth(legacy, v1, func(c *Client) bool { return c.grants == nil })
+
+	// Grant-restricted clients get a config scoped to their grants, built
+	// once per distinct grant set.
+	h.mu.RLock()
+	var restricted []*Client
+	for c := range h.clients {
+		if c.grants != nil {
+			restricted = append(restricted, c)
+		}
+	}
+	h.mu.RUnlock()
+	type frames struct{ legacy, v1 []byte }
+	built := make(map[string]frames)
+	for _, c := range restricted {
+		key := fmt.Sprint(c.grants)
+		f, ok := built[key]
+		if !ok {
+			l, v, err := buildCFGFrames(ctx, h.queries, c.grants)
+			if err != nil {
+				slog.Error("ws: failed to build scoped CFG", "user_id", c.userID, "error", err)
+				continue
+			}
+			f = frames{l, v}
+			built[key] = f
+		}
+		if c.isV1() {
+			c.trySend(f.v1)
+		} else {
+			c.trySend(f.legacy)
+		}
+	}
 	slog.Debug("ws: cfg broadcast complete", "clients", h.ClientCount())
 }
 
@@ -263,12 +312,14 @@ func (h *Hub) BroadcastAdminEvent(topic string, data any) {
 }
 
 // BroadcastTRN sends a transcript-ready message (legacy TRN / native
-// call.transcript) to all connected listener clients in both wire formats.
-// segments may be nil when diarization is disabled.
-func (h *Hub) BroadcastTRN(callID int64, text string, segments any) {
+// call.transcript) to the clients allowed to receive the call — the same
+// grant rule as its call.new. systemID and talkgroupID are the call's
+// database ids. segments may be nil when diarization is disabled.
+func (h *Hub) BroadcastTRN(callID, systemID, talkgroupID int64, text string, segments any) {
 	if h == nil {
 		return
 	}
+	filter := func(c *Client) bool { return c.CanReceive(systemID, talkgroupID) }
 	legacy, err := NewTRNMessage(callID, text, segments)
 	if err != nil {
 		slog.Error("ws: failed to build TRN message", "call_id", callID, "error", err)
@@ -277,10 +328,10 @@ func (h *Hub) BroadcastTRN(callID int64, text string, segments any) {
 	v1, err := NewCallTranscriptV1(callID, text, segments)
 	if err != nil {
 		slog.Error("ws: failed to build native call.transcript", "call_id", callID, "error", err)
-		h.Broadcast(legacy, nil)
+		h.Broadcast(legacy, filter)
 		return
 	}
-	h.broadcastBoth(legacy, v1, nil)
+	h.broadcastBoth(legacy, v1, filter)
 }
 
 // ClientCount returns the number of non-admin (listener) clients.
@@ -329,6 +380,9 @@ func (h *Hub) countByUser(userID int64) int {
 // DisconnectByUser closes all WS connections for the given user ID.
 // Sends an XPR message before closing so the client knows to re-authenticate.
 func (h *Hub) DisconnectByUser(userID int64) {
+	if h.sessionRevoker != nil {
+		h.sessionRevoker.DisconnectUser(userID)
+	}
 	h.mu.RLock()
 	var targets []*Client
 	for c := range h.clients {
@@ -345,8 +399,33 @@ func (h *Hub) DisconnectByUser(userID int64) {
 	}
 }
 
+// DisconnectAnonymous closes every unauthenticated listener connection. It is
+// called when public access is turned off: those clients were admitted only
+// because of it and are otherwise never re-checked.
+func (h *Hub) DisconnectAnonymous() {
+	h.mu.RLock()
+	var targets []*Client
+	for c := range h.clients {
+		if c.userID == 0 && !c.isAdmin {
+			targets = append(targets, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range targets {
+		c.trySend(c.encodeSessionExpired())
+		h.Unregister(c)
+	}
+	if len(targets) > 0 {
+		slog.Info("ws: disconnected anonymous listeners after public access was disabled", "count", len(targets))
+	}
+}
+
 // DisconnectByJTI closes the WS connection associated with the given JWT ID.
 func (h *Hub) DisconnectByJTI(jti string) {
+	if h.sessionRevoker != nil && jti != "" {
+		h.sessionRevoker.DisconnectJTI(jti)
+	}
 	h.mu.RLock()
 	var target *Client
 	for c := range h.clients {

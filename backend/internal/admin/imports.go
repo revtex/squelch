@@ -377,6 +377,7 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 	} {
 		o.broadcastAdminEvent(topic, nil)
 	}
+	o.enforcePublicAccess(ctx)
 	o.broadcastCFG(ctx)
 
 	slog.Info("config imported successfully via WS",

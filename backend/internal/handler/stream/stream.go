@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/handler/shared"
 	streamsvc "github.com/revtex/squelch/internal/stream"
@@ -29,7 +30,6 @@ import (
 // back to the same user's own WebSocket, but it is client input, so it is
 // bounded.
 const maxSidLen = 64
-
 
 // Handler serves the listener audio stream.
 type Handler struct {
@@ -90,6 +90,15 @@ type storedSelection struct {
 	} `json:"avoidList"`
 }
 
+// accountActive reports whether a user may still receive call audio: not
+// disabled and not past their account expiration.
+func accountActive(user db.User, now time.Time) bool {
+	if user.Disabled != 0 {
+		return false
+	}
+	return !user.Expiration.Valid || user.Expiration.Int64 <= 0 || now.Unix() <= user.Expiration.Int64
+}
+
 // userFilter reproduces the client-side play rules on the server, because a
 // streaming listener has no client to apply them: system/talkgroup grants,
 // the saved talkgroup selection, and active AVOID entries.
@@ -104,12 +113,14 @@ func userFilter(queries *db.Queries) streamsvc.Filter {
 			return false
 		}
 
-		if user.SystemsJson.Valid && user.SystemsJson.String != "" {
-			var grants []shared.SystemGrant
-			if err := json.Unmarshal([]byte(user.SystemsJson.String), &grants); err == nil &&
-				len(grants) > 0 && !shared.IsGranted(grants, call.SystemID, call.TalkgroupID) {
-				return false
-			}
+		// The stream outlives the request that authenticated it, so account
+		// state is re-checked for every call rather than only at connect.
+		if !accountActive(user, time.Now()) {
+			return false
+		}
+
+		if !auth.HasSystemAccess(auth.ParseSystemGrants(user.SystemsJson), call.SystemID, call.TalkgroupID) {
+			return false
 		}
 
 		if !user.TgSelectionJson.Valid || user.TgSelectionJson.String == "" {
@@ -158,6 +169,14 @@ func (h *Handler) GetStream(c *gin.Context) {
 	}
 	userID, _ := userIDVal.(int64)
 
+	// The token is only checked for signature and expiry; refuse a stream
+	// to an account that has since been disabled or has expired.
+	if user, err := h.queries.GetUser(c.Request.Context(), userID); err != nil || !accountActive(user, time.Now()) {
+		shared.WriteAPIError(c, http.StatusUnauthorized, shared.CodeInvalidCredentials,
+			"authentication required", nil)
+		return
+	}
+
 	if !h.mgr.Ready() {
 		shared.WriteAPIError(c, http.StatusServiceUnavailable, shared.CodeUnavailable,
 			"audio streaming is unavailable on this server", nil)
@@ -188,7 +207,9 @@ func (h *Handler) GetStream(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Flush()
 
-	err := h.mgr.Serve(c.Request.Context(), userID, sid, c.Writer, c.Writer.Flush)
+	jti, _ := c.Get("jti")
+	jtiStr, _ := jti.(string)
+	err := h.mgr.Serve(c.Request.Context(), userID, jtiStr, sid, c.Writer, c.Writer.Flush)
 	switch {
 	case err == nil, errors.Is(err, context.Canceled):
 		// Client went away — the normal end of a live stream.

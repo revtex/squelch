@@ -39,12 +39,24 @@ type ipBucket struct {
 	count       int
 }
 
+// maxIPBuckets caps how many client IPs RateLimitByIP tracks at once.
+const maxIPBuckets = 10000
+
 // RateLimitByIP returns middleware that limits requests per IP per minute.
 // Designed for unauthenticated, public endpoints (e.g. shared call access).
 func RateLimitByIP(rpm int) gin.HandlerFunc {
+	return rateLimitByIP(rpm, maxIPBuckets)
+}
+
+// rateLimitByIP tracks at most maxBuckets IPs. Stale buckets are swept at
+// most once per window, so a request never pays for a full scan; when the
+// table is still full, requests from untracked IPs are refused rather than
+// letting the table grow.
+func rateLimitByIP(rpm, maxBuckets int) gin.HandlerFunc {
 	var mu sync.Mutex
 	buckets := make(map[string]*ipBucket)
 	window := time.Minute
+	var lastSweep time.Time
 
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
@@ -52,17 +64,22 @@ func RateLimitByIP(rpm int) gin.HandlerFunc {
 
 		mu.Lock()
 
-		// Periodic cleanup: remove stale entries to bound memory.
-		if len(buckets) > 1000 {
+		if now.Sub(lastSweep) >= window {
 			for k, b := range buckets {
-				if now.Sub(b.windowStart) >= 2*window {
+				if now.Sub(b.windowStart) >= window {
 					delete(buckets, k)
 				}
 			}
+			lastSweep = now
 		}
 
 		b, ok := buckets[ip]
 		if !ok {
+			if len(buckets) >= maxBuckets {
+				mu.Unlock()
+				c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
+				return
+			}
 			b = &ipBucket{windowStart: now}
 			buckets[ip] = b
 		}

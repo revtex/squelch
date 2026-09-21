@@ -111,6 +111,28 @@ func (o *Operations) broadcastCFG(ctx context.Context) {
 	}
 }
 
+// anonymousDisconnecter is implemented by sinks that can drop
+// unauthenticated listeners (the WS hub). It is optional so test sinks need
+// not implement it.
+type anonymousDisconnecter interface {
+	DisconnectAnonymous()
+}
+
+// enforcePublicAccess drops anonymous listeners unless publicAccess is
+// currently "true". Call it after any write that may have changed the
+// setting.
+func (o *Operations) enforcePublicAccess(ctx context.Context) {
+	d, ok := o.Events.(anonymousDisconnecter)
+	if !ok {
+		return
+	}
+	s, err := o.Queries.GetSetting(ctx, "publicAccess")
+	if err == nil && s.Value == "true" {
+		return
+	}
+	d.DisconnectAnonymous()
+}
+
 // disconnectByUser is a nil-safe wrapper around Events.DisconnectByUser.
 func (o *Operations) disconnectByUser(userID int64) {
 	if o.Events != nil {
@@ -219,6 +241,13 @@ var validRoles = map[string]bool{
 var SensitiveSettingKeys = map[string]bool{
 	"vapidPrivateKey": true,
 	"jwtSecret":       true,
+}
+
+// serverOnlySettingKeys are settings the server reads but never hands to a
+// client, not even an admin: the JWT signing key would let its holder mint
+// tokens for any user, and it outlives the admin's own revocation.
+var serverOnlySettingKeys = map[string]bool{
+	auth.JWTSecretKeyName: true,
 }
 
 // allowedSettingKeys mirrors the allowed setting keys from config.go.

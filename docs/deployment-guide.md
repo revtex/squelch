@@ -278,6 +278,7 @@ Two rules to remember when proxying:
 
 - **Forward WebSocket upgrades** on `/api/ws`, `/ws`, and `/api/admin/ws` — the live call feed and admin events use them. `/api/ws` is the canonical listener endpoint; `/ws` is a compatibility alias kept for legacy clients and should also be proxied. (Audio is delivered separately as a regular HTTP response from `/api/calls/:id/audio` and does not require WebSocket forwarding.)
 - **Send `X-Forwarded-Proto`** so Squelch knows whether to mark cookies as secure.
+- **Send `X-Forwarded-For`** so login lockout and rate limits see the real client address. Squelch only believes this header when the connection comes from a trusted proxy — by default any loopback or private address (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), which covers a proxy on the same host, LAN, or Docker network. If your proxy connects from anywhere else, list it with `--trusted-proxies` / `SQUELCH_TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set it to `none` when Squelch is exposed directly with no proxy in front.
 
 If the proxy is on the same machine, it's also a good idea to bind Squelch to localhost only so nothing bypasses the proxy. In your compose file:
 
@@ -713,6 +714,7 @@ Docker users will almost always use environment variables; binary users typicall
 | `--encryption-key`      | Key for encrypting secrets at rest                        |                        |
 | `--encryption-key-file` | Path to a file containing the encryption key              |                        |
 | `--timezone`            | IANA timezone for recorder timestamps                     | `UTC`                  |
+| `--trusted-proxies`     | Proxy IPs/CIDRs allowed to set `X-Forwarded-For`, or `none` | loopback + private ranges |
 | `--admin-password`      | Reset the first admin user's password on startup          |                        |
 | `--config`              | Path to JSON config file                                  | `squelch.json`     |
 | `--config-save`         | Write current flags to JSON config and exit               |                        |
@@ -734,6 +736,7 @@ Docker users will almost always use environment variables; binary users typicall
 | `SQUELCH_ENCRYPTION_KEY_FILE` | `--encryption-key-file` |
 | `SQUELCH_ADMIN_PASSWORD`      | `--admin-password`      |
 | `SQUELCH_TIMEZONE`            | `--timezone`            |
+| `SQUELCH_TRUSTED_PROXIES`     | `--trusted-proxies`     |
 | `TZ`                              | `--timezone` (fallback) |
 
 #### Env-Only Settings

@@ -14,7 +14,7 @@ ARG VERSION=dev
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.4
 COPY backend/ .
 # Copy the built frontend dist into the go:embed target path
 COPY --from=node-builder /src/frontend/dist ./internal/static/dist/

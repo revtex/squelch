@@ -146,8 +146,12 @@ type queuedFrame struct {
 // listener is one connected stream client.
 type listener struct {
 	userID int64
+	// jti is the JWT ID the stream was opened with, so logout can end it.
+	jti string
 	// sid identifies this connection; a user may hold several.
 	sid string
+	// cancel ends Serve for this listener; used on session revocation.
+	cancel context.CancelFunc
 
 	mu sync.Mutex
 	// framesWritten is this listener's stream position, in frames. The
@@ -265,7 +269,7 @@ func (m *Manager) maxFramesLocked() int {
 // Serve streams to one listener until the context is cancelled or the
 // client disconnects. It never returns normally: a live stream ends only
 // when one side goes away.
-func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writer, flush func()) error {
+func (m *Manager) Serve(ctx context.Context, userID int64, jti, sid string, w io.Writer, flush func()) error {
 	m.mu.Lock()
 	silence := m.silence
 	period := m.period
@@ -274,7 +278,9 @@ func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writ
 		return errors.New("stream: manager not started")
 	}
 
-	l := &listener{userID: userID, sid: sid}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	l := &listener{userID: userID, jti: jti, sid: sid, cancel: cancel}
 	m.add(l)
 	defer m.remove(l)
 
@@ -313,6 +319,32 @@ func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writ
 				offset := float64(at) * period.Seconds()
 				go m.cue(userID, sid, callID, offset)
 			}
+		}
+	}
+}
+
+// DisconnectUser ends every open stream belonging to userID. It is called
+// when the user is disabled, expired, deleted or changes their password.
+func (m *Manager) DisconnectUser(userID int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for l := range m.listeners {
+		if l.userID == userID {
+			l.cancel()
+		}
+	}
+}
+
+// DisconnectJTI ends the open streams opened with the given JWT ID (logout).
+func (m *Manager) DisconnectJTI(jti string) {
+	if jti == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for l := range m.listeners {
+		if l.jti == jti {
+			l.cancel()
 		}
 	}
 }

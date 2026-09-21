@@ -19,7 +19,7 @@ const (
 	RefreshCookiePath = "/api"
 
 	// SessionCookieName is the HTTP cookie name for the session access token.
-	// The cookie value is the access JWT itself; ParseToken + Tokens.IsRevoked
+	// The cookie value is the access JWT itself; ParseToken + Tokens.Rejects
 	// remain the single source of truth for validity.
 	SessionCookieName = "os_session"
 

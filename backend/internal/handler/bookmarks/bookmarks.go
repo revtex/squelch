@@ -191,8 +191,15 @@ func (h *Handler) GetBookmarkCalls(c *gin.Context) {
 		return
 	}
 
+	// A bookmark outlives the grant that allowed it: re-check the listener's
+	// current grants so narrowing them also hides old bookmarks.
+	grants := shared.LoadUserGrants(c, h.queries)
+
 	results := make([]shared.CallSearchResult, 0, len(rows))
 	for _, row := range rows {
+		if !shared.IsGranted(grants, row.SystemID, row.TalkgroupID.Int64) {
+			continue
+		}
 		r := shared.CallSearchResult{
 			ID:        row.ID,
 			AudioName: row.AudioName,

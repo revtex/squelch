@@ -16,6 +16,7 @@ const (
 
 type loginEntry struct {
 	failures    int
+	inFlight    int // attempts admitted by TryBegin that have not yet ended
 	lockedUntil time.Time
 	lastFailure time.Time
 }
@@ -86,10 +87,57 @@ func (r *RateLimiter) IsLockedOut(ip string) bool {
 	return locked
 }
 
+// TryBegin reserves a login attempt for ip. It refuses when the IP is locked
+// out or when recorded failures plus attempts still in progress already reach
+// the lockout threshold, so concurrent requests cannot all run the password
+// check before the first failures are recorded. Every true result must be
+// paired with a call to End.
+func (r *RateLimiter) TryBegin(ip string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	e, ok := r.entries[ip]
+	if !ok {
+		e = &loginEntry{}
+		r.entries[ip] = e
+	}
+	now := time.Now()
+	if now.Before(e.lockedUntil) {
+		return false
+	}
+	failures := e.failures
+	if failures >= maxFailures {
+		failures = 0 // lockout expired; RecordFailure resets the counter too
+	}
+	if failures+e.inFlight >= maxFailures {
+		return false
+	}
+	e.inFlight++
+	return true
+}
+
+// End releases an attempt reserved by TryBegin.
+func (r *RateLimiter) End(ip string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e, ok := r.entries[ip]; ok && e.inFlight > 0 {
+		e.inFlight--
+	}
+}
+
 // Reset clears the failure record for an IP (call on successful login).
+// Attempts still in progress stay reserved.
 func (r *RateLimiter) Reset(ip string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	e, ok := r.entries[ip]
+	if !ok {
+		return
+	}
+	if e.inFlight > 0 {
+		*e = loginEntry{inFlight: e.inFlight}
+		return
+	}
 	delete(r.entries, ip)
 }
 
@@ -105,6 +153,9 @@ func (r *RateLimiter) cleanup(ctx context.Context) {
 			r.mu.Lock()
 			now := time.Now()
 			for ip, e := range r.entries {
+				if e.inFlight > 0 {
+					continue
+				}
 				if e.failures >= maxFailures {
 					// Remove once lockout has expired.
 					if now.After(e.lockedUntil) {

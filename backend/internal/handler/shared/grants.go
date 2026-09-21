@@ -1,22 +1,22 @@
 package shared
 
 import (
-	"encoding/json"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/db"
 )
 
-// SystemGrant mirrors ws.systemGrant for grant-based filtering in REST handlers.
-type SystemGrant struct {
-	ID         int64   `json:"id"`
-	Talkgroups []int64 `json:"talkgroups,omitempty"`
-}
+// SystemGrant is the grant shape used by REST handlers.
+type SystemGrant = auth.SystemGrant
 
-// LoadUserGrants returns the parsed grants for the authenticated user. Returns
-// nil (allow-all) for admins, unauthenticated users, or users with no grants.
+// LoadUserGrants returns the parsed grants for the caller. It returns nil
+// (allow-all) for admins, unauthenticated callers (whose access is gated by
+// publicAccess elsewhere), and users without grants. If the user's row cannot
+// be loaded — for example because the user was deleted while their token is
+// still valid — it returns a deny-all list rather than failing open.
 func LoadUserGrants(c *gin.Context, queries *db.Queries) []SystemGrant {
 	role, _ := c.Get("role")
 	roleStr, _ := role.(string)
@@ -30,40 +30,29 @@ func LoadUserGrants(c *gin.Context, queries *db.Queries) []SystemGrant {
 	uid, _ := userIDVal.(int64)
 	user, err := queries.GetUser(c.Request.Context(), uid)
 	if err != nil {
-		return nil
+		slog.WarnContext(c.Request.Context(), "grants: user lookup failed; denying", "user_id", uid, "error", err)
+		return auth.DenyAllGrants()
 	}
-	if !user.SystemsJson.Valid || user.SystemsJson.String == "" {
-		return nil
-	}
-	var grants []SystemGrant
-	if err := json.Unmarshal([]byte(user.SystemsJson.String), &grants); err != nil {
-		slog.Warn("failed to parse user grants", "user_id", uid, "error", err)
-		return nil
-	}
-	if len(grants) == 0 {
-		return nil
-	}
-	return grants
+	return auth.ParseSystemGrants(user.SystemsJson)
 }
 
 // IsGranted checks whether a call with the given system/talkgroup passes the
-// grant filter. A nil grant list means everything is allowed.
+// grant filter. A nil grant list means everything is allowed; an empty
+// non-nil list denies everything.
 func IsGranted(grants []SystemGrant, systemID, talkgroupID int64) bool {
-	if grants == nil {
+	return auth.HasSystemAccess(grants, systemID, talkgroupID)
+}
+
+// RequireUserOrPublicAccess admits authenticated callers, and anonymous
+// callers only while the publicAccess setting is "true". Otherwise it writes
+// a 401 and returns false; the handler must return immediately.
+func RequireUserOrPublicAccess(c *gin.Context, queries *db.Queries) bool {
+	if _, hasUser := c.Get("userID"); hasUser {
 		return true
 	}
-	for _, g := range grants {
-		if g.ID != systemID {
-			continue
-		}
-		if len(g.Talkgroups) == 0 {
-			return true
-		}
-		for _, tg := range g.Talkgroups {
-			if tg == talkgroupID {
-				return true
-			}
-		}
+	if GetSettingValue(c, queries, "publicAccess") == "true" {
+		return true
 	}
+	c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 	return false
 }

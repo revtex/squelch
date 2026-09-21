@@ -136,7 +136,7 @@ func Configure(development bool, logFilePath string) {
 
 	// Open log file if requested.
 	if logFilePath != "" {
-		f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
 			// Fall back — log to stderr and continue without file.
 			fmt.Fprintf(os.Stderr, "logging: failed to open log file %s: %v\n", logFilePath, err)

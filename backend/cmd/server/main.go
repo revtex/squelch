@@ -199,7 +199,8 @@ func runSetup(args []string) int {
 		slog.Error("setup: failed to create config directory", "error", err)
 		return 1
 	}
-	if err := os.MkdirAll(filepath.Dir(*dbFile), 0o755); err != nil {
+	// The database holds secrets; keep its directory private to the service.
+	if err := os.MkdirAll(filepath.Dir(*dbFile), 0o700); err != nil {
 		slog.Error("setup: failed to create database directory", "error", err)
 		return 1
 	}
@@ -585,41 +586,38 @@ func promptWithDefault(reader *bufio.Reader, out io.Writer, label, def string) (
 func serviceArguments(args []string) []string {
 	// Flags that take a value and must not be persisted.
 	stripValue := map[string]bool{
-		"--service":             true,
-		"--admin-password":      true,
-		"--encryption-key":      true,
-		"--encryption-key-file": true,
+		"service":             true,
+		"admin-password":      true,
+		"encryption-key":      true,
+		"encryption-key-file": true,
 	}
 	// Boolean flags that must not be persisted.
 	stripBool := map[string]bool{
-		"--config-save": true,
-		"--version":     true,
+		"config-save": true,
+		"version":     true,
 	}
 
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		// The flag package accepts -name and --name, each optionally with
+		// =value, so normalise all four spellings before matching.
+		name, hasValue := "", false
+		if len(a) > 1 && a[0] == '-' && a != "--" {
+			name = strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
+			name, _, hasValue = strings.Cut(name, "=")
+		}
 		switch {
-		case stripValue[a]:
-			// Skip this flag and its next argument (the value).
-			if i+1 < len(args) {
+		case stripValue[name]:
+			// Skip this flag and, in the separate-argument form, its value.
+			if !hasValue && i+1 < len(args) {
 				i++
 			}
 			continue
-		case stripBool[a]:
+		case stripBool[name]:
 			continue
 		}
-		// Also handle --flag=value form for value flags.
-		skip := false
-		for prefix := range stripValue {
-			if strings.HasPrefix(a, prefix+"=") {
-				skip = true
-				break
-			}
-		}
-		if !skip {
-			out = append(out, a)
-		}
+		out = append(out, a)
 	}
 	return out
 }
@@ -700,6 +698,13 @@ func (p *program) run() {
 	}
 
 	queries := db.New(sqlDB)
+
+	if cfg.AdminPassword != "" {
+		if err := resetAdminPassword(context.Background(), queries, cfg.AdminPassword); err != nil {
+			slog.Error("admin password reset failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// Resolve encryption key (from file if configured).
 	if err := cfg.ResolveEncryptionKey(); err != nil {
@@ -785,7 +790,18 @@ func (p *program) run() {
 
 	// Set up Gin router with registered routes.
 	router := gin.New()
-	router.MaxMultipartMemory = 50 << 20 // 50 MiB limit for multipart uploads
+	// Multipart parts beyond this are spooled to temp files rather than held
+	// in memory. Legacy uploads may carry the API key as a form field, so the
+	// form is parsed before the key is checked; a small threshold keeps an
+	// unauthenticated body from costing more than a few MiB of heap. Request
+	// size itself is capped per route by MaxBodySize.
+	router.MaxMultipartMemory = 8 << 20
+	// Only honour X-Forwarded-For from configured proxies, so a direct client
+	// cannot pick the IP that login lockout and rate limits are keyed on.
+	if err := router.SetTrustedProxies(cfg.TrustedProxyList()); err != nil {
+		slog.Error("invalid trusted proxies", "value", cfg.TrustedProxies, "error", err)
+		os.Exit(1)
+	}
 	router.Use(gin.Recovery())
 
 	// Create the shutdown context early so it can be passed to long-lived components
@@ -858,11 +874,7 @@ func (p *program) run() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				now := time.Now().Unix()
-				if err := queries.DeleteExpiredRefreshTokens(ctx, db.DeleteExpiredRefreshTokensParams{
-					ExpiresAt: now,
-					CreatedAt: now,
-				}); err != nil {
+				if err := queries.DeleteExpiredRefreshTokens(ctx, time.Now().Unix()); err != nil {
 					slog.Error("failed to cleanup expired refresh tokens", "error", err)
 				}
 			}
@@ -895,6 +907,7 @@ func (p *program) run() {
 		slog.Warn("stream: continuous audio stream disabled", "error", err)
 	} else {
 		hub.SetCallNotifier(streamMgr.Notify)
+		hub.SetSessionRevoker(streamMgr)
 		// Lets a stream listener hold a call's now-playing label until its
 		// own playback reaches that call, instead of showing it the moment
 		// the call arrives — clients run several seconds behind the head.
@@ -1249,8 +1262,15 @@ func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *
 
 			slog.Info("transcription stored", "call_id", res.CallID, "language", res.Result.Language, "segments", len(res.Result.Segments))
 
-			// Broadcast TRN to all connected clients.
-			hub.BroadcastTRN(res.CallID, res.Result.Text, res.Result.Segments)
+			// Broadcast TRN to the clients allowed to receive this call. If
+			// the call can't be loaded its grants are unknown, so skip the
+			// broadcast rather than sending it to everyone.
+			call, err := queries.GetCall(ctx, res.CallID)
+			if err != nil {
+				slog.Error("transcription: call lookup failed; not broadcasting", "call_id", res.CallID, "error", err)
+				continue
+			}
+			hub.BroadcastTRN(res.CallID, call.SystemID, call.TalkgroupID.Int64, res.Result.Text, res.Result.Segments)
 		}
 	}
 }

@@ -14,22 +14,26 @@ import (
 )
 
 // ConfigGet returns the current settings (sensitive values decrypted) along
-// with server capabilities.
+// with server capabilities. Server-only secrets such as the JWT signing key
+// are never returned.
 func (o *Operations) ConfigGet(ctx context.Context, _ json.RawMessage, _ int64) (any, error) {
 	settings, err := o.Queries.ListSettings(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list settings: %w", err)
 	}
 
-	settingsList := make([]map[string]string, len(settings))
-	for i, s := range settings {
+	settingsList := make([]map[string]string, 0, len(settings))
+	for _, s := range settings {
+		if serverOnlySettingKeys[s.Key] {
+			continue
+		}
 		val := s.Value
 		if SensitiveSettingKeys[s.Key] && o.Deps.EncryptionKey != "" {
 			if plain, err := auth.DecryptString(val, o.Deps.EncryptionKey); err == nil {
 				val = plain
 			}
 		}
-		settingsList[i] = map[string]string{"key": s.Key, "value": val}
+		settingsList = append(settingsList, map[string]string{"key": s.Key, "value": val})
 	}
 
 	return map[string]any{
@@ -164,6 +168,10 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 			o.Deps.WhisperAvailable = ok && tEnabled.Value == "true"
 		}
 	}
+
+	// Turning public access off must also end the anonymous sessions it
+	// admitted, not just refuse new ones.
+	o.enforcePublicAccess(ctx)
 
 	// Broadcast updated config to all WS clients using the safe,
 	// curated CFG builder (excludes secrets like VAPID keys).

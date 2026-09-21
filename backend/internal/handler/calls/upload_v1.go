@@ -72,6 +72,7 @@ import (
 //	@Success		200	{object}	object{id=int64,message=string}	"Call ingested"
 //	@Failure		400	{object}	shared.APIErrorResponse	"Validation failed"
 //	@Failure		401	{object}	shared.APIErrorResponse	"Invalid credentials"
+//	@Failure		403	{object}	shared.APIErrorResponse	"API key not permitted for this system"
 //	@Failure		422	{object}	shared.APIErrorResponse	"Unprocessable entity (system/talkgroup not configured)"
 //	@Failure		429	{object}	shared.APIErrorResponse	"Rate limit exceeded"
 //	@Failure		500	{object}	shared.APIErrorResponse	"Internal error"
@@ -250,12 +251,18 @@ func (h *Handler) PostCallUploadV1(c *gin.Context) {
 
 	// Resolve system.
 	system, err := h.queries.GetSystemBySystemID(ctx, systemIDRaw)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		slog.Error("v1 upload: failed to query system", "system_id", systemIDRaw, "error", err)
+		shared.WriteAPIError(c, http.StatusInternalServerError, shared.CodeInternalError, "internal error", nil)
+		return
+	}
+	if !apiKeyMayUpload(c, err == nil, system.ID) {
+		slog.Warn("v1 upload: system outside API key scope", "system_id", systemIDRaw)
+		shared.WriteAPIError(c, http.StatusForbidden, shared.CodeForbidden,
+			"API key not permitted for this system", map[string]any{"systemId": systemIDRaw})
+		return
+	}
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			slog.Error("v1 upload: failed to query system", "system_id", systemIDRaw, "error", err)
-			shared.WriteAPIError(c, http.StatusInternalServerError, shared.CodeInternalError, "internal error", nil)
-			return
-		}
 		if !autoPopulateSystems {
 			shared.WriteAPIError(c, http.StatusUnprocessableEntity, shared.CodeSystemNotFound,
 				"system is not configured and autoPopulateSystems is disabled",

@@ -159,16 +159,6 @@ func (h *Handler) PostShareCall(c *gin.Context) {
 		return
 	}
 
-	// Check if already shared — return existing token.
-	existing, err := h.queries.GetSharedLinkByCallID(ctx, id)
-	if err == nil {
-		c.JSON(http.StatusOK, ShareCreateResponse{
-			Token: existing.Token,
-			URL:   fmt.Sprintf("/call/%s", existing.Token),
-		})
-		return
-	}
-
 	// Verify call exists.
 	call, err := h.queries.GetCall(ctx, id)
 	if err != nil {
@@ -185,6 +175,17 @@ func (h *Handler) PostShareCall(c *gin.Context) {
 	// outside their authorised scope.
 	if grants := shared.LoadUserGrants(c, h.queries); !shared.IsGranted(grants, call.SystemID, call.TalkgroupID.Int64) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "call not found"})
+		return
+	}
+
+	// Check if already shared — return existing token. This must come after
+	// the grant check: the token unlocks the call's audio for anyone.
+	existing, err := h.queries.GetSharedLinkByCallID(ctx, id)
+	if err == nil {
+		c.JSON(http.StatusOK, ShareCreateResponse{
+			Token: existing.Token,
+			URL:   fmt.Sprintf("/call/%s", existing.Token),
+		})
 		return
 	}
 
@@ -244,6 +245,23 @@ func (h *Handler) DeleteShareCall(c *gin.Context) {
 	userIDVal, _ := c.Get("userID")
 	userID, _ := userIDVal.(int64)
 	role, _ := c.Get("role")
+
+	// The token unlocks the call for anyone, so only a caller who may access
+	// the call itself may read it.
+	call, err := h.queries.GetCall(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not shared"})
+			return
+		}
+		slog.Error("failed to get call for share lookup", "call_id", id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if grants := shared.LoadUserGrants(c, h.queries); !shared.IsGranted(grants, call.SystemID, call.TalkgroupID.Int64) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not shared"})
+		return
+	}
 
 	sl, err := h.queries.GetSharedLinkByCallID(ctx, id)
 	if err != nil {
@@ -461,6 +479,23 @@ func (h *Handler) GetCallShare(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid call id"})
+		return
+	}
+
+	// The token unlocks the call for anyone, so only a caller who may access
+	// the call itself may read it.
+	call, err := h.queries.GetCall(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not shared"})
+			return
+		}
+		slog.Error("failed to get call for share lookup", "call_id", id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if grants := shared.LoadUserGrants(c, h.queries); !shared.IsGranted(grants, call.SystemID, call.TalkgroupID.Int64) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not shared"})
 		return
 	}
 

@@ -45,9 +45,23 @@ func (h *Handler) GetCallTranscript(c *gin.Context) {
 	}
 
 	// Require authentication or publicAccess.
-	_, hasUser := c.Get("userID")
-	if !hasUser && shared.GetSettingValue(c, h.queries, "publicAccess") != "true" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+	if !shared.RequireUserOrPublicAccess(c, h.queries) {
+		return
+	}
+
+	// A transcript is call content: apply the same grant check as the audio.
+	call, err := h.queries.GetCall(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "transcript not found"})
+			return
+		}
+		slog.Error("failed to load call for transcript", "call_id", id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if grants := shared.LoadUserGrants(c, h.queries); !shared.IsGranted(grants, call.SystemID, call.TalkgroupID.Int64) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "transcript not found"})
 		return
 	}
 
