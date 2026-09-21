@@ -346,6 +346,18 @@ func serveFrontend(r *gin.Engine) {
 			return
 		}
 
+		// Machine-fetched well-known documents must never fall through to
+		// index.html. RFC 8615 paths and the legacy root-level Apple
+		// association file are requested by verifiers that expect JSON (or
+		// a clean 404 meaning "this server has no such association"); the
+		// SPA fallback answered both with HTTP 200 and an HTML body, which
+		// a verifier reports as a malformed file rather than a missing one.
+		// Nothing is served here yet — this only makes the absence honest.
+		if strings.HasPrefix(path, "/.well-known/") || path == "/apple-app-site-association" {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
 		// Try to serve the exact file (JS, CSS, images, etc.).
 		if f, err := distFS.Open(strings.TrimPrefix(path, "/")); err == nil {
 			f.Close()

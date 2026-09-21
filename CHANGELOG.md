@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`/.well-known/*` and `/apple-app-site-association` returned the web app
+  with HTTP 200.** Those paths are fetched by machines — App Links and
+  Universal Links verifiers, ACME clients, `security.txt` readers — and the
+  SPA fallback answered every one of them with `index.html` and a
+  `text/html` content type. A verifier reads that as a malformed association
+  file rather than a missing one, which is the harder failure to diagnose.
+  They now return a clean 404. Client-side routes such as `/call/<token>`
+  are unaffected.
+
 ## [3.0.0] — 2026-09-19
 
 ### Fixed
