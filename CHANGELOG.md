@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Shared-call pages offer "Open in app" on a phone.** A share link opened on
+  Android or iOS now shows a button that hands the token to the native app
+  through a custom scheme, falling back to the page itself on Android when no
+  app is installed. Universal Links and App Links cannot do this job for a
+  self-hosted server — both platforms bind the app to a domain at signing
+  time, and iOS fetches its association file through an Apple-operated CDN
+  that a LAN-only instance is invisible to — so the handoff is explicit. The
+  button appears only for a well-formed share token, and only on a phone.
+
 - **Native clients can hold the refresh token themselves.** `POST /auth/login`
   with the header `X-Squelch-Client: native` returns `refreshToken` in the
   response body and sets no cookies, and `POST /auth/refresh` accepts
