@@ -52,7 +52,7 @@ cd backend  && go vet ./... && go build ./...
 cd frontend && npx tsc --noEmit
 ```
 
-**Swagger:** there is no `make swag` target — `swag init` runs automatically as part of `make build` (backend Makefile). After editing Swaggo annotations, run `make build` (or the `swag init` line from `backend/Makefile`) and commit the regenerated `backend/docs/`.
+**Swagger:** there is no `make swag` target — `swag init` runs automatically as part of `make build` (backend Makefile). `backend/docs/` is **generated and gitignored** (`.gitignore:13`), so there is nothing to commit: the annotations in the handler source are the only tracked copy. After editing Swaggo annotations, run `make build` (or the `swag init` line from `backend/Makefile`) to confirm they parse.
 
 **Dev tools** (`sqlc`, `golang-migrate`, `swag`, `air`, `golangci-lint`, `pnpm`) are provisioned by `.devcontainer/`. The frontend uses **pnpm**, not npm.
 
