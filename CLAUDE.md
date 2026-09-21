@@ -18,7 +18,7 @@ Two existing files are the source of truth for structure and rules — read them
 
 Do not duplicate those rules from memory — defer to them.
 
-> **On sub-agents:** the per-domain files are **reference material, not dispatch targets** — read the relevant one rather than spawning an agent to read it for you. Skills under `.claude/skills/` may spawn sub-agents where they say to (`two-axis-review` runs its two axes in parallel, `research` runs in the background); follow the skill.
+> **On sub-agents:** the per-domain files are **reference material, not dispatch targets** — read the relevant one rather than spawning an agent to read it for you. Skills under `.claude/skills/` may spawn sub-agents where they say to (`two-axis-review` runs its two axes in parallel, `research` runs in the background, `security-audit` fans out hunters and verifiers in full audit mode); follow the skill.
 
 ## Commands
 
@@ -65,6 +65,7 @@ Packaged workflows live in `.claude/skills/` and are invoked as `/<name>`:
 - **`research`** — background agent, primary sources only, writes a committed note to `docs/research/`.
 - **`grilling`** — stress-tests a plan one question at a time.
 - **`resolving-merge-conflicts`** — for an in-progress merge or rebase.
+- **`security-audit`** — Cloudflare's source-first vulnerability audit, vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c` (MIT; `LICENSE` travels with it). **Guidance mode by default** — security questions and focused reviews use only the relevant parts. **Full audit mode** (an explicit audit/pen-test request, or asking for report artifacts) runs six phases with many isolated sub-agents; pass a budget to cap it. Output goes **outside the repo** by default (`~/security-audit-skill/<repo>/run-<N>`), and target code only ever runs in a sandbox. Distinct from the built-in `/security-review`, which reviews the pending diff; this covers the whole codebase. Vendored, so it never auto-updates — re-copy from upstream deliberately.
 
 ## Architecture (big picture)
 
