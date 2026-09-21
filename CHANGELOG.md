@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Native clients can hold the refresh token themselves.** `POST /auth/login`
+  with the header `X-Squelch-Client: native` returns `refreshToken` in the
+  response body and sets no cookies, and `POST /auth/refresh` accepts
+  `{"refreshToken": "…"}` in the body when no cookie is present, returning the
+  rotated token the same way. Browsers are unaffected: the cookie wins
+  whenever it is present, and a cookie-authenticated refresh never echoes the
+  raw token into the body, so an httpOnly cookie still cannot be read by page
+  script. Rotation, family revocation and the replay grace window behave
+  identically on both paths. `POST /auth/logout` now also accepts the body
+  token, so a client without cookies can revoke its refresh family — before
+  this, logging out of such a client left the family valid for its full
+  30 days.
+
 ### Fixed
 
 - **`/.well-known/*` and `/apple-app-site-association` returned the web app
