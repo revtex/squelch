@@ -567,7 +567,15 @@
      readout's mono face must not leak into the ones drawn over it. */
   .tooltip::before,
   [class*="tooltip-"]::before {
+    /* Type is set outright, never inherited: a tip anchored on the
+       control itself — HOLD, AVOID — would otherwise come out in the
+       button's bold, wide-tracked label face, and one on the readout in
+       its mono. */
     font-family: var(--font-sans);
+    font-weight: 400;
+    font-style: normal;
+    letter-spacing: normal;
+    text-transform: none;
     /* A hairline and a soft shadow keep the tip readable as a tip where
        it lands on a panel of its own tone, such as the dark readouts. */
     box-shadow:
