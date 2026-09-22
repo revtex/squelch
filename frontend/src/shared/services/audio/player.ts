@@ -73,6 +73,9 @@ class AudioPlayer {
   private volume = 1;
   private queue: QueueItem[] = [];
   private currentItem: QueueItem | null = null;
+  /** The last Call started, kept after it ends so Replay has something to
+   *  replay — which is exactly when anyone reaches for it. */
+  private lastItem: QueueItem | null = null;
   private _paused = false;
   private _playing = false;
   private callStartCb: ((call: Call) => void) | null = null;
@@ -302,13 +305,23 @@ class AudioPlayer {
   }
 
   replay(): void {
-    if (!this.currentItem || !this.audio) return;
-    try {
-      this.audio.currentTime = 0;
-    } catch {
-      // ignore — element may not be ready
+    if (this.currentItem && this.audio) {
+      try {
+        this.audio.currentTime = 0;
+      } catch {
+        // ignore — element may not be ready
+      }
+      void this.playElement(this.audio, this.currentItem);
+      return;
     }
-    void this.playElement(this.audio, this.currentItem);
+    // Nothing on the air: play the last Call again, the way an on-demand
+    // play does, so a queued ingested Call is not thrown away for it.
+    if (this.lastItem) this.playNow(this.lastItem.call);
+  }
+
+  /** True when there is something for [replay] to play. */
+  canReplay(): boolean {
+    return this.currentItem !== null || this.lastItem !== null;
   }
 
   pause(): void {
@@ -547,6 +560,7 @@ class AudioPlayer {
 
   private startPlayback(item: QueueItem): void {
     this.currentItem = item;
+    this.lastItem = item;
     this.callStartCb?.(item.call);
     this.updateMediaSession(item.call);
     this.ensureContext();

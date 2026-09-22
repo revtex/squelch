@@ -74,8 +74,9 @@ function formatFrequency(hz?: number) {
 
 /**
  * The talkgroup name, stepped down in size until it fits the panel, then
- * ellipsised — never squashed. Its full size comes from the theme's CSS
- * (.lcd-sign), so block and classic panels each start from their own.
+ * ellipsised — never squashed. Its size and its fixed box both come from
+ * the theme's CSS (.lcd-sign), so block and classic panels each start from
+ * their own and neither changes height as names come and go.
  */
 function AutoSizeText({
   text,
@@ -91,7 +92,6 @@ function AutoSizeText({
     if (!el) return;
     const fit = () => {
       el.style.fontSize = "";
-      el.style.lineHeight = "";
       const full = parseFloat(getComputedStyle(el).fontSize) || 0;
       const min = full * 0.48;
       let size = full;
@@ -99,8 +99,6 @@ function AutoSizeText({
         size -= 2;
         el.style.fontSize = `${size}px`;
       }
-      // Keep the row's height as the name shrinks.
-      if (size !== full) el.style.lineHeight = getComputedStyle(el).height;
     };
     fit();
     if (typeof ResizeObserver === "undefined") return;
@@ -283,7 +281,7 @@ export function DisplayPanel({
     : "";
 
   const badge =
-    "inline-flex h-[18px] sm:h-5 items-center rounded-[2px] border border-accent px-1.5 text-[10px] sm:text-[11px] font-bold tracking-[0.08em] text-accent";
+    "inline-flex h-[18px] sm:h-5 items-center rounded-[2px] border border-lcd-accent px-1.5 text-[10px] sm:text-[11px] font-bold tracking-[0.08em] text-lcd-accent";
 
   const displayContent = (
     <div className="flex flex-col">
@@ -315,18 +313,18 @@ export function DisplayPanel({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 min-h-lh">
+        <div className="flex items-center justify-between gap-2 h-lh">
           <span className="min-w-0 flex-1 truncate">
             {currentCall?.systemLabel ?? ""}
           </span>
           {currentCall?.talkgroupTag && (
-            <span className="shrink-0 rounded-[2px] bg-secondary px-1.5 py-px text-[10px] sm:text-[11px] leading-[14px] sm:leading-4 font-bold tracking-[0.1em] uppercase text-lcd-bg">
+            <span className="shrink-0 inline-flex h-3.5 sm:h-4 items-center rounded-[2px] bg-lcd-chip px-1.5 text-[10px] sm:text-[11px] leading-none font-bold tracking-[0.1em] uppercase text-lcd-bg">
               {currentCall.talkgroupTag}
             </span>
           )}
         </div>
 
-        <div className="flex justify-between gap-2 min-h-lh">
+        <div className="flex justify-between gap-2 h-lh">
           <span className="min-w-0 truncate">
             {currentCall
               ? [currentCall.talkgroupGroup, currentCall.talkgroupLabel]
@@ -359,7 +357,7 @@ export function DisplayPanel({
 
       {/* Body — the readout. Idle, it keeps its height. */}
       <div className="px-3 pt-2.5 pb-3 flex flex-col gap-[5px]">
-        <div className="flex justify-between gap-2 min-h-lh">
+        <div className="flex justify-between gap-2 h-lh">
           <span className="truncate">
             {currentCall ? formatFrequency(currentCall.frequency) : ""}
           </span>
@@ -368,27 +366,44 @@ export function DisplayPanel({
           )}
         </div>
 
-        <div className="flex justify-between gap-2 min-h-lh">
+        <div className="flex h-6 items-center justify-between gap-2">
           {currentCall ? (
             <>
               {/* Bookmark and share lead this row, under the frequency as
-                  they always sat. -my-1 keeps the 24px buttons from growing
-                  the line; -ml-1 lines the star up with the text above. */}
+                  they always sat. The row is 24px — the buttons' height —
+                  in every state, so the panel cannot change height; -ml-1
+                  lines the star up with the text above. */}
               <div className="flex min-w-0 items-center gap-1.5">
                 {isAuthenticated && (
-                  <div className="-my-1 -ml-1 flex shrink-0 items-center gap-1">
-                    <BookmarkButton
-                      isBookmarked={bookmarkedCallIds.includes(currentCall.id)}
-                      onToggle={() => handleToggleBookmark(currentCall.id)}
-                    />
+                  <div className="-ml-1 flex shrink-0 items-center gap-1">
+                    <span
+                      className="tooltip tooltip-right"
+                      data-tip={
+                        bookmarkedCallIds.includes(currentCall.id)
+                          ? "Remove bookmark"
+                          : "Bookmark this call"
+                      }
+                    >
+                      <BookmarkButton
+                        isBookmarked={bookmarkedCallIds.includes(
+                          currentCall.id,
+                        )}
+                        onToggle={() => handleToggleBookmark(currentCall.id)}
+                      />
+                    </span>
                     {shareableLinks && (
-                      <button
-                        className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
-                        onClick={handleShare}
-                        aria-label="Share call"
+                      <span
+                        className="tooltip tooltip-right"
+                        data-tip="Copy a link to this call"
                       >
-                        <Share2 className="w-3.5 h-3.5" />
-                      </button>
+                        <button
+                          className="btn btn-circle btn-ghost btn-xs border-0 bg-transparent hover:bg-transparent opacity-55 transition-opacity hover:opacity-100"
+                          onClick={handleShare}
+                          aria-label="Share call"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
                     )}
                   </div>
                 )}
@@ -415,14 +430,14 @@ export function DisplayPanel({
         </div>
 
         <div className="flex h-[18px] sm:h-5 items-center gap-1.5">
-          {isHeld && <span className={badge}>HOLD</span>}
-          {isAvoided && <span className={badge}>AVOID</span>}
-          {currentCall?.patches && <span className={badge}>PATCH</span>}
           {errorChip && (
             <span className="inline-flex h-[18px] sm:h-5 items-center rounded-[2px] bg-lcd-badge-bg px-1.5 text-[10px] sm:text-[11px]">
               {errorChip}
             </span>
           )}
+          {isHeld && <span className={badge}>HOLD</span>}
+          {isAvoided && <span className={badge}>AVOID</span>}
+          {currentCall?.patches && <span className={badge}>PATCH</span>}
           <span className="flex-1" />
           {callClock && (
             <span className="shrink-0 text-lcd-dim">{callClock}</span>

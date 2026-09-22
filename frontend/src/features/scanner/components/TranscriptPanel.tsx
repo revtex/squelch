@@ -105,33 +105,33 @@ export function TranscriptPanel({
 
       {expanded && (
         <div className="pb-3">
-          {segments.length > 0 && (
-            <div className="flex h-8 items-center gap-0.5" aria-hidden="true">
-              {segments.map((seg, i) => {
-                const span = Math.max(seg.end - seg.start, MIN_SPAN_SECONDS);
-                const fill =
-                  current === -1
-                    ? "lcd-dither-dim"
-                    : i === current
-                      ? "bg-lcd-fg"
-                      : seg.end <= position
-                        ? "bg-accent"
-                        : "lcd-dither-dim";
-                return (
-                  <div
-                    key={i}
-                    className={`h-2 rounded-[1px] ${fill}`}
-                    style={{ flexGrow: span, flexBasis: 0 }}
-                    title={`${formatElapsed(seg.start)} – ${formatElapsed(seg.end)}`}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* The strip keeps its 32px whether or not there are segments to
+              draw in it: a transcript arriving must not move the panel. */}
+          <div className="flex h-8 items-center gap-0.5" aria-hidden="true">
+            {segments.map((seg, i) => {
+              const span = Math.max(seg.end - seg.start, MIN_SPAN_SECONDS);
+              const fill =
+                current === -1
+                  ? "lcd-dither-dim"
+                  : i === current
+                    ? "bg-lcd-fg"
+                    : seg.end <= position
+                      ? "bg-lcd-accent"
+                      : "lcd-dither-dim";
+              return (
+                <div
+                  key={i}
+                  className={`h-2 rounded-[1px] ${fill}`}
+                  style={{ flexGrow: span, flexBasis: 0 }}
+                  title={`${formatElapsed(seg.start)} – ${formatElapsed(seg.end)}`}
+                />
+              );
+            })}
+          </div>
 
           <div
             ref={windowRef}
-            className="relative h-[51px] sm:h-[60px] overflow-y-auto text-xs leading-[17px] sm:text-[13px] sm:leading-5"
+            className="scrollbar-none relative h-[51px] sm:h-[60px] overflow-y-auto text-xs leading-[17px] sm:text-[13px] sm:leading-5"
           >
             {!call ? null : !call.transcript ? (
               <div className="text-lcd-dim">No transcript</div>

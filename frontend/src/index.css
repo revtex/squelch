@@ -70,6 +70,8 @@
   --color-lcd-block: var(--lcd-block);
   --color-lcd-block-content: var(--lcd-block-content);
   --color-lcd-face: var(--lcd-face);
+  --color-lcd-accent: var(--lcd-accent);
+  --color-lcd-chip: var(--lcd-chip-bg);
 }
 
 /* Themes — generated from squelch-mobile's design-tokens/tokens.json so the
@@ -378,6 +380,22 @@
   --led-live: #00e676;
 }
 
+/* Two colours the display owns. A block theme gets its highlight from the
+   theme accent and its tag chip from the secondary — one piece of colour on
+   the ink block. The classic panel has no block to stick a label onto, so
+   both become the panel's own ink, reversed out: a lit blue tick or an
+   orange chip on pale green is a different instrument. */
+:root,
+[data-theme] {
+  --lcd-accent: var(--color-accent);
+  --lcd-chip-bg: var(--color-secondary);
+}
+[data-theme="squelch-classic"],
+:root:not([data-theme]) {
+  --lcd-accent: var(--lcd-fg);
+  --lcd-chip-bg: var(--lcd-fg);
+}
+
 /* The display's signature colour for previews: the ink block, or the
    panel itself where there is no block. */
 :root,
@@ -451,6 +469,9 @@
     font-family: var(--font-sign);
     font-weight: 900;
     font-size: 42px;
+    /* Height as well as line-height: the name is sized down to fit, and a
+       display that changed height as calls came in would bounce. */
+    height: 43px;
     line-height: 43px;
     text-transform: uppercase;
   }
@@ -459,6 +480,7 @@
     font-family: var(--font-mono);
     font-weight: 700;
     font-size: 24px;
+    height: 32px;
     line-height: 32px;
     text-transform: none;
   }
@@ -467,7 +489,12 @@
   .lcd-dither {
     height: 6px;
     background-color: var(--lcd-bg);
-    background-image: conic-gradient(var(--lcd-block) 25%, transparent 0 50%, var(--lcd-block) 0 75%, transparent 0);
+    background-image: conic-gradient(
+      var(--lcd-block) 25%,
+      transparent 0 50%,
+      var(--lcd-block) 0 75%,
+      transparent 0
+    );
     background-size: 6px 6px;
   }
 
@@ -480,10 +507,12 @@
     }
     .lcd-sign {
       font-size: 56px;
+      height: 58px;
       line-height: 58px;
     }
     [data-theme="squelch-classic"] .lcd-sign {
       font-size: 28px;
+      height: 36px;
       line-height: 36px;
     }
     .lcd-label {
@@ -497,8 +526,24 @@
 
   /* Unlit timeline segment: the same dither, one pixel to the cell. */
   .lcd-dither-dim {
-    background-image: conic-gradient(var(--lcd-dim) 25%, transparent 0 50%, var(--lcd-dim) 0 75%, transparent 0);
+    background-image: conic-gradient(
+      var(--lcd-dim) 25%,
+      transparent 0 50%,
+      var(--lcd-dim) 0 75%,
+      transparent 0
+    );
     background-size: 2px 2px;
+  }
+
+  /* Scrolls by wheel or touch; the bar itself is chrome the panel does
+     not want. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   .lcd-label {

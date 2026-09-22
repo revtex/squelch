@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **An Avoids tab under SELECT.** It lists the talkgroups you have avoided
+  for a set time, each with the time left counting down, and a Resume button
+  that puts one back on the air early. A permanent avoid has no clock to
+  show, so it is not listed; it is turned back on from the talkgroup itself
+  under Groups, Tags or Systems.
+
 - **Shared-call pages offer "Open in app" on a phone.** A share link opened on
   Android or iOS now shows a button that hands the token to the native app
   through a custom scheme, falling back to the page itself on Android when no
@@ -53,6 +59,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine and no font is fetched from a third party.
 
 ### Fixed
+
+- **Replay works after a call has finished.** It did nothing unless a call
+  was still playing, which is the opposite of when it is reached for. It now
+  replays the last call played, and is greyed out only when nothing has
+  played yet.
+- **The display no longer bounces as calls come in.** Every row of the
+  readout now has a fixed height — including the talkgroup name, which is
+  sized down to fit — so the panel keeps one height whether a call is on the
+  air, idle, tagged, or has a transcript arriving under it.
+- **Squelch classic keeps to its own palette.** The transcript timeline and
+  the HOLD/AVOID/PATCH badges were drawn in the blue accent and the tag chip
+  in orange, neither of which belongs on the pale LCD; they now use the
+  panel's own ink, as the mobile app does.
+- **The display's bookmark and share buttons stop growing a background.**
+  They now dim and brighten under the pointer with nothing behind them, in
+  every theme, and both carry a tooltip. HOLD and AVOID have tooltips too.
+- **The transcript window scrolls without a scrollbar.** The bar is gone;
+  the wheel and touch still scroll it.
+- **HOLD and AVOID sit to the right of the error and spike counts**, rather
+  than pushing them along the row.
 
 - **`/.well-known/*` and `/apple-app-site-association` returned the web app
   with HTTP 200.** Those paths are fetched by machines — App Links and

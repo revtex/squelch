@@ -11,7 +11,11 @@ export function BookmarkButton({
 }: BookmarkButtonProps) {
   return (
     <button
-      className={`btn btn-circle btn-ghost btn-xs ${isBookmarked ? "text-warning opacity-50 hover:opacity-50" : "opacity-50 hover:opacity-50"}`}
+      // On the display these are engraved marks, not chrome: no plate
+      // behind them in any theme, just dim until the pointer is on them.
+      className={`btn btn-circle btn-ghost btn-xs border-0 bg-transparent hover:bg-transparent transition-opacity ${
+        isBookmarked ? "opacity-100" : "opacity-55 hover:opacity-100"
+      }`}
       onClick={onToggle}
       aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
     >

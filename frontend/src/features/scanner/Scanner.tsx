@@ -4,12 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useGetSetupStatusQuery } from "@/app/api";
 import { useAppDispatch, useAppSelector } from "@/app/store";
 import { setSetupStatus, selectToken } from "@/features/auth";
-import {
-  expireAvoids,
-  setPaused,
-  setLive,
-  resetDisplay,
-} from "./scannerSlice";
+import { expireAvoids, setPaused, setLive, resetDisplay } from "./scannerSlice";
 import { useScanner } from "./hooks/useScanner";
 import { useTGSelectionSync } from "./hooks/useTGSelectionSync";
 import { LEDPanel } from "./components/LEDPanel";
@@ -149,13 +144,17 @@ export default function Scanner() {
             (a) => a.talkgroupId === scanner.currentCall?.talkgroup,
           )
         }
-        canReplay={scanner.currentCall != null}
+        // Anything the player has already played can be replayed, whether or
+        // not it is still the Call on the display.
+        canReplay={scanner.currentCall != null || scanner.history.length > 0}
         backgroundAudio={scanner.backgroundAudio}
         streamState={scanner.streamState}
         onToggleBackgroundAudio={
           // Mobile only: a desktop browser keeps a background tab running
           // and plays each call normally, so the stream buys nothing there.
-          token && isMobilePlatform() ? scanner.toggleBackgroundAudio : undefined
+          token && isMobilePlatform()
+            ? scanner.toggleBackgroundAudio
+            : undefined
         }
         keypadBeeps={scanner.config?.keypadBeeps}
       />
@@ -164,9 +163,7 @@ export default function Scanner() {
         time12hFormat={
           scanner.config?.time12hFormat ?? cachedPrefs.time12hFormat ?? false
         }
-        playingCallId={
-          isAudioActive ? (scanner.currentCall?.id ?? null) : null
-        }
+        playingCallId={isAudioActive ? (scanner.currentCall?.id ?? null) : null}
       />
       <SelectTGPanel
         isOpen={selectTGOpen}

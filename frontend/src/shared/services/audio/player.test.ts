@@ -250,6 +250,30 @@ describe("audioPlayer", () => {
     expect(el.paused).toBe(false);
   });
 
+  it("replays the last Call once it has finished", async () => {
+    // Replay is reached for after a Call has played out, which is exactly
+    // when the player has no current item left — it used to do nothing.
+    const player = await loadPlayer();
+    player.enqueue(makeCall(1));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    lastElement().emit("ended");
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect(player.canReplay()).toBe(true);
+    player.replay();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect(lastElement().src).toContain("/api/v1/calls/1/audio");
+    expect(player.isPlaying()).toBe(true);
+  });
+
+  it("has nothing to replay before the first Call", async () => {
+    const player = await loadPlayer();
+    expect(player.canReplay()).toBe(false);
+    player.replay();
+    expect(player.isPlaying()).toBe(false);
+  });
+
   it("plays without waiting for canplay", async () => {
     const player = await loadPlayer();
     player.enqueue(makeCall(1));

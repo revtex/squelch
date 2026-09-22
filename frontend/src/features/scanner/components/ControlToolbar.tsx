@@ -261,8 +261,10 @@ export function ControlToolbar({
               role="button"
               aria-label="Hold"
               aria-disabled={backgroundAudio === true}
-              title={backgroundAudio ? inertTip : undefined}
-              className={`${mode} ${
+              data-tip={
+                backgroundAudio ? inertTip : "Stay on this system or talkgroup"
+              }
+              className={`tooltip tooltip-bottom ${mode} ${
                 backgroundAudio
                   ? "btn-disabled"
                   : isHolding
@@ -307,7 +309,8 @@ export function ControlToolbar({
               tabIndex={0}
               role="button"
               aria-label="Avoid"
-              className={`${mode} ${isAvoided ? "btn-primary" : off}`}
+              data-tip="Skip this talkgroup for a while"
+              className={`tooltip tooltip-bottom ${mode} ${isAvoided ? "btn-primary" : off}`}
             >
               <Ban className="hidden sm:inline w-3.5 h-3.5" />
               AVOID
