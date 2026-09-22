@@ -554,15 +554,6 @@
     text-transform: uppercase;
   }
 
-  /* Buttons drawn on the readout keep the panel's ink in every state.
-     Left alone, the hover state repaints them in base-content, which on
-     the classic theme is near-white on a pale panel. */
-  .lcd-display .btn,
-  .lcd-display .btn:hover,
-  .lcd-display .btn:focus-visible {
-    color: inherit;
-  }
-
   /* A tooltip is interface chrome wherever it is anchored, so the
      readout's mono face must not leak into the ones drawn over it. */
   .tooltip::before,
@@ -582,6 +573,22 @@
       0 0 0 1px color-mix(in oklab, var(--color-base-content) 25%, transparent),
       0 2px 8px rgb(0 0 0 / 0.4);
   }
+}
+
+/* Controls drawn on the readout are engraved marks, not chrome. The
+   pointer must not repaint them in base-content — near-white on the
+   classic panel's pale face — nor raise a button plate under them; they
+   only come up from dim to full. Unlayered on purpose: daisyUI's button
+   styles live in the utilities layer, which outranks anything here. */
+.lcd-display .btn,
+.lcd-display .btn:hover,
+.lcd-display .btn:focus,
+.lcd-display .btn:focus-visible,
+.lcd-display .btn:active {
+  color: inherit;
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* A panel that clips its own contents — the readout's bezel, a scrolling
