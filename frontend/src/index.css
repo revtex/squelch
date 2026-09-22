@@ -554,9 +554,40 @@
     text-transform: uppercase;
   }
 
-  .lcd-display .btn {
+  /* Buttons drawn on the readout keep the panel's ink in every state.
+     Left alone, the hover state repaints them in base-content, which on
+     the classic theme is near-white on a pale panel. */
+  .lcd-display .btn,
+  .lcd-display .btn:hover,
+  .lcd-display .btn:focus-visible {
     color: inherit;
   }
+
+  /* A tooltip is interface chrome wherever it is anchored, so the
+     readout's mono face must not leak into the ones drawn over it. */
+  .tooltip::before,
+  [class*="tooltip-"]::before {
+    font-family: var(--font-sans);
+    /* A hairline and a soft shadow keep the tip readable as a tip where
+       it lands on a panel of its own tone, such as the dark readouts. */
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-base-content) 25%, transparent),
+      0 2px 8px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* A panel that clips its own contents — the readout's bezel, a scrolling
+   list — cuts a tooltip centred on a control at its edge. These open flush to that edge
+   instead; the arrow stays on the control. Unlayered on purpose — it has to
+   outrank daisyUI's own tooltip utilities. */
+.tooltip-flush-left[data-tip]::before {
+  inset: auto auto var(--tt-off) 0;
+  transform: translateX(0) translateY(var(--tt-pos, 0.25rem));
+}
+
+.tooltip-flush-right[data-tip]::before {
+  inset: auto 0 var(--tt-off) auto;
+  transform: translateX(0) translateY(var(--tt-pos, 0.25rem));
 }
 
 /* Restore cursor: pointer on buttons (TW4 changed default to cursor: default) */

@@ -377,7 +377,7 @@ export function DisplayPanel({
                 {isAuthenticated && (
                   <div className="-ml-1 flex shrink-0 items-center gap-1">
                     <span
-                      className="tooltip tooltip-right"
+                      className="tooltip tooltip-top tooltip-flush-left"
                       data-tip={
                         bookmarkedCallIds.includes(currentCall.id)
                           ? "Remove bookmark"
@@ -393,7 +393,7 @@ export function DisplayPanel({
                     </span>
                     {shareableLinks && (
                       <span
-                        className="tooltip tooltip-right"
+                        className="tooltip tooltip-top tooltip-flush-left"
                         data-tip="Copy a link to this call"
                       >
                         <button
@@ -493,25 +493,27 @@ export function DisplayPanel({
                 onFocus={(e) => e.currentTarget.select()}
                 aria-label="Share URL"
               />
-              <button
-                className="btn btn-primary btn-sm btn-square"
-                onClick={handleCopyShareUrl}
-                aria-label="Copy share URL"
-                title="Copy"
-              >
-                <Copy size={16} />
-              </button>
-              <button
-                className="btn btn-ghost btn-sm btn-square"
-                onClick={() => {
-                  if (!shareUrl) return;
-                  window.open(shareUrl, "_blank", "noopener,noreferrer");
-                }}
-                aria-label="Open share URL"
-                title="Open"
-              >
-                <ExternalLink size={16} />
-              </button>
+              <span className="tooltip tooltip-top" data-tip="Copy">
+                <button
+                  className="btn btn-primary btn-sm btn-square"
+                  onClick={handleCopyShareUrl}
+                  aria-label="Copy share URL"
+                >
+                  <Copy size={16} />
+                </button>
+              </span>
+              <span className="tooltip tooltip-top" data-tip="Open">
+                <button
+                  className="btn btn-ghost btn-sm btn-square"
+                  onClick={() => {
+                    if (!shareUrl) return;
+                    window.open(shareUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  aria-label="Open share URL"
+                >
+                  <ExternalLink size={16} />
+                </button>
+              </span>
             </div>
           </div>
         </div>

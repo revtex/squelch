@@ -74,7 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panel's own ink, as the mobile app does.
 - **The display's bookmark and share buttons stop growing a background.**
   They now dim and brighten under the pointer with nothing behind them, in
-  every theme, and both carry a tooltip. HOLD and AVOID have tooltips too.
+  every theme, and both carry a tooltip that opens above them. On the
+  classic theme the pointer used to repaint them near-white on the pale
+  panel, which all but erased them; they keep the panel's ink now.
+- **One tooltip style throughout.** The last few controls that showed the
+  browser's own tooltip — share in the search and bookmark lists, and Copy
+  and Open in the share popup — now use the same one as everything else,
+  and a tip anchored at a panel's edge no longer has its first or last
+  words clipped. HOLD and AVOID have tooltips too.
 - **The transcript window scrolls without a scrollbar.** The bar is gone;
   the wheel and touch still scroll it.
 - **HOLD and AVOID sit to the right of the error and spike counts**, rather
