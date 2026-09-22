@@ -10,7 +10,7 @@ export interface Call {
   talkgroupId: number; // radio TG ID
   talkgroup: number; // DB TG ID
   frequency?: number; // Hz
-  duration?: number; // seconds
+  duration?: number; // ms
   source?: number; // unit ID
   sources?: string; // JSON array
   frequencies?: string; // JSON array

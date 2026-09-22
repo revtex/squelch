@@ -263,7 +263,7 @@ export function DisplayPanel({
   // length once it has. Held to the length, since the position is sampled.
   const segments = currentCall?.transcriptSegments ?? [];
   const callLength = Math.max(
-    currentCall?.duration ?? 0,
+    (currentCall?.duration ?? 0) / 1000,
     segments.length > 0 ? segments[segments.length - 1].end : 0,
   );
   const callClock =
@@ -371,11 +371,33 @@ export function DisplayPanel({
         <div className="flex justify-between gap-2 min-h-lh">
           {currentCall ? (
             <>
-              <span className="truncate text-lcd-dim">
-                {[currentCall.site, currentCall.decoder]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
+              {/* Bookmark and share lead this row, under the frequency as
+                  they always sat. -my-1 keeps the 24px buttons from growing
+                  the line; -ml-1 lines the star up with the text above. */}
+              <div className="flex min-w-0 items-center gap-1.5">
+                {isAuthenticated && (
+                  <div className="-my-1 -ml-1 flex shrink-0 items-center gap-1">
+                    <BookmarkButton
+                      isBookmarked={bookmarkedCallIds.includes(currentCall.id)}
+                      onToggle={() => handleToggleBookmark(currentCall.id)}
+                    />
+                    {shareableLinks && (
+                      <button
+                        className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
+                        onClick={handleShare}
+                        aria-label="Share call"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <span className="truncate text-lcd-dim">
+                  {[currentCall.site, currentCall.decoder]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </div>
               <span className="truncate text-right">{unitText}</span>
             </>
           ) : (
@@ -402,21 +424,6 @@ export function DisplayPanel({
             </span>
           )}
           <span className="flex-1" />
-          {currentCall && isAuthenticated && (
-            <BookmarkButton
-              isBookmarked={bookmarkedCallIds.includes(currentCall.id)}
-              onToggle={() => handleToggleBookmark(currentCall.id)}
-            />
-          )}
-          {currentCall && isAuthenticated && shareableLinks && (
-            <button
-              className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
-              onClick={handleShare}
-              aria-label="Share call"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-            </button>
-          )}
           {callClock && (
             <span className="shrink-0 text-lcd-dim">{callClock}</span>
           )}
