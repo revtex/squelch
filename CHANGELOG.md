@@ -31,6 +31,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   this, logging out of such a client left the family valid for its full
   30 days.
 
+### Changed
+
+- **The scanner looks like the mobile app.** The web scanner page now uses the
+  app's design: the display's clock, tag and talkgroup name sit in a solid ink
+  block over a dithered edge, with the name in a condensed display face sized
+  to fit. The transport is a large play/pause between replay and skip, and the
+  mode buttons are an even row that wraps on narrow screens. Recent calls are
+  one-line rows below the controls; tap one to replay it, and a talkgroup's LED
+  colour shows as a rail. The live transcript follows playback in a three-line
+  window with a timeline above it. The menu (⋮) now holds the theme, display
+  brightness, bookmarks, admin, password and sign-in/out.
+- **Seven dark themes, chosen per browser.** Midnight (the new default),
+  Graphite, Ember, Moss, Plum, Ash and Squelch classic — the same set the
+  mobile app offers, from the same palette. Squelch classic keeps the original
+  pale LCD. Pick one from ⋮ → Theme. It applies to every page, admin included,
+  and is remembered in that browser. The light theme is retired; a browser that
+  had it selected moves to Midnight.
+- **Bundled fonts.** Selawik, JetBrains Mono and Big Shoulders Display now ship
+  with the app (SIL Open Font License), so the display looks the same on every
+  machine and no font is fetched from a third party.
+
 ### Fixed
 
 - **`/.well-known/*` and `/apple-app-site-association` returned the web app

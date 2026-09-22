@@ -20,7 +20,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 - React 18 with TypeScript strict mode
 - Vite 6 as the build tool
 - DaisyUI 5 components (Tailwind CSS 4 component library)
-- Tailwind CSS 4 via `@tailwindcss/vite` for styling (dark/light theme toggle via DaisyUI dual themes)
+- Tailwind CSS 4 via `@tailwindcss/vite` for styling (seven dark DaisyUI themes, picked per browser)
 - Redux Toolkit + RTK Query for state and server data
 - React Router DOM 7 for client-side routing
 - `@tanstack/react-virtual` for virtual scrolling in large admin lists
@@ -45,7 +45,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 
 - Use DaisyUI component classes (`btn`, `card`, `modal`, `table`, `input input-bordered`, `toggle`, `badge`, `toast`, `menu`, `stats`, `dropdown`, `tooltip`, `range`) — do not hand-roll equivalents
 - Compose with Tailwind utilities; never write custom CSS unless a truly unique visual requires it
-- Theming: `data-theme="squelch-dark"` / `squelch-light` on `<html>`; palette tokens (`base-100`, `primary`, `secondary`, `error`) only — no raw hex in components
+- Theming: `data-theme="squelch-<name>"` on `<html>` (`midnight` default, plus `graphite`, `ember`, `moss`, `plum`, `ash`, `classic`); palette tokens (`base-100`, `primary`, `secondary`, `error`, plus the theme-owned `base-content-dim` and `lcd-*` colours) only — no raw hex in components. The palettes are generated from squelch-mobile's `design-tokens/tokens.json`; change them there first and regenerate, so the web and the app stay one palette
 - Mobile-first responsive: `sm` (<640px), `md` (640–1023px), `lg` (≥1024px)
 - Icons: import from `lucide-react` as individual named imports; never `import * as Icons`
 
@@ -136,7 +136,7 @@ frontend/
       useActiveUnit.ts              ← resolves currently-talking unit from CAL payload
       useAudioPlayer.ts             ← React binding to audioPlayer service
       useTGSelectionSync.ts         ← persists SELECT state to localStorage keyed by ?id=
-      useTheme.ts                   ← theme toggle + persistence
+      useTheme.ts                   ← theme list, picker state + persistence
     services/
       wsClient.ts                   ← listener WS singleton
       adminWsClient.ts              ← admin WS singleton (request/response correlation)
@@ -159,13 +159,14 @@ frontend/
 
 Local-only design notes (in the gitignored `docs/plans/` working directory) may contain extended ASCII wireframes and palette spec. The canonical, in-repo summary follows. Key points:
 
-- **Dark-first** — custom DaisyUI `squelch` theme; `base-100` (#121212), `base-200` (#1e1e1e), `base-300` (#2d2d2d), `primary` (#00e676 green), `secondary` (#ff9100 orange), `error` (#ff1744 red)
-- **Scanner page** — vertically-stacked single column, max-width 640px, 24px padding:
-  - Status bar: branding text (left) + theme toggle (sun/moon) + LED dot (right)
-  - Display panel: dark surface (`base-200`), 8 rows monospace data, row 5 large TG name (24px bold), bookmark/share icons on row 8
-  - Transcript panel: collapsible text between display and history (conditional on `transcriptionEnabled`)
-  - History table: inline below display (5 rows, 11px font, bookmark/share indicators)
-  - Control toolbar: two-row icon layout — row 1: playback icons (play/pause, skip, replay, volume, download, bookmark) + row 2: mode toggles (LIVE, HOLD▾, AVOID▾, SELECT▾, SEARCH, ⋯ overflow)
+- **Dark only** — seven DaisyUI themes shared with the mobile app (Midnight default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name
+- **Scanner page** — vertically-stacked single column, max-width 672px, 24px padding, laid out like the mobile app:
+  - LED bar: branding (left), LED, ⋮ menu (Theme, Display brightness, Bookmarks, Admin, Change password, About, Sign in/out)
+  - Display panel: ink-block head (clock, counts, system + tag chip, group · label, auto-sized TG name), dither strip, then frequency/TGID, site/unit, and a badge row (HOLD/AVOID/PATCH, E/S chip, bookmark/share, call clock). Type steps up from the phone sizes at `sm`
+  - Transcript: inside the display (when `liveTranscriptDisplay` is on) — header with line/speaker count, a duration-weighted timeline, and a three-line window that follows playback
+  - Transport: volume (left), replay / play-pause (primary, 64px) / skip, centred
+  - Mode row: LIVE (+ BKGND on mobile, joined), HOLD▾, AVOID▾, SELECT, SEARCH — equal cells, wrapping 3 + 2 when narrow; "on" is `success` for LIVE, `primary` otherwise
+  - RECENT: up to five one-line rows below the controls, each a button that replays the Call; the Call on the air gets the accent rail, and a talkgroup LED colour becomes its rail
 - **Side panels** — SelectTG slides from right, Search slides from left, Bookmarks slides from right
 - **Admin dashboard** — sidebar (icons on `md`, icons+labels on `lg`, drawer on `sm`) + content area (max-width 1200px)
 - **Login/Setup** — centered DaisyUI card (max-width 400px) on `base-100` background
@@ -196,10 +197,10 @@ Before reporting a task done, run the validation loop from `frontend/`:
 - TG selection state persists in `localStorage` keyed by `?id=` URL param — enables multiple browser instances with independent selections
 - Avoid talkgroup: 30/60/120 min countdown tracked in Redux, LED flashes for avoided TGs
 - HOLD SYS / HOLD TG: filter CAL events so only the held system/talkgroup enters the queue
-- Theme toggle: `useTheme.ts` reads server `darkMode` default, user overrides stored in localStorage; sets `data-theme` on `<html>`
+- Theme: `applyStoredTheme()` in `main.tsx` sets `data-theme` on `<html>` before first render so every route uses the chosen palette; `useTheme.ts` holds the choice (localStorage `squelch-theme`, per browser) and the picker lives in the scanner's ⋮ menu. Retired `squelch-dark`/`squelch-light` values fall back to Midnight
 - Bookmarks: star icon on calls; authenticated users persist to DB via RTK Query, public listeners use localStorage + generated session ID
 - Shareable links: share button creates a token via RTK Query and copies `/call/<token>` URL; `SharedCall.tsx` renders a minimal public player for the token
-- Transcripts: `TranscriptPanel.tsx` shows transcript below the display; `TRN` WS event updates live; search panel supports transcript text search
+- Transcripts: `TranscriptPanel.tsx` shows the transcript inside the display; `TRN` WS event updates live; search panel supports transcript text search
 - Push notifications: request permission, subscribe to TGs; Service Worker handles `push` and `notificationclick` events in `sw.ts`
 - Admin panels with large lists (1000+ rows) use `@tanstack/react-virtual` for smooth scrolling (LogsPanel, SystemsPanel, SearchPanel)
 - Service Worker caches app shell (HTML, JS, CSS, fonts); network-first for API calls; never caches authenticated API responses

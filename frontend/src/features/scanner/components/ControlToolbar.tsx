@@ -3,7 +3,6 @@ import {
   Pause,
   SkipForward,
   RotateCcw,
-  Star,
   Volume2,
   VolumeX,
   Radio,
@@ -36,7 +35,13 @@ interface ControlToolbarProps {
   onAddAvoid: (entry: AvoidEntry) => void;
   onToggleSelectTG: () => void;
   onToggleSearch: () => void;
-  onToggleBookmarks?: () => void;
+  /** The select / search panels are open — their buttons read as on. */
+  selectOpen?: boolean;
+  searchOpen?: boolean;
+  /** The current Call's talkgroup is on the avoid list. */
+  isAvoided?: boolean;
+  /** There is a Call to replay; false greys out Replay. */
+  canReplay?: boolean;
   backgroundAudio?: boolean;
   /** What the stream is really doing, not merely what is enabled. */
   streamState?: StreamState;
@@ -62,7 +67,10 @@ export function ControlToolbar({
   onAddAvoid,
   onToggleSelectTG,
   onToggleSearch,
-  onToggleBookmarks,
+  selectOpen,
+  searchOpen,
+  isAvoided,
+  canReplay = true,
   backgroundAudio,
   streamState,
   onToggleBackgroundAudio,
@@ -81,88 +89,26 @@ export function ControlToolbar({
     onAddAvoid({ talkgroupId: currentCallTgId, expiresAt });
   };
 
+  const inertTip = "Not available while background audio is on";
+
+  // Mode buttons: equal widths in one row, wrapping to 3 + 2 when the row
+  // is narrower than the labels need. LIVE + BKGND share a double cell.
+  const cell = "flex-1 basis-[calc((100%-16px)/3)] @[340px]:basis-0 min-w-0";
+  const pair =
+    "grow-[2] basis-[calc((100%-16px)/3*2+8px)] @[340px]:basis-0 min-w-0";
+  const mode =
+    "btn w-full h-11 min-h-11 min-w-0 px-1 gap-1.5 rounded-[4px] border-0 shadow-none text-[11px] sm:text-xs font-bold tracking-[0.1em]";
+  const off = "bg-base-300 text-base-content hover:bg-base-300/70";
+
   return (
-    <div className="mt-4 space-y-2">
-      {/* Row 1 — Playback + Quick Actions */}
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        {/* Play/Pause. Inert while the server stream owns playback: these
-            three act on the local player, which is released in that mode,
-            so they would look available while doing nothing. */}
-        <div
-          className="tooltip tooltip-bottom"
-          data-tip={
-            backgroundAudio
-              ? "Not available while background audio is on"
-              : isPaused
-                ? "Resume"
-                : "Pause"
-          }
-        >
-          <button
-            className="btn btn-circle btn-ghost w-11 h-11"
-            disabled={backgroundAudio === true}
-            onClick={() => {
-              beep();
-              onTogglePause();
-            }}
-            aria-label={isPaused ? "Resume" : "Pause"}
-          >
-            {isPaused ? (
-              <Play className="w-5 h-5" />
-            ) : (
-              <Pause className="w-5 h-5" />
-            )}
-          </button>
-        </div>
-
-        {/* Skip */}
-        <div
-          className="tooltip tooltip-bottom"
-          data-tip={
-            backgroundAudio
-              ? "Not available while background audio is on"
-              : "Skip"
-          }
-        >
-          <button
-            className="btn btn-circle btn-ghost w-9 h-9"
-            disabled={backgroundAudio === true}
-            onClick={() => {
-              beep();
-              onSkip();
-            }}
-            aria-label="Skip"
-          >
-            <SkipForward className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Replay */}
-        <div
-          className="tooltip tooltip-bottom"
-          data-tip={
-            backgroundAudio
-              ? "Not available while background audio is on"
-              : "Replay"
-          }
-        >
-          <button
-            className="btn btn-circle btn-ghost w-9 h-9"
-            disabled={backgroundAudio === true}
-            onClick={() => {
-              beep();
-              onReplay();
-            }}
-            aria-label="Replay"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="divider divider-horizontal mx-0" />
-
-        {/* Volume — visible on md+ */}
-        <div className="hidden md:flex items-center gap-1">
+    <div className="mt-4">
+      {/* Transport — replay, play/pause, skip, centred; volume to the
+          left. The three transport buttons act on the local player, which
+          is released while the server stream owns playback, so they go
+          inert in that mode rather than look available while doing
+          nothing. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center">
+        <div className="flex items-center gap-1 justify-self-start">
           <button
             className="btn btn-circle btn-ghost w-9 h-9"
             onClick={() => onSetVolume(isMuted ? 0.8 : 0)}
@@ -181,237 +127,243 @@ export function ControlToolbar({
             step={0.05}
             value={volume}
             onChange={(e) => onSetVolume(Number(e.target.value))}
-            className="range range-xs range-primary w-28"
+            className="range range-xs range-primary w-24 hidden sm:block"
             aria-label="Volume"
           />
         </div>
 
-        {/* Volume — sm only (icon with dropdown) */}
-        <div className="md:hidden dropdown dropdown-top">
+        <div className="flex items-center gap-[26px]">
           <div
-            tabIndex={0}
-            role="button"
-            className="btn btn-circle btn-ghost w-9 h-9"
+            className="tooltip tooltip-bottom"
+            data-tip={backgroundAudio ? inertTip : "Replay"}
           >
-            {isMuted ? (
-              <VolumeX className="w-4 h-4" />
-            ) : (
-              <Volume2 className="w-4 h-4" />
-            )}
+            <button
+              className="btn btn-circle btn-ghost w-12 h-12"
+              disabled={backgroundAudio === true || !canReplay}
+              onClick={() => {
+                beep();
+                onReplay();
+              }}
+              aria-label="Replay"
+            >
+              <RotateCcw className="w-[21px] h-[21px]" />
+            </button>
           </div>
+
           <div
-            tabIndex={0}
-            className="dropdown-content p-3 shadow bg-base-200 rounded-box"
+            className="tooltip tooltip-bottom"
+            data-tip={
+              backgroundAudio ? inertTip : isPaused ? "Resume" : "Pause"
+            }
           >
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={volume}
-              onChange={(e) => onSetVolume(Number(e.target.value))}
-              className="range range-xs range-primary w-28"
-              aria-label="Volume"
-            />
+            <button
+              className="btn btn-circle btn-primary w-16 h-16 border-0"
+              disabled={backgroundAudio === true}
+              onClick={() => {
+                beep();
+                onTogglePause();
+              }}
+              aria-label={isPaused ? "Resume" : "Pause"}
+            >
+              {isPaused ? (
+                <Play className="w-7 h-7" fill="currentColor" />
+              ) : (
+                <Pause className="w-7 h-7" fill="currentColor" />
+              )}
+            </button>
+          </div>
+
+          <div
+            className="tooltip tooltip-bottom"
+            data-tip={backgroundAudio ? inertTip : "Skip"}
+          >
+            <button
+              className="btn btn-circle btn-ghost w-12 h-12"
+              disabled={backgroundAudio === true}
+              onClick={() => {
+                beep();
+                onSkip();
+              }}
+              aria-label="Skip"
+            >
+              <SkipForward className="w-[21px] h-[21px]" />
+            </button>
           </div>
         </div>
 
-        {/* Bookmarks panel toggle */}
-        {onToggleBookmarks && (
-          <div className="tooltip tooltip-bottom" data-tip="Bookmarks">
-            <button
-              className="btn btn-circle btn-ghost w-9 h-9"
-              onClick={() => {
-                beep();
-                onToggleBookmarks();
-              }}
-              aria-label="Bookmarks"
-            >
-              <Star className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        <div />
       </div>
 
-      {/* Row 2 — Mode Toggles. Six columns when the background-audio
-          control is present (mobile only); five otherwise. */}
-      <div
-        className={`grid ${
-          onToggleBackgroundAudio ? "grid-cols-6" : "grid-cols-5"
-        } gap-1 sm:gap-2 w-full items-center`}
-      >
-        {/* Playback mode. LIVE and BACKGROUND are two ways of listening,
-            not a control plus a mystery switch — joining them makes the
-            choice visible and removes the greyed-out LIVE that used to
-            need explaining. BACKGROUND is mobile-only; on desktop this is
-            just the LIVE button it always was. */}
-        <div
-          className={`${onToggleBackgroundAudio ? "col-span-2 join w-full" : ""}`}
-        >
-          <div
-            className={`tooltip tooltip-bottom ${
-              onToggleBackgroundAudio ? "w-1/2" : "w-full"
-            }`}
-            data-tip="Play in this tab"
-          >
-            <button
-              className={`btn btn-xs sm:btn-sm w-full min-w-0 px-1 sm:px-2 gap-1 ${
-                onToggleBackgroundAudio ? "join-item" : ""
-              } ${
-                isLive && !backgroundAudio
-                  ? "btn-success"
-                  : "btn-soft"
-              }`}
-              onClick={() => {
-                beep();
-                onToggleLive();
-              }}
-            >
-              <Radio className="hidden sm:inline w-3.5 h-3.5" />
-              LIVE
-            </button>
-          </div>
-
-          {onToggleBackgroundAudio && (
+      {/* Modes. LIVE and BKGND are two ways of listening, not a control
+          plus a mystery switch — joining them makes the choice visible.
+          BKGND is mobile-only; on desktop this is just the LIVE button. */}
+      <div className="@container mt-4">
+        <div className="flex flex-wrap gap-2">
+          <div className={onToggleBackgroundAudio ? `join ${pair}` : cell}>
             <div
-              className="tooltip tooltip-bottom w-1/2"
-              data-tip={
-                streamState === "blocked" && backgroundAudio
-                  ? "Paused — tap to resume"
-                  : "Keeps playing when your screen locks"
-              }
+              className={`tooltip tooltip-bottom ${
+                onToggleBackgroundAudio ? "w-1/2" : "w-full"
+              }`}
+              data-tip="Play in this tab"
             >
               <button
-                className={`btn btn-xs sm:btn-sm join-item w-full min-w-0 px-1 sm:px-2 gap-1 ${
-                  backgroundAudio
-                    ? streamState === "blocked"
-                      ? "btn-warning"
-                      : "btn-primary"
-                    : "btn-soft"
+                className={`${mode} ${onToggleBackgroundAudio ? "join-item" : ""} ${
+                  isLive && !backgroundAudio ? "btn-success" : off
                 }`}
                 onClick={() => {
                   beep();
-                  onToggleBackgroundAudio();
+                  onToggleLive();
                 }}
-                aria-label="Background audio"
-                aria-pressed={backgroundAudio === true}
+                aria-pressed={isLive && !backgroundAudio}
               >
-                <Smartphone className="hidden sm:inline w-3.5 h-3.5" />
-                BKGND
+                <Radio className="hidden sm:inline w-3.5 h-3.5" />
+                LIVE
               </button>
             </div>
-          )}
-        </div>
 
-        {/* HOLD */}
-        <div className="dropdown dropdown-top w-full">
-          {/* HOLD is transient UI state the server never sees, so it
-              cannot filter the stream — it would look like it worked and
-              silently do nothing. */}
-          <div
-            tabIndex={backgroundAudio ? -1 : 0}
-            role="button"
-            aria-label="Hold"
-            aria-disabled={backgroundAudio === true}
-            title={
-              backgroundAudio
-                ? "Not available while background audio is on"
-                : undefined
-            }
-            className={`btn btn-xs sm:btn-sm w-full min-w-0 px-1 sm:px-2 gap-1 ${
-              backgroundAudio
-                ? "btn-disabled"
-                : isHolding
-                  ? "btn-secondary"
-                  : "btn-soft"
-            }`}
-          >
-            <Lock className="hidden sm:inline w-3.5 h-3.5" />
-            HOLD
-          </div>
-          <ul
-            tabIndex={0}
-            className="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-48 z-50"
-          >
-            <li>
-              <button
-                onClick={() =>
-                  onHoldSystem(
-                    heldSystem !== null ? null : (currentCallSystemId ?? null),
-                  )
+            {onToggleBackgroundAudio && (
+              <div
+                className="tooltip tooltip-bottom w-1/2"
+                data-tip={
+                  streamState === "blocked" && backgroundAudio
+                    ? "Paused — tap to resume"
+                    : "Keeps playing when your screen locks"
                 }
               >
-                {heldSystem !== null ? "Release System" : "Hold System"}
-              </button>
-            </li>
-            <li>
-              <button
-                onClick={() =>
-                  onHoldTG(heldTG !== null ? null : (currentCallTgId ?? null))
-                }
-              >
-                {heldTG !== null ? "Release Talkgroup" : "Hold Talkgroup"}
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        {/* AVOID */}
-        <div className="dropdown dropdown-top w-full">
-          <div
-            tabIndex={0}
-            role="button"
-            aria-label="Avoid"
-            className="btn btn-xs sm:btn-sm w-full min-w-0 px-1 sm:px-2 gap-1 btn-soft"
-          >
-            <Ban className="hidden sm:inline w-3.5 h-3.5" />
-            AVOID
+                <button
+                  className={`${mode} join-item ${
+                    backgroundAudio
+                      ? streamState === "blocked"
+                        ? "btn-warning"
+                        : "btn-primary"
+                      : off
+                  }`}
+                  onClick={() => {
+                    beep();
+                    onToggleBackgroundAudio();
+                  }}
+                  aria-label="Background audio"
+                  aria-pressed={backgroundAudio === true}
+                >
+                  <Smartphone className="hidden sm:inline w-3.5 h-3.5" />
+                  BKGND
+                </button>
+              </div>
+            )}
           </div>
-          <ul
-            tabIndex={0}
-            className="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-44 z-50"
-          >
-            <li>
-              <button onClick={() => handleAvoid(30)}>30 minutes</button>
-            </li>
-            <li>
-              <button onClick={() => handleAvoid(60)}>60 minutes</button>
-            </li>
-            <li>
-              <button onClick={() => handleAvoid(120)}>120 minutes</button>
-            </li>
-            <li>
-              <button onClick={() => handleAvoid(0)}>Permanent</button>
-            </li>
-          </ul>
-        </div>
 
-        {/* SELECT */}
-        <div className="tooltip tooltip-bottom" data-tip="Select Talkgroups">
-          <button
-            className="btn btn-xs sm:btn-sm w-full min-w-0 px-1 sm:px-2 gap-1 btn-soft"
-            onClick={() => {
-              beep();
-              onToggleSelectTG();
-            }}
-          >
-            <List className="hidden sm:inline w-3.5 h-3.5" />
-            SELECT
-          </button>
-        </div>
+          {/* HOLD is transient UI state the server never sees, so it cannot
+            filter the stream — it would look like it worked and silently
+            do nothing. */}
+          <div className={`dropdown dropdown-top ${cell}`}>
+            <div
+              tabIndex={backgroundAudio ? -1 : 0}
+              role="button"
+              aria-label="Hold"
+              aria-disabled={backgroundAudio === true}
+              title={backgroundAudio ? inertTip : undefined}
+              className={`${mode} ${
+                backgroundAudio
+                  ? "btn-disabled"
+                  : isHolding
+                    ? "btn-primary"
+                    : off
+              }`}
+            >
+              <Lock className="hidden sm:inline w-3.5 h-3.5" />
+              HOLD
+            </div>
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-48 z-50"
+            >
+              <li>
+                <button
+                  onClick={() =>
+                    onHoldSystem(
+                      heldSystem !== null
+                        ? null
+                        : (currentCallSystemId ?? null),
+                    )
+                  }
+                >
+                  {heldSystem !== null ? "Release System" : "Hold System"}
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() =>
+                    onHoldTG(heldTG !== null ? null : (currentCallTgId ?? null))
+                  }
+                >
+                  {heldTG !== null ? "Release Talkgroup" : "Hold Talkgroup"}
+                </button>
+              </li>
+            </ul>
+          </div>
 
-        {/* SEARCH */}
-        <div className="tooltip tooltip-bottom" data-tip="Search Calls">
-          <button
-            className="btn btn-xs sm:btn-sm w-full min-w-0 px-1 sm:px-2 gap-1 btn-soft"
-            onClick={() => {
-              beep();
-              onToggleSearch();
-            }}
+          <div className={`dropdown dropdown-top ${cell}`}>
+            <div
+              tabIndex={0}
+              role="button"
+              aria-label="Avoid"
+              className={`${mode} ${isAvoided ? "btn-primary" : off}`}
+            >
+              <Ban className="hidden sm:inline w-3.5 h-3.5" />
+              AVOID
+            </div>
+            <ul
+              tabIndex={0}
+              className="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-44 z-50"
+            >
+              <li>
+                <button onClick={() => handleAvoid(30)}>30 minutes</button>
+              </li>
+              <li>
+                <button onClick={() => handleAvoid(60)}>60 minutes</button>
+              </li>
+              <li>
+                <button onClick={() => handleAvoid(120)}>120 minutes</button>
+              </li>
+              <li>
+                <button onClick={() => handleAvoid(0)}>Permanent</button>
+              </li>
+            </ul>
+          </div>
+
+          <div
+            className={`tooltip tooltip-bottom ${cell}`}
+            data-tip="Select Talkgroups"
           >
-            <Search className="hidden sm:inline w-3.5 h-3.5" />
-            SEARCH
-          </button>
+            <button
+              className={`${mode} ${selectOpen ? "btn-primary" : off}`}
+              onClick={() => {
+                beep();
+                onToggleSelectTG();
+              }}
+              aria-expanded={selectOpen === true}
+            >
+              <List className="hidden sm:inline w-3.5 h-3.5" />
+              SELECT
+            </button>
+          </div>
+
+          <div
+            className={`tooltip tooltip-bottom ${cell}`}
+            data-tip="Search Calls"
+          >
+            <button
+              className={`${mode} ${searchOpen ? "btn-primary" : off}`}
+              onClick={() => {
+                beep();
+                onToggleSearch();
+              }}
+              aria-expanded={searchOpen === true}
+            >
+              <Search className="hidden sm:inline w-3.5 h-3.5" />
+              SEARCH
+            </button>
+          </div>
         </div>
       </div>
     </div>

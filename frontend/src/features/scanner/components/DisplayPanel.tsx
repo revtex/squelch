@@ -6,20 +6,23 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { Share2, Sun, Copy, X, ExternalLink } from "lucide-react";
+import { Share2, Copy, X, ExternalLink } from "lucide-react";
 import { BookmarkButton } from "../components/BookmarkButton";
 import { useGetBookmarkIDsQuery, useToggleBookmarkMutation } from "@/app/api";
 import { useShareCallMutation } from "../shareSlice";
-import { HistoryPanel } from "../components/HistoryPanel";
 import { TranscriptPanel } from "../components/TranscriptPanel";
 import { useActiveUnit } from "../hooks/useActiveUnit";
+import { useLcdBrightness } from "../hooks/useLcdBrightness";
+import {
+  usePlaybackPosition,
+  formatElapsed,
+} from "../hooks/usePlaybackPosition";
 import { useAppSelector } from "@/app/store";
 import type { AvoidEntry } from "@/types";
 import type { Call } from "../types";
 
 interface DisplayPanelProps {
   currentCall: Call | null;
-  history: Call[];
   heldSystem: number | null;
   heldTG: number | null;
   listenerCount: number;
@@ -30,6 +33,7 @@ interface DisplayPanelProps {
   shareableLinks: boolean;
   isAuthenticated: boolean;
   isLive: boolean;
+  isPaused?: boolean;
   /** Server stream is playing; LIVE is deliberately off in that mode. */
   backgroundAudio?: boolean;
 }
@@ -62,12 +66,17 @@ function formatCallTime(ts: number, hour12: boolean) {
 }
 
 function formatFrequency(hz?: number) {
-  if (!hz) return "";
-  const str = hz.toString();
-  const spaced = str.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return `F: ${spaced} Hz`;
+  if (!hz || hz <= 0) return "";
+  const mhz = Math.floor(hz / 1_000_000);
+  const rest = (hz % 1_000_000).toString().padStart(6, "0");
+  return `${mhz}.${rest} MHz`;
 }
 
+/**
+ * The talkgroup name, stepped down in size until it fits the panel, then
+ * ellipsised — never squashed. Its full size comes from the theme's CSS
+ * (.lcd-sign), so block and classic panels each start from their own.
+ */
 function AutoSizeText({
   text,
   className,
@@ -75,38 +84,43 @@ function AutoSizeText({
   text: string;
   className?: string;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const container = containerRef.current;
-    const textEl = textRef.current;
-    if (!container || !textEl) return;
-    // Reset to natural size before measuring.
-    textEl.style.transform = "";
-    textEl.style.display = "inline-block";
-    textEl.style.transformOrigin = "left center";
-    const textWidth = textEl.offsetWidth;
-    const containerWidth = container.clientWidth;
-    if (textWidth > containerWidth) {
-      const scale = containerWidth / textWidth;
-      textEl.style.transform = `scaleX(${scale})`;
-    }
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.fontSize = "";
+      el.style.lineHeight = "";
+      const full = parseFloat(getComputedStyle(el).fontSize) || 0;
+      const min = full * 0.48;
+      let size = full;
+      while (el.scrollWidth > el.clientWidth && size - 2 >= min) {
+        size -= 2;
+        el.style.fontSize = `${size}px`;
+      }
+      // Keep the row's height as the name shrinks.
+      if (size !== full) el.style.lineHeight = getComputedStyle(el).height;
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [text]);
 
   return (
     <div
-      ref={containerRef}
-      className={`overflow-hidden whitespace-nowrap ${className ?? ""}`}
+      ref={ref}
+      className={`overflow-hidden whitespace-nowrap text-ellipsis ${className ?? ""}`}
     >
-      <span ref={textRef}>{text}</span>
+      {text}
     </div>
   );
 }
 
 export function DisplayPanel({
   currentCall,
-  history,
   heldSystem,
   heldTG,
   listenerCount,
@@ -117,22 +131,16 @@ export function DisplayPanel({
   shareableLinks,
   isAuthenticated,
   isLive,
+  isPaused,
   backgroundAudio,
 }: DisplayPanelProps) {
   const clock = useClock();
   const liveTranscriptDisplay = useAppSelector(
     (s) => s.scanner.config?.liveTranscriptDisplay ?? false,
   );
-  const [brightness, setBrightness] = useState(() => {
-    const saved = localStorage.getItem("lcd-brightness");
-    return saved ? Number(saved) : 50;
-  });
-  const [showBrightness, setShowBrightness] = useState(false);
-
-  const handleBrightness = useCallback((val: number) => {
-    setBrightness(val);
-    localStorage.setItem("lcd-brightness", String(val));
-  }, []);
+  const { brightness } = useLcdBrightness();
+  const isAudioActive = useAppSelector((s) => s.scanner.isAudioActive);
+  const position = usePlaybackPosition(isAudioActive);
 
   const { data: bookmarkData } = useGetBookmarkIDsQuery(undefined, {
     skip: !isAuthenticated,
@@ -233,238 +241,208 @@ export function DisplayPanel({
 
   const activeUnit = useActiveUnit(currentCall?.sources);
 
-  const displayContent = (
-    <div className="font-mono text-sm leading-5 p-3 h-105 flex flex-col">
-      {/* Row 1: clock, listeners, queue */}
-      <div className="flex justify-between">
-        <span>{formatClock(clock, time12hFormat)}</span>
-        <div className="flex items-center gap-4">
-          {showListenersCount && <span>L: {listenerCount}</span>}
-          {/* The queue is the local player's. While background audio is on
-              the server does the queueing, so this counter is structurally
-              zero — a dash says "not applicable here" instead of implying
-              nothing is waiting. */}
-          <span
-            title={
-              backgroundAudio
-                ? "The server manages the queue while background audio is on"
-                : undefined
-            }
-          >
-            Q: {backgroundAudio ? "\u2014" : queueCount}
-          </span>
-        </div>
-      </div>
+  const isHolding = heldSystem !== null || heldTG !== null;
+  const idleSign = backgroundAudio
+    ? "SQUELCH"
+    : !isLive
+      ? "OFF"
+      : isPaused
+        ? "PAUSED"
+        : isHolding
+          ? "HOLD"
+          : "SQUELCH";
 
-      {currentCall ? (
-        <>
-          {/* Row 3: system label, tag */}
-          <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 flex-1 truncate">
-              {currentCall.systemLabel ?? ""}
-            </span>
-            <span className="shrink-0 whitespace-nowrap opacity-60">
-              {currentCall.talkgroupTag ?? ""}
+  const unitText = (() => {
+    if (!currentCall) return "";
+    const uid = activeUnit?.src || currentCall.source;
+    const alias = activeUnit?.tag || currentCall.talkerAlias;
+    return [uid ? `UID: ${uid}` : "", alias].filter(Boolean).join(" · ");
+  })();
+
+  // The badge row's clock: position / length while the Call plays, its
+  // length once it has. Held to the length, since the position is sampled.
+  const segments = currentCall?.transcriptSegments ?? [];
+  const callLength = Math.max(
+    currentCall?.duration ?? 0,
+    segments.length > 0 ? segments[segments.length - 1].end : 0,
+  );
+  const callClock =
+    !currentCall || callLength <= 0
+      ? ""
+      : isAudioActive
+        ? `${formatElapsed(Math.min(position, callLength))} / ${formatElapsed(callLength)}`
+        : formatElapsed(callLength);
+
+  const errorChip = currentCall
+    ? [
+        currentCall.errorCount != null ? `E:${currentCall.errorCount}` : "",
+        currentCall.spikeCount != null ? `S:${currentCall.spikeCount}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+
+  const badge =
+    "inline-flex h-[18px] sm:h-5 items-center rounded-[2px] border border-accent px-1.5 text-[10px] sm:text-[11px] font-bold tracking-[0.08em] text-accent";
+
+  const displayContent = (
+    <div className="flex flex-col">
+      {/* Head — the ink block on block themes, plain panel on classic. */}
+      <div className="lcd-head px-3 pt-2.5 pb-2 flex flex-col gap-0.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-bold tracking-[0.06em]">
+            {formatClock(clock, time12hFormat)}
+          </span>
+          <div className="flex items-center gap-3 whitespace-nowrap">
+            {avoidList.length > 0 && (
+              <span className="opacity-85">AVD {avoidList.length}</span>
+            )}
+            {showListenersCount && <span>L: {listenerCount}</span>}
+            {/* The queue is the local player's. While background audio is
+                on the server does the queueing, so this counter is
+                structurally zero — a dash says "not applicable here"
+                instead of implying nothing is waiting. */}
+            <span
+              className="font-bold"
+              title={
+                backgroundAudio
+                  ? "The server manages the queue while background audio is on"
+                  : undefined
+              }
+            >
+              Q: {backgroundAudio ? "—" : queueCount}
             </span>
           </div>
+        </div>
 
-          {/* Row 4: TG group/label, call time */}
-          <div className="flex justify-between">
-            <span className="truncate">
-              {[currentCall.talkgroupGroup, currentCall.talkgroupLabel]
-                .filter(Boolean)
-                .join(" · ")}
+        <div className="flex items-center justify-between gap-2 min-h-lh">
+          <span className="min-w-0 flex-1 truncate">
+            {currentCall?.systemLabel ?? ""}
+          </span>
+          {currentCall?.talkgroupTag && (
+            <span className="shrink-0 rounded-[2px] bg-secondary px-1.5 py-px text-[10px] sm:text-[11px] leading-[14px] sm:leading-4 font-bold tracking-[0.1em] uppercase text-lcd-bg">
+              {currentCall.talkgroupTag}
             </span>
-            <span className="shrink-0 whitespace-nowrap opacity-60">
+          )}
+        </div>
+
+        <div className="flex justify-between gap-2 min-h-lh">
+          <span className="min-w-0 truncate">
+            {currentCall
+              ? [currentCall.talkgroupGroup, currentCall.talkgroupLabel]
+                  .filter(Boolean)
+                  .join(" · ")
+              : ""}
+          </span>
+          {currentCall && (
+            <span className="shrink-0 whitespace-nowrap opacity-78">
               {formatCallTime(currentCall.dateTime, time12hFormat)}
             </span>
-          </div>
+          )}
+        </div>
 
-          {/* Row 5: TG name — large, auto-sized to fit */}
+        {currentCall ? (
           <AutoSizeText
             text={
               currentCall.talkgroupName?.trim() ||
               currentCall.talkgroupLabel?.trim() ||
               `TGID: ${currentCall.talkgroupId}`
             }
-            className="text-2xl font-bold text-center py-1"
+            className="lcd-sign text-center py-1"
           />
+        ) : (
+          <div className="lcd-sign text-center py-1 opacity-30">{idleSign}</div>
+        )}
+      </div>
 
-          {/* Row 6: frequency, TGID */}
-          <div className="flex justify-between">
-            <span>{formatFrequency(currentCall.frequency)}</span>
-            <span>TGID: {currentCall.talkgroupId}</span>
-          </div>
+      <div className="lcd-dither" aria-hidden="true" />
 
-          {/* Row 7: site/decoder, unit ID / talker alias */}
-          <div className="flex justify-between">
-            <span className="truncate opacity-60">
-              {[currentCall.site, currentCall.decoder]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-            <span className="truncate text-right">
-              {(() => {
-                const uid = activeUnit?.src ?? currentCall.source;
-                const alias = activeUnit?.tag || currentCall.talkerAlias;
-                return [uid ? `UID: ${uid}` : "", alias]
-                  .filter(Boolean)
-                  .join(" · ");
-              })()}
-            </span>
-          </div>
-
-          {/* Row 8: bookmark, share, flags */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <div className="relative flex items-center">
-                <button
-                  className="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-50"
-                  onClick={() => setShowBrightness((p) => !p)}
-                  aria-label="Adjust brightness"
-                >
-                  <Sun className="w-4 h-4" />
-                </button>
-                {showBrightness && (
-                  <input
-                    type="range"
-                    min={20}
-                    max={120}
-                    value={brightness}
-                    onChange={(e) => handleBrightness(Number(e.target.value))}
-                    className="brightness-slider ml-1"
-                    aria-label="Display brightness"
-                  />
-                )}
-              </div>
-              {isAuthenticated && (
-                <BookmarkButton
-                  isBookmarked={bookmarkedCallIds.includes(currentCall.id)}
-                  onToggle={() => handleToggleBookmark(currentCall.id)}
-                />
-              )}
-              {isAuthenticated && shareableLinks && (
-                <button
-                  className="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-50"
-                  onClick={handleShare}
-                  aria-label="Share call"
-                >
-                  <Share2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              {isHeld && (
-                <span className="badge badge-xs bg-base-300 text-base-content">
-                  HOLD
-                </span>
-              )}
-              {isAvoided && (
-                <span className="badge badge-xs bg-base-300 text-base-content">
-                  AVOID
-                </span>
-              )}
-              {currentCall.patches && (
-                <span className="badge badge-xs bg-base-300 text-base-content">
-                  PATCH
-                </span>
-              )}
-              <span className="opacity-50 text-xs">
-                {currentCall.errorCount != null
-                  ? `E: ${currentCall.errorCount}`
-                  : ""}
-                {currentCall.errorCount != null &&
-                currentCall.spikeCount != null
-                  ? " "
-                  : ""}
-                {currentCall.spikeCount != null
-                  ? `S: ${currentCall.spikeCount}`
-                  : ""}
-              </span>
-            </div>
-          </div>
-        </>
-      ) : (
-        /* Idle state — same row structure to keep constant height */
-        <>
-          {/* Row 3: system label, tag */}
-          <div className="flex justify-between invisible">
-            <span>&nbsp;</span>
-          </div>
-
-          {/* Row 4: TG group/label, call time */}
-          <div className="flex justify-between invisible">
-            <span>&nbsp;</span>
-          </div>
-
-          {/* Row 5: TG name — large */}
-          <div className="text-2xl font-bold text-center py-1 opacity-30">
-            SQUELCH
-          </div>
-
-          {/* Row 6: frequency, TGID */}
-          <div className="flex justify-between invisible">
-            <span>&nbsp;</span>
-          </div>
-
-          {/* Row 7: site/decoder, unit ID */}
-          <div className="flex justify-between invisible">
-            <span>&nbsp;</span>
-          </div>
-
-          {/* Hint to enable LIVE when offline. In background-audio mode
-              LIVE is deliberately off and the server stream is playing, so
-              telling the user to tap it would be wrong. */}
-          {!isLive && (
-            <div className="text-center text-sm opacity-40 py-1">
-              {backgroundAudio
-                ? "Background audio — streaming"
-                : "Tap LIVE to start listening"}
-            </div>
+      {/* Body — the readout. Idle, it keeps its height. */}
+      <div className="px-3 pt-2.5 pb-3 flex flex-col gap-[5px]">
+        <div className="flex justify-between gap-2 min-h-lh">
+          <span className="truncate">
+            {currentCall ? formatFrequency(currentCall.frequency) : ""}
+          </span>
+          {currentCall && (
+            <span className="shrink-0">TGID: {currentCall.talkgroupId}</span>
           )}
+        </div>
 
-          {/* Row 8: bookmark, share, flags */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              <div className="relative flex items-center">
-                <button
-                  className="btn btn-ghost btn-xs btn-circle opacity-50 hover:opacity-50"
-                  onClick={() => setShowBrightness((p) => !p)}
-                  aria-label="Adjust brightness"
-                >
-                  <Sun className="w-4 h-4" />
-                </button>
-                {showBrightness && (
-                  <input
-                    type="range"
-                    min={20}
-                    max={120}
-                    value={brightness}
-                    onChange={(e) => handleBrightness(Number(e.target.value))}
-                    className="brightness-slider ml-1"
-                    aria-label="Display brightness"
-                  />
-                )}
-              </div>
-            </div>
-            <span>&nbsp;</span>
-          </div>
-        </>
-      )}
+        <div className="flex justify-between gap-2 min-h-lh">
+          {currentCall ? (
+            <>
+              <span className="truncate text-lcd-dim">
+                {[currentCall.site, currentCall.decoder]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              <span className="truncate text-right">{unitText}</span>
+            </>
+          ) : (
+            /* Hint to enable LIVE when offline. In background-audio mode
+               LIVE is deliberately off and the server stream is playing,
+               so telling the user to tap it would be wrong. */
+            !isLive && (
+              <span className="w-full text-center text-lcd-dim">
+                {backgroundAudio
+                  ? "Background audio — streaming"
+                  : "Tap LIVE to start listening"}
+              </span>
+            )
+          )}
+        </div>
+
+        <div className="flex h-[18px] sm:h-5 items-center gap-1.5">
+          {isHeld && <span className={badge}>HOLD</span>}
+          {isAvoided && <span className={badge}>AVOID</span>}
+          {currentCall?.patches && <span className={badge}>PATCH</span>}
+          {errorChip && (
+            <span className="inline-flex h-[18px] sm:h-5 items-center rounded-[2px] bg-lcd-badge-bg px-1.5 text-[10px] sm:text-[11px]">
+              {errorChip}
+            </span>
+          )}
+          <span className="flex-1" />
+          {currentCall && isAuthenticated && (
+            <BookmarkButton
+              isBookmarked={bookmarkedCallIds.includes(currentCall.id)}
+              onToggle={() => handleToggleBookmark(currentCall.id)}
+            />
+          )}
+          {currentCall && isAuthenticated && shareableLinks && (
+            <button
+              className="btn btn-ghost btn-xs btn-circle opacity-70 hover:opacity-100"
+              onClick={handleShare}
+              aria-label="Share call"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {callClock && (
+            <span className="shrink-0 text-lcd-dim">{callClock}</span>
+          )}
+        </div>
+      </div>
 
       {/* Transcript (when enabled in admin) */}
-      {liveTranscriptDisplay && <TranscriptPanel call={currentCall} />}
-
-      {/* History */}
-      <HistoryPanel history={history} time12hFormat={time12hFormat} />
+      {liveTranscriptDisplay && (
+        <TranscriptPanel
+          call={currentCall}
+          position={position}
+          playing={isAudioActive}
+        />
+      )}
     </div>
   );
 
   return (
     <>
       <div
-        className="lcd-display rounded-lg"
-        style={{ filter: `brightness(${brightness / 100})` }}
+        className="lcd-display"
+        style={
+          brightness !== 100
+            ? { filter: `brightness(${brightness / 100})` }
+            : undefined
+        }
       >
         {displayContent}
       </div>

@@ -74,15 +74,15 @@ describe("ControlToolbar", () => {
     expect(liveBtn.className).toContain("btn-success");
   });
 
-  it("LIVE button has the faint resting style when isLive is false", () => {
-    // Resting mode buttons carry a faint background rather than none, so
-    // they read as buttons before being pressed; the active state stays
-    // bold enough to remain the obvious difference.
+  it("LIVE button has the resting style when isLive is false", () => {
+    // Resting mode buttons sit on base-300 rather than nothing, so they
+    // read as buttons before being pressed; the active state stays bold
+    // enough to remain the obvious difference.
     const props = defaultProps();
     props.isLive = false;
     render(<ControlToolbar {...props} />);
     const liveBtn = screen.getByText("LIVE").closest("button")!;
-    expect(liveBtn.className).toContain("btn-soft");
+    expect(liveBtn.className).toContain("bg-base-300");
     expect(liveBtn.className).not.toContain("btn-success");
   });
 
@@ -205,9 +205,7 @@ describe("ControlToolbar", () => {
       screen.queryByRole("button", { name: "Background audio" }),
     ).not.toBeInTheDocument();
 
-    rerender(
-      <ControlToolbar {...props} onToggleBackgroundAudio={vi.fn()} />,
-    );
+    rerender(<ControlToolbar {...props} onToggleBackgroundAudio={vi.fn()} />);
     expect(
       screen.getByRole("button", { name: "Background audio" }),
     ).toBeInTheDocument();
@@ -263,5 +261,31 @@ describe("ControlToolbar", () => {
     );
 
     expect(screen.getByRole("button", { name: /LIVE/ })).toBeEnabled();
+  });
+
+  it("disables Replay when there is no Call to replay", () => {
+    const props = defaultProps();
+    render(<ControlToolbar {...props} canReplay={false} />);
+    expect(screen.getByRole("button", { name: "Replay" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeEnabled();
+  });
+
+  it("lights SELECT and SEARCH while their panels are open", () => {
+    const props = defaultProps();
+    render(<ControlToolbar {...props} selectOpen searchOpen={false} />);
+    expect(screen.getByText("SELECT").closest("button")!.className).toContain(
+      "btn-primary",
+    );
+    expect(
+      screen.getByText("SEARCH").closest("button")!.className,
+    ).not.toContain("btn-primary");
+  });
+
+  it("lights AVOID when the current talkgroup is avoided", () => {
+    const props = defaultProps();
+    render(<ControlToolbar {...props} isAvoided />);
+    expect(screen.getByRole("button", { name: "Avoid" }).className).toContain(
+      "btn-primary",
+    );
   });
 });

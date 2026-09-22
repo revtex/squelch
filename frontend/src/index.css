@@ -3,11 +3,341 @@
   themes: false;
 }
 
-/* Custom themes */
+/* Bundled typefaces — the same three the mobile app ships (SIL OFL 1.1;
+   the licences sit beside the files in src/assets/fonts/). */
+@font-face {
+  font-family: "Selawik";
+  src: url("./assets/fonts/selawik_regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Selawik";
+  src: url("./assets/fonts/selawik_semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Selawik";
+  src: url("./assets/fonts/selawik_bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/jetbrainsmono_regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/jetbrainsmono_bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/jetbrainsmono_italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Big Shoulders Display";
+  src: url("./assets/fonts/bigshoulders_display_black.woff2") format("woff2");
+  font-weight: 900;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Selawik", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sign: "Big Shoulders Display", "Selawik", ui-sans-serif, sans-serif;
+}
+
+/* Theme-owned colours DaisyUI has no slot for: the dimmed text tone and
+   the scanner display's own palette. Each theme below sets the variables;
+   these make them Tailwind colours (text-lcd-dim, bg-lcd-block, ...). */
+@theme inline {
+  --color-base-content-dim: var(--base-content-dim);
+  --color-lcd-bg: var(--lcd-bg);
+  --color-lcd-fg: var(--lcd-fg);
+  --color-lcd-dim: var(--lcd-dim);
+  --color-lcd-border: var(--lcd-border);
+  --color-lcd-badge-bg: var(--lcd-badge-bg);
+  --color-lcd-block: var(--lcd-block);
+  --color-lcd-block-content: var(--lcd-block-content);
+  --color-lcd-face: var(--lcd-face);
+}
+
+/* Themes — generated from squelch-mobile's design-tokens/tokens.json so the
+   web and the app share one palette. All dark: a scanner is read in the
+   dark. Midnight is the default; "classic" is the original pale LCD. */
 @plugin "daisyui/theme" {
-  name: "squelch-dark";
+  name: "squelch-midnight";
   default: true;
   prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #0a0f18;
+  --color-base-200: #141c2a;
+  --color-base-300: #20293a;
+  --color-base-content: #d5dde8;
+  --color-primary: #23405f;
+  --color-primary-content: #dce3ec;
+  --color-secondary: #c9a227;
+  --color-accent: #8fb4dc;
+  --color-neutral: #141c2a;
+  --color-neutral-content: #d5dde8;
+  --color-info: #8fb4dc;
+  --color-success: #2f5a4a;
+  --color-warning: #c9a227;
+  --color-error: #d98479;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-midnight"],
+:root:not([data-theme]) {
+  --base-content-dim: #8a99ad;
+  --lcd-bg: #101725;
+  --lcd-fg: #d5dde8;
+  --lcd-dim: #8a99ad;
+  --lcd-border: #263144;
+  --lcd-badge-bg: #20293a;
+  --lcd-block: #23405f;
+  --lcd-block-content: #dce3ec;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #333c4a;
+  --led-paused: #d89a4a;
+  --led-live: #6fbf8a;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-graphite";
+  default: false;
+  color-scheme: dark;
+  --color-base-100: #0e1013;
+  --color-base-200: #191c20;
+  --color-base-300: #23272c;
+  --color-base-content: #d6d3cb;
+  --color-primary: #8e3b33;
+  --color-primary-content: #e6e3db;
+  --color-secondary: #c9a227;
+  --color-accent: #8fb4dc;
+  --color-neutral: #191c20;
+  --color-neutral-content: #d6d3cb;
+  --color-info: #8fb4dc;
+  --color-success: #3a6350;
+  --color-warning: #c9a227;
+  --color-error: #d06a5c;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-graphite"] {
+  --base-content-dim: #93999e;
+  --lcd-bg: #16181b;
+  --lcd-fg: #d6d3cb;
+  --lcd-dim: #93999e;
+  --lcd-border: #2a2e33;
+  --lcd-badge-bg: #23272c;
+  --lcd-block: #8e3b33;
+  --lcd-block-content: #e6e3db;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #3a3f45;
+  --led-paused: #d89a4a;
+  --led-live: #6fbf8a;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-ember";
+  default: false;
+  color-scheme: dark;
+  --color-base-100: #110e0c;
+  --color-base-200: #1e1815;
+  --color-base-300: #2a231f;
+  --color-base-content: #e4d9c9;
+  --color-primary: #8a3b23;
+  --color-primary-content: #f0e7d8;
+  --color-secondary: #c08a2e;
+  --color-accent: #e0a07a;
+  --color-neutral: #1e1815;
+  --color-neutral-content: #e4d9c9;
+  --color-info: #e0a07a;
+  --color-success: #3c5140;
+  --color-warning: #c08a2e;
+  --color-error: #dd8a6a;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-ember"] {
+  --base-content-dim: #a2917d;
+  --lcd-bg: #1a1513;
+  --lcd-fg: #e4d9c9;
+  --lcd-dim: #a2917d;
+  --lcd-border: #2f2723;
+  --lcd-badge-bg: #2a231f;
+  --lcd-block: #8a3b23;
+  --lcd-block-content: #f0e7d8;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #3f3630;
+  --led-paused: #d89a4a;
+  --led-live: #7fbf8f;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-moss";
+  default: false;
+  color-scheme: dark;
+  --color-base-100: #0c100d;
+  --color-base-200: #171d18;
+  --color-base-300: #1e2620;
+  --color-base-content: #d9e0d3;
+  --color-primary: #35573f;
+  --color-primary-content: #e4ebde;
+  --color-secondary: #b7a23e;
+  --color-accent: #96c0a0;
+  --color-neutral: #171d18;
+  --color-neutral-content: #d9e0d3;
+  --color-info: #96c0a0;
+  --color-success: #35573f;
+  --color-warning: #b7a23e;
+  --color-error: #d98a7c;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-moss"] {
+  --base-content-dim: #8d9a8c;
+  --lcd-bg: #121714;
+  --lcd-fg: #d9e0d3;
+  --lcd-dim: #8d9a8c;
+  --lcd-border: #232d25;
+  --lcd-badge-bg: #1e2620;
+  --lcd-block: #35573f;
+  --lcd-block-content: #e4ebde;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #333b34;
+  --led-paused: #d89a4a;
+  --led-live: #86c48f;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-plum";
+  default: false;
+  color-scheme: dark;
+  --color-base-100: #0f0b12;
+  --color-base-200: #1d1721;
+  --color-base-300: #241e29;
+  --color-base-content: #dfd7e3;
+  --color-primary: #5c2b48;
+  --color-primary-content: #ede6f0;
+  --color-secondary: #bfa03a;
+  --color-accent: #c89bb8;
+  --color-neutral: #1d1721;
+  --color-neutral-content: #dfd7e3;
+  --color-info: #c89bb8;
+  --color-success: #3e5b45;
+  --color-warning: #bfa03a;
+  --color-error: #d98b93;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-plum"] {
+  --base-content-dim: #978ca1;
+  --lcd-bg: #17121b;
+  --lcd-fg: #dfd7e3;
+  --lcd-dim: #978ca1;
+  --lcd-border: #2c2433;
+  --lcd-badge-bg: #241e29;
+  --lcd-block: #5c2b48;
+  --lcd-block-content: #ede6f0;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #3a3340;
+  --led-paused: #d89a4a;
+  --led-live: #7fc49a;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-ash";
+  default: false;
+  color-scheme: dark;
+  --color-base-100: #0c0c0c;
+  --color-base-200: #1a1a19;
+  --color-base-300: #232322;
+  --color-base-content: #cfccc4;
+  --color-primary: #7e3a30;
+  --color-primary-content: #e8e3dc;
+  --color-secondary: #c9a227;
+  --color-accent: #d08a78;
+  --color-neutral: #1a1a19;
+  --color-neutral-content: #cfccc4;
+  --color-info: #d08a78;
+  --color-success: #35553f;
+  --color-warning: #c9a227;
+  --color-error: #d08a78;
+  --radius-selector: 1rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
+
+[data-theme="squelch-ash"] {
+  --base-content-dim: #8b8981;
+  --lcd-bg: #131313;
+  --lcd-fg: #cfccc4;
+  --lcd-dim: #8b8981;
+  --lcd-border: #2b2b29;
+  --lcd-badge-bg: #232322;
+  --lcd-block: #2b2b29;
+  --lcd-block-content: #dcd9d1;
+  --lcd-scanline: rgb(0 0 0 / 0);
+  --led-off: #343431;
+  --led-paused: #d89a4a;
+  --led-live: #6fbf8a;
+}
+
+@plugin "daisyui/theme" {
+  name: "squelch-classic";
+  default: false;
   color-scheme: dark;
   --color-base-100: #121212;
   --color-base-200: #1e1e1e;
@@ -33,37 +363,38 @@
   --noise: 0;
 }
 
-@plugin "daisyui/theme" {
-  name: "squelch-light";
-  default: false;
-  color-scheme: light;
-  --color-base-100: #ffffff;
-  --color-base-200: #f5f5f5;
-  --color-base-300: #e0e0e0;
-  --color-base-content: #1e1e1e;
-  --color-primary: #3d7a42;
-  --color-primary-content: #ffffff;
-  --color-secondary: #a66932;
-  --color-accent: #0277bd;
-  --color-neutral: #f5f5f5;
-  --color-neutral-content: #1e1e1e;
-  --color-info: #0277bd;
-  --color-success: #3d7a42;
-  --color-warning: #c8963a;
-  --color-error: #c62828;
-  --radius-selector: 1rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.25rem;
-  --size-field: 0.25rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
+[data-theme="squelch-classic"] {
+  --base-content-dim: #9e9e9e;
+  --lcd-bg: #bbc8c0;
+  --lcd-fg: #1e2a24;
+  --lcd-dim: #45524b;
+  --lcd-border: #8a9690;
+  --lcd-badge-bg: #a3b0a8;
+  --lcd-block: transparent;
+  --lcd-block-content: #1e2a24;
+  --lcd-scanline: rgb(0 0 0 / 0.06);
+  --led-off: #505050;
+  --led-paused: #ff9100;
+  --led-live: #00e676;
+}
+
+/* The display's signature colour for previews: the ink block, or the
+   panel itself where there is no block. */
+:root,
+[data-theme] {
+  --lcd-face: var(--lcd-block);
+}
+[data-theme="squelch-classic"] {
+  --lcd-face: var(--lcd-bg);
 }
 
 /* Custom utilities */
-@utility led-branding {
-  letter-spacing: 2px;
+@utility tracking-label {
+  letter-spacing: 0.12em;
+}
+
+@utility tracking-brand {
+  letter-spacing: 0.22em;
 }
 
 @utility led-indicator {
@@ -71,35 +402,37 @@
   height: 12px;
 }
 
-@utility history-row {
-  font-size: 11px;
-  line-height: 21px;
-}
-
-/* Nokia-style LCD display */
+/* Scanner display. Every colour comes from the active theme, so one
+   component draws both looks: block themes put the clock, tag and
+   talkgroup name in a solid ink block over a dithered edge; the classic
+   theme's block is transparent, which leaves the original pale panel. */
 @layer components {
   .lcd-display {
-    --lcd-bg: #bbc8c0;
-    --lcd-fg: #1e2a24;
     background: var(--lcd-bg);
     color: var(--lcd-fg);
-    border: 3px solid #8a9690;
+    border: 3px solid var(--lcd-border);
     border-radius: 4px;
     box-shadow:
       inset 0 2px 8px rgba(0, 0, 0, 0.25),
       inset 0 -1px 4px rgba(255, 255, 255, 0.15),
       0 2px 6px rgba(0, 0, 0, 0.5);
     position: relative;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 16px;
   }
 
+  /* Scanlines only on a panel that claims to be lit; block themes set
+     the line colour fully transparent. */
   .lcd-display::after {
     content: "";
     position: absolute;
     inset: 0;
     background: repeating-linear-gradient(
       0deg,
-      rgba(0, 0, 0, 0.06) 0px,
-      rgba(0, 0, 0, 0.06) 1px,
+      var(--lcd-scanline) 0px,
+      var(--lcd-scanline) 1px,
       transparent 1px,
       transparent 3px
     );
@@ -107,24 +440,77 @@
     border-radius: inherit;
   }
 
-  .lcd-display .badge {
-    --lcd-badge-bg: #a3b0a8;
-    background: var(--lcd-badge-bg);
-    color: var(--lcd-fg);
-    border-color: var(--lcd-fg);
+  .lcd-head {
+    background: var(--lcd-block);
+    color: var(--lcd-block-content);
+  }
+
+  /* The talkgroup name: a condensed black sign in block themes, the
+     panel's own bold monospace on the classic LCD. */
+  .lcd-sign {
+    font-family: var(--font-sign);
+    font-weight: 900;
+    font-size: 42px;
+    line-height: 43px;
+    text-transform: uppercase;
+  }
+
+  [data-theme="squelch-classic"] .lcd-sign {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 24px;
+    line-height: 32px;
+    text-transform: none;
+  }
+
+  /* A 50% checkerboard of the block's ink, three pixels to the cell. */
+  .lcd-dither {
+    height: 6px;
+    background-color: var(--lcd-bg);
+    background-image: conic-gradient(var(--lcd-block) 25%, transparent 0 50%, var(--lcd-block) 0 75%, transparent 0);
+    background-size: 6px 6px;
+  }
+
+  /* The phone's sizes are set for a hand-held screen; on a desktop the
+     same panel is read from further away, so the type steps up. */
+  @media (min-width: 640px) {
+    .lcd-display {
+      font-size: 14px;
+      line-height: 20px;
+    }
+    .lcd-sign {
+      font-size: 56px;
+      line-height: 58px;
+    }
+    [data-theme="squelch-classic"] .lcd-sign {
+      font-size: 28px;
+      line-height: 36px;
+    }
+    .lcd-label {
+      font-size: 11px;
+    }
+  }
+
+  [data-theme="squelch-classic"] .lcd-dither {
+    display: none;
+  }
+
+  /* Unlit timeline segment: the same dither, one pixel to the cell. */
+  .lcd-dither-dim {
+    background-image: conic-gradient(var(--lcd-dim) 25%, transparent 0 50%, var(--lcd-dim) 0 75%, transparent 0);
+    background-size: 2px 2px;
+  }
+
+  .lcd-label {
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
   .lcd-display .btn {
-    color: var(--lcd-fg);
-  }
-
-  /* Horizontal brightness slider — LCD-integrated style */
-  .brightness-slider {
-    width: 100px;
-    height: 6px;
-    accent-color: var(--lcd-fg, #1e2a24);
-    cursor: pointer;
-    opacity: 0.6;
+    color: inherit;
   }
 }
 

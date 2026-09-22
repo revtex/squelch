@@ -15,6 +15,7 @@ import { useTGSelectionSync } from "./hooks/useTGSelectionSync";
 import { LEDPanel } from "./components/LEDPanel";
 import { DisplayPanel } from "./components/DisplayPanel";
 import { ControlToolbar } from "./components/ControlToolbar";
+import { HistoryPanel } from "./components/HistoryPanel";
 import SelectTGPanel from "./components/SelectTGPanel";
 import SearchPanel from "./components/SearchPanel";
 import BookmarksPanel from "./components/BookmarksPanel";
@@ -25,6 +26,7 @@ export default function Scanner() {
   const dispatch = useAppDispatch();
   const { data: setupStatus } = useGetSetupStatusQuery();
   const token = useAppSelector(selectToken);
+  const isAudioActive = useAppSelector((s) => s.scanner.isAudioActive);
 
   const scanner = useScanner();
   useTGSelectionSync();
@@ -95,11 +97,14 @@ export default function Scanner() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <LEDPanel />
+      <LEDPanel
+        onToggleBookmarks={
+          token ? () => setBookmarksOpen((prev) => !prev) : undefined
+        }
+      />
       <DisplayPanel
         currentCall={scanner.currentCall}
         backgroundAudio={scanner.backgroundAudio}
-        history={scanner.history}
         heldSystem={scanner.heldSystem}
         heldTG={scanner.heldTG}
         listenerCount={scanner.listenerCount}
@@ -116,6 +121,7 @@ export default function Scanner() {
         shareableLinks={scanner.config?.shareableLinks ?? false}
         isAuthenticated={!!token}
         isLive={scanner.isLive}
+        isPaused={scanner.isPaused}
       />
       <ControlToolbar
         isPaused={scanner.isPaused}
@@ -135,9 +141,15 @@ export default function Scanner() {
         onAddAvoid={scanner.addAvoid}
         onToggleSelectTG={handleToggleSelectTG}
         onToggleSearch={handleToggleSearch}
-        onToggleBookmarks={
-          token ? () => setBookmarksOpen((prev) => !prev) : undefined
+        selectOpen={selectTGOpen}
+        searchOpen={searchOpen}
+        isAvoided={
+          scanner.currentCall != null &&
+          scanner.avoidList.some(
+            (a) => a.talkgroupId === scanner.currentCall?.talkgroup,
+          )
         }
+        canReplay={scanner.currentCall != null}
         backgroundAudio={scanner.backgroundAudio}
         streamState={scanner.streamState}
         onToggleBackgroundAudio={
@@ -146,6 +158,15 @@ export default function Scanner() {
           token && isMobilePlatform() ? scanner.toggleBackgroundAudio : undefined
         }
         keypadBeeps={scanner.config?.keypadBeeps}
+      />
+      <HistoryPanel
+        history={scanner.history}
+        time12hFormat={
+          scanner.config?.time12hFormat ?? cachedPrefs.time12hFormat ?? false
+        }
+        playingCallId={
+          isAudioActive ? (scanner.currentCall?.id ?? null) : null
+        }
       />
       <SelectTGPanel
         isOpen={selectTGOpen}

@@ -4,8 +4,8 @@
   "description": "Self-hosted radio call archive",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#121212",
-  "theme_color": "#00e676",
+  "background_color": "#0a0f18",
+  "theme_color": "#0a0f18",
   "icons": [
     {
       "src": "/icon-192.png",

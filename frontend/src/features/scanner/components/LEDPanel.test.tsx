@@ -14,14 +14,21 @@ import type { Call } from "../types";
 import { trMqttReducer } from "@/app/store";
 
 // Mock useTheme since it reads localStorage / sets DOM attributes
-const mockToggle = vi.fn();
-let mockIsDark = true;
+const mockSetTheme = vi.fn();
 
 vi.mock("@/shared/hooks/useTheme", () => ({
+  THEMES: [
+    { id: "squelch-midnight", label: "Midnight", summary: "Blue-black" },
+    { id: "squelch-classic", label: "Squelch classic", summary: "Pale LCD" },
+  ],
   useTheme: () => ({
-    isDark: mockIsDark,
-    toggle: mockToggle,
-    theme: mockIsDark ? "squelch-dark" : "squelch-light",
+    theme: "squelch-midnight",
+    label: "Midnight",
+    setTheme: mockSetTheme,
+    themes: [
+      { id: "squelch-midnight", label: "Midnight", summary: "Blue-black" },
+      { id: "squelch-classic", label: "Squelch classic", summary: "Pale LCD" },
+    ],
   }),
 }));
 
@@ -70,8 +77,7 @@ function makeCall(overrides: Partial<Call> = {}): Call {
 
 describe("LEDPanel", () => {
   beforeEach(() => {
-    mockToggle.mockClear();
-    mockIsDark = true;
+    mockSetTheme.mockClear();
   });
 
   it('renders default branding text "SQUELCH"', () => {
@@ -98,7 +104,7 @@ describe("LEDPanel", () => {
         isPaused: false,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -135,7 +141,7 @@ describe("LEDPanel", () => {
         isPaused: false,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -153,26 +159,50 @@ describe("LEDPanel", () => {
     expect(screen.getByText("SQUELCH")).toBeInTheDocument();
   });
 
-  it("shows theme toggle button", () => {
+  it("names the current theme in the menu", () => {
     renderLED();
-    const btn = screen.getByRole("button", { name: /toggle theme/i });
-    expect(btn).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const item = screen.getByRole("button", { name: /theme/i });
+    expect(item).toHaveTextContent("Midnight");
   });
 
-  it("calls toggle when theme button clicked", () => {
+  it("sets the theme picked in the theme picker", () => {
     renderLED();
-    fireEvent.click(screen.getByRole("button", { name: /toggle theme/i }));
-    expect(mockToggle).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: /theme/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /squelch classic/i }));
+    expect(mockSetTheme).toHaveBeenCalledWith("squelch-classic");
   });
 
-  it("shows green LED when live and playing", () => {
+  it("offers bookmarks in the menu only when the page provides them", () => {
+    const onToggleBookmarks = vi.fn();
+    const { unmount } = renderLED();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(
+      screen.queryByRole("button", { name: "Bookmarks" }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <Provider store={makeStore()}>
+          <LEDPanel onToggleBookmarks={onToggleBookmarks} />
+        </Provider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: "Bookmarks" }));
+    expect(onToggleBookmarks).toHaveBeenCalledOnce();
+  });
+
+  it("shows the live colour, dimmed, when live and idle", () => {
     renderLED({
       scanner: {
         isLive: true,
         isPaused: false,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -187,21 +217,20 @@ describe("LEDPanel", () => {
         pendingTranscripts: {},
       },
     });
-    const led = document.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const led = screen.getByTestId("led");
     expect(led).toBeTruthy();
-    expect(led.style.backgroundColor).toBe("rgb(0, 230, 118)"); // #00e676
+    expect(led.dataset.state).toBe("idle");
+    expect(led.getAttribute("style")).toContain("var(--led-live)");
   });
 
-  it("shows orange LED when paused", () => {
+  it("shows the paused colour when paused", () => {
     renderLED({
       scanner: {
         isLive: true,
         isPaused: true,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -216,11 +245,10 @@ describe("LEDPanel", () => {
         pendingTranscripts: {},
       },
     });
-    const led = document.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const led = screen.getByTestId("led");
     expect(led).toBeTruthy();
-    expect(led.style.backgroundColor).toBe("rgb(255, 145, 0)"); // #ff9100 orange
+    expect(led.dataset.state).toBe("paused");
+    expect(led.getAttribute("style")).toContain("var(--led-paused)");
   });
 
   it("shows blink animation when paused", () => {
@@ -230,7 +258,7 @@ describe("LEDPanel", () => {
         isPaused: true,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -256,7 +284,7 @@ describe("LEDPanel", () => {
         isPaused: false,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -282,7 +310,7 @@ describe("LEDPanel", () => {
         isPaused: false,
         isAudioActive: true,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -297,21 +325,19 @@ describe("LEDPanel", () => {
         pendingTranscripts: {},
       },
     });
-    const led = document.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const led = screen.getByTestId("led");
     expect(led).toBeTruthy();
     expect(led.style.backgroundColor).toBe("rgb(255, 0, 255)"); // #ff00ff
   });
 
-  it("shows gray LED when not live and not playing", () => {
+  it("shows the off colour when not live", () => {
     renderLED({
       scanner: {
         isLive: false,
         isPaused: false,
         isAudioActive: false,
         backgroundAudio: false,
-      streamState: "idle" as const,
+        streamState: "idle" as const,
         heldSystem: null,
         heldTG: null,
         avoidList: [],
@@ -326,10 +352,9 @@ describe("LEDPanel", () => {
         pendingTranscripts: {},
       },
     });
-    const led = document.querySelector(
-      '[style*="background-color"]',
-    ) as HTMLElement;
+    const led = screen.getByTestId("led");
     expect(led).toBeTruthy();
-    expect(led.style.backgroundColor).toBe("rgb(80, 80, 80)"); // #505050
+    expect(led.dataset.state).toBe("off");
+    expect(led.getAttribute("style")).toContain("var(--led-off)");
   });
 });

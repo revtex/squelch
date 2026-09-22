@@ -1,15 +1,19 @@
 import {
-  Sun,
-  Moon,
-  User,
+  EllipsisVertical,
+  LogIn,
   LogOut,
   Settings,
   Info,
   KeyRound,
+  Palette,
+  Sun,
+  Star,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/shared/hooks/useTheme";
+import { useLcdBrightness } from "../hooks/useLcdBrightness";
+import { ThemePicker } from "./ThemePicker";
 import { useAppSelector, useAppDispatch } from "@/app/store";
 import {
   selectToken,
@@ -20,8 +24,14 @@ import {
 } from "@/features/auth";
 import { useChangePasswordMutation } from "@/features/auth";
 
-export function LEDPanel() {
-  const { isDark, toggle } = useTheme();
+interface LEDPanelProps {
+  /** Opens the bookmarks panel; omitted for anonymous listeners. */
+  onToggleBookmarks?: () => void;
+}
+
+export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
+  const { label: themeLabel } = useTheme();
+  const { brightness, setBrightness } = useLcdBrightness();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const token = useAppSelector(selectToken);
@@ -34,6 +44,8 @@ export function LEDPanel() {
   const currentCall = useAppSelector((s) => s.scanner.currentCall);
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [brightnessOpen, setBrightnessOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -60,33 +72,33 @@ export function LEDPanel() {
 
   const branding = config?.branding?.trim() || "SQUELCH";
 
-  // LED color logic:
-  // Live off:          off gray (always)
-  // Paused (live on):  orange + blink
-  // Live + receiving:  green (or TG custom color) with glow
-  // Live + idle:       green, dimmer (no glow)
-  // Playback/archive:  orange (or TG custom color)
-  // No link:           off gray
+  // LED state — colours come from the active theme:
+  // Live off:          off (always)
+  // Paused (live on):  paused + blink
+  // Live + receiving:  live (or the TG's own colour) with glow
+  // Live + idle:       live, dimmer (no glow)
+  let ledState: "off" | "paused" | "receiving" | "idle";
   let ledColor: string;
-  let dimmed: boolean;
-  const shouldBlink = isLive && isPaused;
-
   if (!isLive) {
-    ledColor = "#505050"; // off when live mode is disabled
-    dimmed = true;
+    ledState = "off";
+    ledColor = "var(--led-off)";
   } else if (isPaused) {
-    ledColor = "#ff9100"; // orange blink when paused
-    dimmed = false;
-  } else if (isAudioActive && currentCall?.talkgroupLedColor) {
-    ledColor = currentCall.talkgroupLedColor;
-    dimmed = false;
+    ledState = "paused";
+    ledColor = "var(--led-paused)";
   } else if (isAudioActive) {
-    ledColor = "#00e676"; // green - live receiving
-    dimmed = false;
+    ledState = "receiving";
+    ledColor = currentCall?.talkgroupLedColor || "var(--led-live)";
   } else {
-    ledColor = "#00e676"; // green dimmed - live idle
-    dimmed = true;
+    ledState = "idle";
+    ledColor = "var(--led-live)";
   }
+  const dimmed = ledState === "off" || ledState === "idle";
+  const shouldBlink = ledState === "paused";
+
+  const closeMenuAnd = (action: () => void) => () => {
+    setMenuOpen(false);
+    action();
+  };
 
   const handleSignOut = () => {
     postLogout()
@@ -125,99 +137,139 @@ export function LEDPanel() {
   };
 
   return (
-    <div className="flex items-center justify-between mb-6 overflow-visible">
-      <span className="led-branding text-sm font-bold tracking-widest uppercase opacity-70">
+    <div className="flex items-center gap-3 mb-3 overflow-visible">
+      <span className="flex-1 min-w-0 truncate font-mono text-sm tracking-brand uppercase text-base-content-dim">
         {branding}
       </span>
-      <div className="flex items-center gap-3">
-        {/* User menu */}
-        {token ? (
-          <div className="relative" ref={menuRef}>
-            <button
-              className="btn btn-ghost btn-xs gap-1"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="User menu"
-              aria-expanded={menuOpen}
-            >
-              <User className="w-4 h-4" />
-              <span className="text-xs opacity-70 max-w-24 truncate">
-                {username}
-              </span>
-            </button>
-            {menuOpen && (
-              <ul className="absolute right-0 top-full mt-1 menu p-2 shadow-lg bg-base-200 rounded-box w-48 z-100 border border-base-300">
-                {role === "admin" && (
-                  <li>
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        navigate("/admin/activity");
-                      }}
-                    >
-                      <Settings className="w-4 h-4" /> Admin Panel
-                    </button>
-                  </li>
-                )}
-                <li>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setPasswordOpen(true);
-                    }}
-                  >
-                    <KeyRound className="w-4 h-4" /> Change Password
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleSignOut();
-                    }}
-                  >
-                    <LogOut className="w-4 h-4" /> Sign Out
-                  </button>
-                </li>
-              </ul>
+      <div
+        data-testid="led"
+        data-state={ledState}
+        role="img"
+        aria-label={
+          ledState === "off"
+            ? "Live off"
+            : ledState === "paused"
+              ? "Paused"
+              : ledState === "receiving"
+                ? "Receiving"
+                : "Live, idle"
+        }
+        className={`led-indicator shrink-0 rounded ${shouldBlink ? "animate-pulse" : ""}`}
+        style={{
+          backgroundColor: ledColor,
+          boxShadow: dimmed
+            ? "none"
+            : `0 0 8px ${ledColor}, 0 0 16px ${ledColor}`,
+          opacity: dimmed ? 0.5 : 1,
+          animationTimingFunction: shouldBlink ? "step-end" : undefined,
+        }}
+      />
+      <div className="relative" ref={menuRef}>
+        <button
+          className="btn btn-ghost btn-sm btn-circle"
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-label="More"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <EllipsisVertical className="w-4 h-4" />
+        </button>
+        {menuOpen && (
+          <ul className="absolute right-0 top-full mt-1 menu p-2 shadow-lg bg-base-200 rounded-box w-60 z-100 border border-base-300">
+            {token && username && (
+              <li className="menu-title truncate">Signed in as {username}</li>
             )}
-          </div>
-        ) : (
-          <button
-            className="btn btn-ghost btn-xs"
-            onClick={() => navigate("/login")}
-            aria-label="Sign in"
-          >
-            <User className="w-4 h-4" />
-            <span className="text-xs opacity-70">Sign in</span>
-          </button>
+            <li>
+              <button onClick={closeMenuAnd(() => setThemeOpen(true))}>
+                <Palette className="w-4 h-4" /> Theme
+                <span className="ml-auto text-xs text-base-content-dim">
+                  {themeLabel}
+                </span>
+              </button>
+            </li>
+            <li>
+              <button onClick={closeMenuAnd(() => setBrightnessOpen(true))}>
+                <Sun className="w-4 h-4" /> Display brightness
+              </button>
+            </li>
+            {onToggleBookmarks && (
+              <li>
+                <button onClick={closeMenuAnd(onToggleBookmarks)}>
+                  <Star className="w-4 h-4" /> Bookmarks
+                </button>
+              </li>
+            )}
+            {token && role === "admin" && (
+              <li>
+                <button
+                  onClick={closeMenuAnd(() => navigate("/admin/activity"))}
+                >
+                  <Settings className="w-4 h-4" /> Admin Panel
+                </button>
+              </li>
+            )}
+            {token && (
+              <li>
+                <button onClick={closeMenuAnd(() => setPasswordOpen(true))}>
+                  <KeyRound className="w-4 h-4" /> Change Password
+                </button>
+              </li>
+            )}
+            <li>
+              <button onClick={closeMenuAnd(() => setAboutOpen(true))}>
+                <Info className="w-4 h-4" /> About
+              </button>
+            </li>
+            {token ? (
+              <li>
+                <button onClick={closeMenuAnd(handleSignOut)}>
+                  <LogOut className="w-4 h-4" /> Sign Out
+                </button>
+              </li>
+            ) : (
+              <li>
+                <button onClick={closeMenuAnd(() => navigate("/login"))}>
+                  <LogIn className="w-4 h-4" /> Sign in
+                </button>
+              </li>
+            )}
+          </ul>
         )}
-
-        <button
-          className="btn btn-ghost btn-xs btn-circle"
-          onClick={toggle}
-          aria-label="Toggle theme"
-        >
-          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
-        <button
-          className="btn btn-ghost btn-xs btn-circle"
-          onClick={() => setAboutOpen(true)}
-          aria-label="About"
-        >
-          <Info className="w-4 h-4" />
-        </button>
-        <div
-          className={`led-indicator rounded-sm ${shouldBlink ? "animate-pulse" : ""}`}
-          style={{
-            backgroundColor: ledColor,
-            boxShadow: dimmed
-              ? "none"
-              : `0 0 8px ${ledColor}, 0 0 16px ${ledColor}`,
-            opacity: dimmed ? 0.5 : 1,
-            animationTimingFunction: shouldBlink ? "step-end" : undefined,
-          }}
-        />
       </div>
+
+      <ThemePicker isOpen={themeOpen} onClose={() => setThemeOpen(false)} />
+
+      {/* Brightness modal */}
+      {brightnessOpen && (
+        <dialog
+          className="modal modal-open"
+          onClick={() => setBrightnessOpen(false)}
+        >
+          <div
+            className="modal-box max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg mb-4">Display brightness</h3>
+            <input
+              type="range"
+              min={20}
+              max={120}
+              value={brightness}
+              onChange={(e) => setBrightness(Number(e.target.value))}
+              className="range range-sm range-primary w-full"
+              aria-label="Display brightness"
+            />
+            <div className="modal-action">
+              <button
+                className="btn btn-sm"
+                onClick={() => setBrightnessOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
 
       {/* About modal */}
       {aboutOpen && (
