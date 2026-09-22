@@ -42,12 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   colour shows as a rail. The live transcript follows playback in a three-line
   window with a timeline above it. The menu (⋮) now holds the theme, display
   brightness, bookmarks, admin, password and sign-in/out.
-- **Seven dark themes, chosen per browser.** Midnight (the new default),
-  Graphite, Ember, Moss, Plum, Ash and Squelch classic — the same set the
-  mobile app offers, from the same palette. Squelch classic keeps the original
-  pale LCD. Pick one from ⋮ → Theme. It applies to every page, admin included,
-  and is remembered in that browser. The light theme is retired; a browser that
-  had it selected moves to Midnight.
+- **Seven dark themes, chosen per browser.** Squelch classic (the default,
+  the original pale LCD), Midnight, Graphite, Ember, Moss, Plum and Ash — the
+  same set the mobile app offers, from the same palette. Pick one from
+  ⋮ → Theme. It applies to every page, admin included, and is remembered in
+  that browser. The light theme is retired; a browser that had it selected
+  moves to Squelch classic.
 - **Bundled fonts.** Selawik, JetBrains Mono and Big Shoulders Display now ship
   with the app (SIL Open Font License), so the display looks the same on every
   machine and no font is fetched from a third party.

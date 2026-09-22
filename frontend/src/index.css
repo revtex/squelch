@@ -74,11 +74,10 @@
 
 /* Themes — generated from squelch-mobile's design-tokens/tokens.json so the
    web and the app share one palette. All dark: a scanner is read in the
-   dark. Midnight is the default; "classic" is the original pale LCD. */
+   dark. Squelch classic, the original pale LCD, is the default. */
 @plugin "daisyui/theme" {
   name: "squelch-midnight";
-  default: true;
-  prefersdark: true;
+  default: false;
   color-scheme: dark;
   --color-base-100: #0a0f18;
   --color-base-200: #141c2a;
@@ -104,8 +103,7 @@
   --noise: 0;
 }
 
-[data-theme="squelch-midnight"],
-:root:not([data-theme]) {
+[data-theme="squelch-midnight"] {
   --base-content-dim: #8a99ad;
   --lcd-bg: #101725;
   --lcd-fg: #d5dde8;
@@ -337,7 +335,8 @@
 
 @plugin "daisyui/theme" {
   name: "squelch-classic";
-  default: false;
+  default: true;
+  prefersdark: true;
   color-scheme: dark;
   --color-base-100: #121212;
   --color-base-200: #1e1e1e;
@@ -363,7 +362,8 @@
   --noise: 0;
 }
 
-[data-theme="squelch-classic"] {
+[data-theme="squelch-classic"],
+:root:not([data-theme]) {
   --base-content-dim: #9e9e9e;
   --lcd-bg: #bbc8c0;
   --lcd-fg: #1e2a24;

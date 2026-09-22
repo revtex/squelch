@@ -38,7 +38,7 @@ export const THEMES = [
 
 export type ThemeId = (typeof THEMES)[number]["id"];
 
-export const DEFAULT_THEME: ThemeId = "squelch-midnight";
+export const DEFAULT_THEME: ThemeId = "squelch-classic";
 const STORAGE_KEY = "squelch-theme";
 
 function isThemeId(value: string | null): value is ThemeId {

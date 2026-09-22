@@ -45,7 +45,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 
 - Use DaisyUI component classes (`btn`, `card`, `modal`, `table`, `input input-bordered`, `toggle`, `badge`, `toast`, `menu`, `stats`, `dropdown`, `tooltip`, `range`) — do not hand-roll equivalents
 - Compose with Tailwind utilities; never write custom CSS unless a truly unique visual requires it
-- Theming: `data-theme="squelch-<name>"` on `<html>` (`midnight` default, plus `graphite`, `ember`, `moss`, `plum`, `ash`, `classic`); palette tokens (`base-100`, `primary`, `secondary`, `error`, plus the theme-owned `base-content-dim` and `lcd-*` colours) only — no raw hex in components. The palettes are generated from squelch-mobile's `design-tokens/tokens.json`; change them there first and regenerate, so the web and the app stay one palette
+- Theming: `data-theme="squelch-<name>"` on `<html>` (`classic` default, plus `midnight`, `graphite`, `ember`, `moss`, `plum`, `ash`); palette tokens (`base-100`, `primary`, `secondary`, `error`, plus the theme-owned `base-content-dim` and `lcd-*` colours) only — no raw hex in components. The palettes are generated from squelch-mobile's `design-tokens/tokens.json`; change them there first and regenerate, so the web and the app stay one palette
 - Mobile-first responsive: `sm` (<640px), `md` (640–1023px), `lg` (≥1024px)
 - Icons: import from `lucide-react` as individual named imports; never `import * as Icons`
 
@@ -159,7 +159,7 @@ frontend/
 
 Local-only design notes (in the gitignored `docs/plans/` working directory) may contain extended ASCII wireframes and palette spec. The canonical, in-repo summary follows. Key points:
 
-- **Dark only** — seven DaisyUI themes shared with the mobile app (Midnight default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name
+- **Dark only** — seven DaisyUI themes shared with the mobile app (Squelch classic default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name
 - **Scanner page** — vertically-stacked single column, max-width 672px, 24px padding, laid out like the mobile app:
   - LED bar: branding (left), LED, ⋮ menu (Theme, Display brightness, Bookmarks, Admin, Change password, About, Sign in/out)
   - Display panel: ink-block head (clock, counts, system + tag chip, group · label, auto-sized TG name), dither strip, then frequency/TGID, site/unit, and a badge row (HOLD/AVOID/PATCH, E/S chip, bookmark/share, call clock). Type steps up from the phone sizes at `sm`
@@ -197,7 +197,7 @@ Before reporting a task done, run the validation loop from `frontend/`:
 - TG selection state persists in `localStorage` keyed by `?id=` URL param — enables multiple browser instances with independent selections
 - Avoid talkgroup: 30/60/120 min countdown tracked in Redux, LED flashes for avoided TGs
 - HOLD SYS / HOLD TG: filter CAL events so only the held system/talkgroup enters the queue
-- Theme: `applyStoredTheme()` in `main.tsx` sets `data-theme` on `<html>` before first render so every route uses the chosen palette; `useTheme.ts` holds the choice (localStorage `squelch-theme`, per browser) and the picker lives in the scanner's ⋮ menu. Retired `squelch-dark`/`squelch-light` values fall back to Midnight
+- Theme: `applyStoredTheme()` in `main.tsx` sets `data-theme` on `<html>` before first render so every route uses the chosen palette; `useTheme.ts` holds the choice (localStorage `squelch-theme`, per browser) and the picker lives in the scanner's ⋮ menu. Retired `squelch-dark`/`squelch-light` values fall back to the default
 - Bookmarks: star icon on calls; authenticated users persist to DB via RTK Query, public listeners use localStorage + generated session ID
 - Shareable links: share button creates a token via RTK Query and copies `/call/<token>` URL; `SharedCall.tsx` renders a minimal public player for the token
 - Transcripts: `TranscriptPanel.tsx` shows the transcript inside the display; `TRN` WS event updates live; search panel supports transcript text search
