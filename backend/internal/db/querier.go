@@ -131,6 +131,7 @@ type Querier interface {
 	UpdateUnit(ctx context.Context, arg UpdateUnitParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error
 	UpdateUserTGSelection(ctx context.Context, arg UpdateUserTGSelectionParams) error
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error

@@ -270,6 +270,10 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 		// per plan §4.1; the handler body is reused unchanged.
 		v1Auth.GET("/listener/tg-selection", authH.GetTGSelection)
 		v1Auth.PUT("/listener/tg-selection", middleware.MaxBodySize(1<<20), authH.PutTGSelection)
+		// A listener's own client settings, kept against the account so they
+		// follow the person to any browser they sign in on.
+		v1Auth.GET("/listener/preferences", authH.GetPreferences)
+		v1Auth.PUT("/listener/preferences", middleware.MaxBodySize(1<<16), authH.PutPreferences)
 		v1Auth.POST("/calls/:id/share", shareHandler.PostShareCall)
 		v1Auth.DELETE("/calls/:id/share", shareHandler.DeleteShareCall)
 		v1Auth.GET("/calls/:id/share", shareHandler.GetCallShare)

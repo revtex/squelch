@@ -200,6 +200,7 @@ type User struct {
 	Limit              sql.NullInt64  `db:"limit" json:"limit"`
 	PasswordNeedChange int64          `db:"password_need_change" json:"password_need_change"`
 	TgSelectionJson    sql.NullString `db:"tg_selection_json" json:"tg_selection_json"`
+	PreferencesJson    sql.NullString `db:"preferences_json" json:"preferences_json"`
 	CreatedAt          int64          `db:"created_at" json:"created_at"`
 	UpdatedAt          int64          `db:"updated_at" json:"updated_at"`
 }

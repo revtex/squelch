@@ -58,3 +58,9 @@ UPDATE users SET
     tg_selection_json = :tg_selection_json,
     updated_at        = :updated_at
 WHERE id = :id;
+
+-- name: UpdateUserPreferences :exec
+UPDATE users SET
+    preferences_json = :preferences_json,
+    updated_at       = :updated_at
+WHERE id = :id;
