@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Globe, Radio, AudioLines, Monitor, Share2, Plug } from "lucide-react";
+import { Globe, Radio, AudioLines, Share2, Plug } from "lucide-react";
 import {
   useGetConfigQuery,
   useUpdateConfigMutation,
@@ -38,8 +38,6 @@ const AUDIO_ENCODING_PRESETS: Record<string, string> = {
 
 const HE_AAC_PRESETS = new Set(["he_aac_12k", "he_aac_8k"]);
 
-const KEYPAD_BEEPS = ["disabled", "uniden", "whistler"] as const;
-
 interface SettingSection {
   title: string;
   icon: React.ReactNode;
@@ -69,11 +67,6 @@ const SECTIONS: SettingSection[] = [
     ],
   },
   {
-    title: "Display",
-    icon: <Monitor className="w-4 h-4" />,
-    keys: ["keypadBeeps"],
-  },
-  {
     title: "Sharing",
     icon: <Share2 className="w-4 h-4" />,
     keys: ["shareableLinks", "sharedLinkExpiry"],
@@ -100,7 +93,6 @@ const LABELS: Record<string, string> = {
   email: "Support Email",
   time12hFormat: "12-Hour Time Format",
   maxClients: "Max Simultaneous Clients",
-  keypadBeeps: "Keypad Beep Style",
   disableDuplicateDetection: "Disable Duplicate Call Detection",
   duplicateDetectionTimeFrame: "Duplicate Detection Time Frame (ms)",
   pruneDays: "Prune Database After (days)",
@@ -127,8 +119,6 @@ const DESCRIPTIONS: Record<string, string> = {
     "Calls within ±this many milliseconds of an existing call with the same system/talkgroup are rejected as duplicates.",
   pruneDays:
     "Automatically delete calls older than this many days. Set to 0 to disable.",
-  keypadBeeps:
-    "Audio feedback style when pressing buttons. Disabled turns off beeps.",
   sharedLinkExpiry:
     "Number of days before shared links expire. Set to 0 to disable (links never expire).",
   trMqttEnabled:
@@ -356,26 +346,6 @@ export default function OptionsPanel() {
               Enable audio conversion above to activate this setting.
             </p>
           )}
-        </div>
-      );
-    }
-
-    if (key === "keypadBeeps") {
-      return (
-        <div className="flex flex-col">
-          {label}
-          {description}
-          <select
-            className="select w-full"
-            value={value}
-            onChange={(e) => updateSetting(key, e.target.value)}
-          >
-            {KEYPAD_BEEPS.map((style) => (
-              <option key={style} value={style}>
-                {style.charAt(0).toUpperCase() + style.slice(1)}
-              </option>
-            ))}
-          </select>
         </div>
       );
     }

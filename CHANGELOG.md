@@ -39,6 +39,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Keypad beeps are a listener's own setting now.** The button-press sound
+  moved out of the admin options panel and into the scanner's ⋮ menu, where
+  each browser picks its own — Off, Uniden or Whistler, and picking one plays
+  it. The person listening is the one in the quiet room, and they are not
+  always the admin. The instance's `keypadBeeps` setting is still the starting
+  point, so nobody has to choose twice, and a listener's own choice wins from
+  then on; operators set the default with
+  `squelch config-set keypadBeeps <style>`.
+
 - **The scanner looks like the mobile app.** The web scanner page now uses the
   app's design: the display's clock, tag and talkgroup name sit in a solid ink
   block over a dithered edge, with the name in a condensed display face sized

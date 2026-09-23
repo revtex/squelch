@@ -7,6 +7,7 @@ import { setSetupStatus, selectToken } from "@/features/auth";
 import { expireAvoids, setPaused, setLive, resetDisplay } from "./scannerSlice";
 import { useScanner } from "./hooks/useScanner";
 import { useTGSelectionSync } from "./hooks/useTGSelectionSync";
+import { useKeypadBeeps } from "./hooks/useKeypadBeeps";
 import { LEDPanel } from "./components/LEDPanel";
 import { DisplayPanel } from "./components/DisplayPanel";
 import { ControlToolbar } from "./components/ControlToolbar";
@@ -25,6 +26,8 @@ export default function Scanner() {
 
   const scanner = useScanner();
   useTGSelectionSync();
+  // Per-browser, with the server's setting as the starting point.
+  const { style: keypadBeeps } = useKeypadBeeps(scanner.config?.keypadBeeps);
 
   // Read cached display prefs so we don't flash defaults before WS delivers CFG.
   // Lazy useState initializer runs exactly once per component instance.
@@ -156,7 +159,7 @@ export default function Scanner() {
             ? scanner.toggleBackgroundAudio
             : undefined
         }
-        keypadBeeps={scanner.config?.keypadBeeps}
+        keypadBeeps={keypadBeeps}
       />
       <HistoryPanel
         history={scanner.history}

@@ -294,11 +294,12 @@ General settings that control how Squelch behaves. Settings are organized into g
 | HE-AAC 12 kbps | High-efficiency AAC, very small files |
 | HE-AAC 8 kbps  | Smallest possible, lowest quality     |
 
-### Display
-
-| Setting           | Description                                                   | Default |
-| ----------------- | ------------------------------------------------------------- | ------- |
-| Keypad Beep Style | Button press sound: **Disabled**, **Uniden**, or **Whistler** | Uniden  |
+> **Keypad beeps are not an admin setting.** The button-press sound is chosen
+> per browser from the scanner's ⋮ menu → **Keypad beeps**, as it is on the
+> mobile app: the person listening is the one in the quiet room, and they are
+> not always the admin. The instance-wide starting point is the `keypadBeeps`
+> setting, which a listener's own choice overrides from then on; set it with
+> `squelch config-set keypadBeeps uniden|whistler|disabled`.
 
 ### Sharing
 

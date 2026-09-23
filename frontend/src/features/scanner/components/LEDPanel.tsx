@@ -8,12 +8,15 @@ import {
   Palette,
   Sun,
   Star,
+  Volume2,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/shared/hooks/useTheme";
 import { useLcdBrightness } from "../hooks/useLcdBrightness";
+import { useKeypadBeeps } from "../hooks/useKeypadBeeps";
 import { ThemePicker } from "./ThemePicker";
+import { KeypadBeepsPicker } from "./KeypadBeepsPicker";
 import { useAppSelector, useAppDispatch } from "@/app/store";
 import {
   selectToken,
@@ -38,6 +41,11 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
   const role = useAppSelector(selectRole);
   const username = useAppSelector(selectUsername);
   const config = useAppSelector((s) => s.scanner.config);
+  const {
+    style: beepStyle,
+    label: beepsLabel,
+    setStyle: setBeepStyle,
+  } = useKeypadBeeps(config?.keypadBeeps);
   const isLive = useAppSelector((s) => s.scanner.isLive);
   const isPaused = useAppSelector((s) => s.scanner.isPaused);
   const isAudioActive = useAppSelector((s) => s.scanner.isAudioActive);
@@ -46,6 +54,7 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const [brightnessOpen, setBrightnessOpen] = useState(false);
+  const [beepsOpen, setBeepsOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -192,6 +201,14 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
                 <Sun className="w-4 h-4" /> Display brightness
               </button>
             </li>
+            <li>
+              <button onClick={closeMenuAnd(() => setBeepsOpen(true))}>
+                <Volume2 className="w-4 h-4" /> Keypad beeps
+                <span className="ml-auto text-xs text-base-content-dim">
+                  {beepsLabel}
+                </span>
+              </button>
+            </li>
             {onToggleBookmarks && (
               <li>
                 <button onClick={closeMenuAnd(onToggleBookmarks)}>
@@ -238,6 +255,13 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
       </div>
 
       <ThemePicker isOpen={themeOpen} onClose={() => setThemeOpen(false)} />
+
+      <KeypadBeepsPicker
+        isOpen={beepsOpen}
+        selected={beepStyle}
+        onSelect={setBeepStyle}
+        onClose={() => setBeepsOpen(false)}
+      />
 
       {/* Brightness modal */}
       {brightnessOpen && (

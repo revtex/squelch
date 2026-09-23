@@ -330,6 +330,20 @@ describe("LEDPanel", () => {
     expect(led.style.backgroundColor).toBe("rgb(255, 0, 255)"); // #ff00ff
   });
 
+  it("offers keypad beeps in the menu, showing what is set", () => {
+    renderLED();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    const item = screen.getByRole("button", { name: /Keypad beeps/ });
+    expect(item).toBeInTheDocument();
+
+    fireEvent.click(item);
+    // The choice is this browser's, so the list is here rather than in
+    // the admin panel.
+    expect(screen.getByRole("radio", { name: "Off" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Uniden" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Whistler" })).toBeInTheDocument();
+  });
+
   it("shows the off colour when not live", () => {
     renderLED({
       scanner: {
