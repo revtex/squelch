@@ -573,6 +573,8 @@ After deploying, check these to confirm everything works:
 - [ ] A test upload from your recorder appears in Squelch
 - [ ] The live scanner feed shows new calls in real time (this proves WebSockets are working) and plays them back (this proves audio HTTP fetches and cookies are working)
 
+If one of those fails, [Troubleshooting](troubleshooting.md) lists the usual cause for each symptom.
+
 ---
 
 ## Advanced
@@ -753,7 +755,7 @@ A couple of toggles don't have matching CLI flags or JSON fields — they only e
 You can save your settings to a JSON file so you don't need to pass flags every time:
 
 ```bash
-squelch --listen 0.0.0.0:3022 --db-file /data/squelch.db --config-save
+squelch --listen 0.0.0.0:3022 --db-file /data/squelch.db --recordings-dir /data/recordings --config-save
 ```
 
 That produces:
@@ -767,12 +769,19 @@ That produces:
   "ssl_cert_file": "",
   "ssl_key_file": "",
   "ssl_auto_cert": "",
-  "encryption_key": "",
   "timezone": ""
 }
 ```
 
-Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written to the file. `--encryption-key-file` is also not persisted — only the resolved `encryption_key` value appears in the JSON.
+Pass `--recordings-dir` if you want it in the file — left off, it defaults to the directory the executable sits in, and that is what gets saved. Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written. `--trusted-proxies` is written as `trusted_proxies`, and only when you have set it.
+
+**The encryption key is never written to this file, and must never be added to it by hand.** Squelch refuses to start if it finds an `encryption_key` field there and prints:
+
+```
+squelch: refusing to start — remove 'encryption_key' from squelch.json; pass the key via --encryption-key, --encryption-key-file, or SQUELCH_ENCRYPTION_KEY
+```
+
+A config file written by an older version may still carry that field. Delete the line and supply the key with `--encryption-key`, `--encryption-key-file`, or `SQUELCH_ENCRYPTION_KEY` instead. An empty `"encryption_key": ""` is ignored — only a real value stops startup.
 
 ### Built-in TLS
 

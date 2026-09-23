@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A Listener Guide** (`docs/listener-guide.md`), for the person doing the
+  listening rather than the one running the server: starting playback, reading
+  the display, selection, AVOID and HOLD, transcripts, search, bookmarks,
+  sharing, themes and beeps, listening on a locked phone, and what to check
+  when nothing plays.
+
+- **A Troubleshooting page** (`docs/troubleshooting.md`) for operators,
+  arranged by symptom: the server not starting, uploads rejected or silently
+  deduplicated, calls arriving but not reaching listeners, background audio
+  failing without FFmpeg, calls pruned after a week by default, and resetting a
+  forgotten administrator password.
+
+- **`CONTRIBUTING.md` and `SECURITY.md`.** Contributing covers setup, the make
+  targets, running one test, the branch and commit conventions, and the
+  changelog gate. Security says which versions get fixes, how to report a
+  vulnerability privately, and what is in scope.
+
 - **An Avoids tab under SELECT.** It lists the talkgroups you have avoided
   for a set time, each with the time left counting down, and a Resume button
   that puts one back on the air early. A permanent avoid has no clock to
@@ -72,6 +89,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine and no font is fetched from a third party.
 
 ### Fixed
+
+- **The deployment guide no longer tells you to put the encryption key in the
+  config file.** It showed an `encryption_key` field in the saved JSON and said
+  the resolved key was written there — the opposite of what the server does. A
+  key actually written into that file stops the server from starting. The
+  example now matches what `--config-save` really writes, and the guide says
+  what the refusal looks like and how to clear the field from an older config
+  file.
 
 - **Replay works after a call has finished.** It did nothing unless a call
   was still playing, which is the opposite of when it is reached for. It now

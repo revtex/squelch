@@ -29,7 +29,7 @@ This reviewer covers the whole application. Sections below map to subsystems:
 7. **Downstream & webhooks** — fan-out, retries, SSRF, HMAC signing
 8. **Push notifications** — VAPID, subscription lifecycle, webpush-go
 9. **Database & migrations** — sqlc discipline, indexes, migrations, encryption-at-rest
-10. **Configuration & secrets** — CLI/env/INI precedence, encryption key handling, import/export
+10. **Configuration & secrets** — CLI/env/JSON-file precedence, encryption key handling, import/export
 11. **Concurrency & resources** — goroutine lifecycle, locking, file handles, DB connections
 12. **Observability** — slog structured logs, request IDs, error paths, log hygiene
 13. **API/HTTP layer** — Gin handlers, middleware order, CORS, timeouts, content-type discipline
@@ -220,7 +220,7 @@ This reviewer covers the whole application. Sections below map to subsystems:
 
 ## Configuration & Secrets
 
-- [ ] Config precedence is documented and enforced: CLI flag > env var > INI file > default
+- [ ] Config precedence is documented and enforced: CLI flag > env var > JSON config file > default
 - [ ] Missing encryption key with encrypted values in DB fails fast with a clear error (never silently degrades)
 - [ ] Wrong encryption key cannot decrypt — error message does not reveal plaintext length or content
 - [ ] Config export does not include decrypted secrets unless explicitly requested

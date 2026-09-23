@@ -9,7 +9,7 @@ Squelch is a modern web-based radio call manager — a reimplementation of rdio-
 - **Backend:** Go 1.26, Gin, coder/websocket, modernc.org/sqlite, sqlc, golang-jwt, bcrypt, golang-migrate, kardianos/service, log/slog, go:embed, webpush-go, swaggo
 - **Frontend:** React 18, TypeScript (strict), Vite 6, Tailwind CSS 4 (@tailwindcss/vite), DaisyUI 5 (dark/light themes), Redux Toolkit, RTK Query, React Router 7, @tanstack/react-virtual, lucide-react, Service Worker (PWA + push notifications)
 - **Database:** SQLite (WAL mode) — all application configuration is stored in the DB
-- **Server config:** CLI flags, environment variables, or optional INI file (for listen address, DB path, TLS, encryption key)
+- **Server config:** CLI flags, environment variables, or an optional JSON config file (for listen address, DB path, TLS, encryption key). The encryption key is the exception: flag, key file, or environment variable only — never the config file.
 - **Audio:** Files stored on filesystem, FFmpeg for conversion (4 modes: disabled/enabled/norm/loudnorm), bounded worker pool
 - **Transcription:** go-whisper HTTP API sidecar (whisper.cpp, CPU or GPU); supports diarization via tinydiarize model
 - **Dev tooling:** air (Go hot-reload) + Vite proxy (single `make dev`), ripgrep (`rg`) for searching, pnpm for frontend package management

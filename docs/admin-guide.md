@@ -295,7 +295,7 @@ General settings that control how Squelch behaves. Settings are organized into g
 | HE-AAC 8 kbps  | Smallest possible, lowest quality     |
 
 > **Keypad beeps are not an admin setting.** The button-press sound is chosen
-> by each listener from the scanner's ⋮ menu → **Keypad beeps**: the person
+> by each listener from the listening screen's ⋮ menu → **Keypad beeps**: the person
 > listening is the one in the quiet room, and they are not always the admin.
 > A signed-in listener's choice is stored against their account and follows
 > them to any browser they sign in on; an anonymous listener's is kept in that

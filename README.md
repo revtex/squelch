@@ -62,14 +62,20 @@ Start here, in this order:
 
 | Guide | What it covers |
 | --- | --- |
+| [Listener Guide](docs/listener-guide.md) | Using the listening screen: modes, selection, search, bookmarks, sharing |
 | [Deployment Guide](docs/deployment-guide.md) | Installing, upgrading, backups, reverse proxies, HTTPS, encrypting secrets |
 | [Recorder Guide](docs/recorder-guide.md) | Pointing each supported recorder at Squelch |
 | [Admin Guide](docs/admin-guide.md) | Every screen in the admin dashboard, panel by panel |
 | [Trunk Recorder MQTT Guide](docs/tr-mqtt-guide.md) | Live recorder health dashboard via trunk-recorder's MQTT plugin |
+| [Troubleshooting](docs/troubleshooting.md) | What to check when calls stop arriving, playback fails, or an upgrade goes sideways |
 
-For contributors: [CONTEXT.md](CONTEXT.md) defines the project's vocabulary, and
-[docs/adr/](docs/adr/) records the significant design decisions and why the
-alternatives lost.
+For contributors: [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, commands, and
+what a change has to satisfy; [CONTEXT.md](CONTEXT.md) defines the project's
+vocabulary; and [docs/adr/](docs/adr/) records the significant design decisions
+and why the alternatives lost.
+
+Found a security problem? Don't open an issue — [SECURITY.md](SECURITY.md) says
+where to send it.
 
 ---
 
@@ -78,7 +84,7 @@ alternatives lost.
 ### Listening
 
 - **Live feed** with play/pause, skip, and replay, streamed as calls arrive.
-- **Hold and avoid** — lock onto a system or talkgroup, or mute one for 5/15/30
+- **Hold and avoid** — lock onto a system or talkgroup, or mute one for 30/60/120
   minutes or until you undo it.
 - **Talkgroup selection** — search and multi-select by system, group, or tag.
   Your selection is saved to your account, not just the browser.
@@ -88,7 +94,8 @@ alternatives lost.
   link to a single call with an expiry date.
 - **Works on a phone** — mobile-first layout, and a background mode that keeps
   playing when the screen locks.
-- **Dark and light themes.**
+- **Seven dark themes**, chosen per browser, with a per-listener keypad beep
+  and display brightness.
 
 ### Getting calls in
 

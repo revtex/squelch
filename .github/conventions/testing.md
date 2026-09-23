@@ -8,7 +8,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 ## Working in this area
 
 - Read the code under test first. read the implementation and any existing sibling `_test.go` or `.test.tsx` so new tests match the existing patterns exactly.
-- Use the existing fixture helpers (`backend/internal/api/testhelpers_test.go` has `newTestDB`, `newTestEngine`, `seedAdminUser`, etc.). Do not invent new harness patterns when one already exists.
+- Use the existing fixture helpers (`backend/internal/handler/routes/testhelpers_test.go` has `newTestDB`, `newTestEngine`, `seedAdminUser`, etc.). Do not invent new harness patterns when one already exists.
 - Write tests that would have caught the bug or regression being described. Cover the happy path, one realistic error path, and the edge case the change introduces.
 - Run the tests you wrote. Go: `cd backend && go test ./internal/<pkg>/...`. Frontend: `cd frontend && pnpm test <file>`. Report pass/fail with an output snippet.
 - Keep tests fast and hermetic: `t.TempDir()` for files, `:memory:` SQLite for DB, `vi.mock` / `msw` for frontend API mocks. Never hit the network or real FS outside `t.TempDir()`.
@@ -47,7 +47,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 
 ### Go Fixture Helpers (already in the repo)
 
-Located in [backend/internal/api/testhelpers_test.go](backend/internal/api/testhelpers_test.go):
+Located in [backend/internal/handler/routes/testhelpers_test.go](../../backend/internal/handler/routes/testhelpers_test.go):
 
 - `newTestDB(t)` — returns `(*sql.DB, *db.Queries)` with all migrations applied in `:memory:`
 - `newTestEngine(t)` — returns `(*gin.Engine, *db.Queries)` with all routes registered
@@ -78,92 +78,78 @@ Located in [backend/internal/api/testhelpers_test.go](backend/internal/api/testh
     </Provider>,
   );
   ```
-- Mock hooks that touch the outside world: `vi.mock("@/hooks/useTheme", () => ({ useTheme: () => ({ isDark: true, toggle: vi.fn() }) }))`
-- Mock the WebSocket client in `src/services/wsClient.ts` for any test whose component subscribes to WS events
+- Mock hooks that touch the outside world: `vi.mock("@/shared/hooks/useTheme", () => ({ useTheme: () => ({ isDark: true, toggle: vi.fn() }) }))`
+- Mock the WebSocket client in `src/shared/services/ws/client.ts` (or `adminClient.ts` for admin surfaces) for any test whose component subscribes to WS events
 - Mock RTK Query via `vi.mock("@/app/api")` or by pre-seeding the RTK Query cache in `preloadedState`
 - Assertions: prefer `screen.getByRole`, `screen.getByLabelText`, `screen.getByText` over container queries or test IDs
 - Never use `findBy*` without an `await`
 - Clean up: RTL auto-unmounts after each test; only add custom cleanup if a global mock was installed
 - Strict TypeScript: test files follow the same strict rules as production code — no `any`, no `@ts-ignore`
 
-## Existing Test Inventory
+## Where Tests Live
 
-### Backend (23 test files)
+Tests sit next to the code they cover, so the layout in
+[PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) is also the test layout. Find the
+current ones rather than working from a list here — an enumerated inventory
+goes stale the moment a package moves.
 
-- [backend/internal/auth/auth_test.go](backend/internal/auth/auth_test.go) — JWT, refresh token rotation/reuse/family revocation, token tracker cap, InitJWTSecret paths
-- [backend/internal/auth/crypto_test.go](backend/internal/auth/crypto_test.go) — AES-256-GCM round-trip, wrong-key failure, `enc::` prefix detection, HKDF key derivation
-- [backend/internal/auth/ratelimit_test.go](backend/internal/auth/ratelimit_test.go) — 3-strike lockout, 10-minute expiry, cleanup
-- [backend/internal/api/auth_test.go](backend/internal/api/auth_test.go) — login success/fail, lockout, refresh, logout, me
-- [backend/internal/api/setup_test.go](backend/internal/api/setup_test.go) — setup status, first-run flow
-- [backend/internal/api/calls_test.go](backend/internal/api/calls_test.go) — upload, list, get, audio serve, path traversal
-- [backend/internal/api/admin_test.go](backend/internal/api/admin_test.go) — user CRUD, role checks
-- [backend/internal/api/share_test.go](backend/internal/api/share_test.go) — shared-link create, resolve, expiry
-- [backend/internal/api/radioreference_test.go](backend/internal/api/radioreference_test.go) — RR import, encrypted credential handling
-- [backend/internal/api/testhelpers_test.go](backend/internal/api/testhelpers_test.go) — shared fixtures
-- [backend/internal/audio/processor_test.go](backend/internal/audio/processor_test.go) — audio store, path sanitisation
-- [backend/internal/audio/duplicate_test.go](backend/internal/audio/duplicate_test.go) — duplicate detection window
-- [backend/internal/audio/export_test.go](backend/internal/audio/export_test.go) — export bundle
-- [backend/internal/audio/worker_test.go](backend/internal/audio/worker_test.go) — bounded worker pool, backpressure
-- [backend/internal/dirmonitor/mask_test.go](backend/internal/dirmonitor/mask_test.go) — meta-mask expansion for all token types
-- [backend/internal/dirmonitor/parsers_test.go](backend/internal/dirmonitor/parsers_test.go) — recorder-specific filename parsers
-- [backend/internal/dirmonitor/watcher_test.go](backend/internal/dirmonitor/watcher_test.go) — fs event handling
-- [backend/internal/downstream/pusher_test.go](backend/internal/downstream/pusher_test.go) — fan-out, retry, backoff, ctx cancel, API key header, multipart
-- [backend/internal/downstream/main_test.go](backend/internal/downstream/main_test.go) — service lifecycle (Start/Stop/Reload)
-- [backend/internal/ws/hub_test.go](backend/internal/ws/hub_test.go) — hub broadcast, client register/unregister
-- [backend/internal/ws/client_test.go](backend/internal/ws/client_test.go) — client send/receive
-- [backend/internal/ws/messages_test.go](backend/internal/ws/messages_test.go) — message marshal/unmarshal
-- [backend/cmd/server/main_test.go](backend/cmd/server/main_test.go) — startup smoke test
+```bash
+find backend -name '*_test.go'          # Go
+find frontend/src -name '*.test.ts*'    # Vitest
+```
 
-### Frontend (13 test files)
+Where to look for a pattern to copy:
 
-- [frontend/src/app/api.test.ts](frontend/src/app/api.test.ts) — RTK Query endpoint definitions
-- [frontend/src/app/slices/callsSlice.test.ts](frontend/src/app/slices/callsSlice.test.ts) — call reducer actions, selector derivations
-- [frontend/src/app/slices/scannerSlice.test.ts](frontend/src/app/slices/scannerSlice.test.ts) — scanner state transitions
-- [frontend/src/components/admin/AdminLayout.test.tsx](frontend/src/components/admin/AdminLayout.test.tsx) — admin shell render, role gate
-- [frontend/src/components/scanner/LEDPanel.test.tsx](frontend/src/components/scanner/LEDPanel.test.tsx) — LED states
-- [frontend/src/components/scanner/ControlToolbar.test.tsx](frontend/src/components/scanner/ControlToolbar.test.tsx) — play/pause/skip dispatches
-- [frontend/src/components/scanner/SearchPanel.test.tsx](frontend/src/components/scanner/SearchPanel.test.tsx) — filter query params
-- [frontend/src/components/scanner/SelectTGPanel.test.tsx](frontend/src/components/scanner/SelectTGPanel.test.tsx) — talkgroup selection tree
-- [frontend/src/components/scanner/BookmarkButton.test.tsx](frontend/src/components/scanner/BookmarkButton.test.tsx) — toggle, optimistic update
-- [frontend/src/components/scanner/BookmarksPanel.test.tsx](frontend/src/components/scanner/BookmarksPanel.test.tsx) — list, empty state
-- [frontend/src/pages/Login.test.tsx](frontend/src/pages/Login.test.tsx) — login form, error render, lockout banner
-- [frontend/src/pages/Setup.test.tsx](frontend/src/pages/Setup.test.tsx) — first-run wizard
-- [frontend/src/pages/SharedCall.test.tsx](frontend/src/pages/SharedCall.test.tsx) — public shared-call view, expiry handling
+- **HTTP endpoints** — `backend/internal/handler/routes/`. This is where the
+  full-engine tests live, along with the shared fixtures. A feature package
+  under `handler/` may also hold its own focused tests (contract tests for the
+  legacy surface, internal limiter tests).
+- **Cross-cutting middleware** — `backend/internal/middleware/`.
+- **Domain packages** — beside the code: `auth`, `audio`, `dirmonitor`,
+  `downstream`, `ws`, `stream`, `safehttp`, `secrets`, `config`, `trmqtt`.
+- **React components and hooks** — colocated inside the owning feature, e.g.
+  `frontend/src/features/scanner/components/LEDPanel.test.tsx`. Shared code is
+  tested under `frontend/src/shared/`.
+- **Redux slices and RTK Query** — beside the slice, e.g.
+  `frontend/src/features/auth/authSlice.test.ts`.
 
-## Known Coverage Gaps (as of the recent security pass)
+## Coverage Gaps
 
-These surfaces have implementation but **no current tests** — prioritise them for new test work:
+Measure before guessing. On the Go side:
 
-### Backend
+```bash
+cd backend && go test -cover ./...
+```
 
-- `backend/internal/safehttp/safehttp.go` — SSRF hardening (redirects off, timeouts enforced, response size capped). Private-address blocking is opt-in via `SQUELCH_BLOCK_INTERNAL_HTTP=1` (default is allow, homelab-friendly)
-- `backend/internal/middleware/middleware.go`:
-  - `MaxBodySize` middleware (rejects bodies over cap before auth)
-  - `APIKeyAuth` precedence (header → query → form) and length cap (>128 chars rejected)
-  - `CORS` localhost exemption active only in `gin.DebugMode`
-  - `RequireAdmin` 403 path, `RequireAuth` 401 path
-- `backend/internal/api/bookmarks.go` — per-user system/talkgroup grant enforcement (404 when listener lacks access)
-- `backend/internal/auth/grants.go` — `HasCallAccess` helper (admin bypass, listener grant match/no-match, empty grants)
-- `backend/internal/auth/cookie.go` — refresh cookie flags (HttpOnly, Secure, SameSite=Lax, Path)
-- `backend/internal/config/config.go` — legacy `encryption_key` field in JSON config causes startup refusal; `SaveJSON` omits key and writes `0o600`
-- `backend/internal/downstream/pusher.go` — decrypt-failure abort path (does **not** send ciphertext as API key)
-- `backend/internal/audio/processor.go` — filename-collision retry with random suffix (O_CREATE\|O_EXCL)
-- `backend/internal/ws/hub.go` — broadcast drop counter increments; `sync.Once` close protects against double-close races
-- `backend/internal/ws/admin_ops.go` — admin op handlers (systems CRUD, talkgroup CRUD, groups/tags CRUD, settings upsert with `enc::` encryption, import/export config)
-- `backend/internal/api/webhooks_*` and push subscription admin ops — CRUD (feature currently not dispatched, but the CRUD surface should be covered)
-- `backend/internal/api/share.go` — `contentDisposition` RFC 6266 encoding (ASCII fallback, percent-encoding of non-ASCII, special characters)
+The frontend has no coverage provider installed, so `--coverage` fails; add
+`@vitest/coverage-v8` first if you want the numbers.
 
-### Frontend
+Prioritise by blast radius, not by percentage: anything that decides access
+(grants, middleware, token handling), anything that touches the filesystem or
+an external process, and anything concurrent.
 
-- `frontend/src/hooks/useWebSocket.ts` — reconnect/backoff, message dispatch to Redux
-- `frontend/src/hooks/useAudioPlayer.ts` — play queue, error recovery, autoplay unlock
-- `frontend/src/hooks/useTokenRefresh.ts` — refresh-before-expiry trigger, 401 retry
-- `frontend/src/hooks/useAuthInit.ts` — boot flow, token restoration
-- `frontend/src/hooks/useScanner.ts` — hold/skip/avoid logic
-- Admin panels with no test file: `SystemsPanel`, `UsersPanel`, `ApiKeysPanel`, `DirMonitorPanel`, `DownstreamsPanel`, `GroupsTagsPanel`, `OptionsPanel`, `TranscriptionPanel`, `WebhooksPanel`, `SharedLinksPanel`, `LogsPanel`, `ToolsPanel`, `ActivityPanel`, `RadioReferenceCard`
-- `frontend/src/components/scanner/HistoryPanel.tsx`, `DisplayPanel.tsx`, `TranscriptPanel.tsx` — rendering and interaction paths
-- `frontend/src/app/slices/authSlice.ts` — token storage (memory only), logout clears state
-- `frontend/src/services/wsClient.ts` — connection lifecycle, auth-token handling on reconnect
+These surfaces have implementation and no test file of their own. Re-derive the
+list rather than trusting it — it is a snapshot, not a contract.
+
+```bash
+# Go packages with no *_test.go
+for d in $(find backend/internal backend/cmd -type d); do
+  ls "$d"/*.go >/dev/null 2>&1 || continue
+  ls "$d"/*_test.go >/dev/null 2>&1 || echo "$d"
+done
+```
+
+**Backend:** `internal/cli`, `internal/logging`, `internal/seed`,
+`internal/handler/health`, `internal/handler/setup`, `cmd/migrate`. Some of
+these are exercised indirectly through `internal/handler/routes` — check before
+concluding a path is untested.
+
+**Frontend:** `features/scanner/components/DisplayPanel.tsx`,
+`features/scanner/hooks/useAudioPlayer.ts`,
+`features/scanner/hooks/useScanner.ts`, and the admin sub-features
+`dir-monitor`, `downstreams`, `groups-tags`, `logs`, `options`,
+`radio-reference`, `shared-links`, `tools`, `transcription`, `webhooks`, plus
+the `_shell` chrome.
 
 ## Coverage Expectations for New Work
 
@@ -184,8 +170,8 @@ When adding tests, target the following minima per surface:
 - Go with race detector (for concurrency changes): `cd backend && go test -race ./...`
 - Go with coverage: `cd backend && go test -cover ./...`
 - Frontend all tests: `cd frontend && pnpm test`
-- Frontend single file: `cd frontend && pnpm test src/components/scanner/LEDPanel.test.tsx`
-- Frontend with coverage: `cd frontend && pnpm test -- --coverage`
+- Frontend single file: `cd frontend && pnpm test src/features/scanner/components/LEDPanel.test.tsx`
+- Frontend with coverage: needs a provider — `pnpm add -D @vitest/coverage-v8` first, then `cd frontend && pnpm test -- --coverage`
 
 ## When You Should Push Back
 

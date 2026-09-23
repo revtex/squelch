@@ -88,7 +88,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 
 ### Config and secrets
 
-- Precedence: CLI flag > environment variable > INI file > default — documented in `internal/config`
+- Precedence: CLI flag > environment variable > JSON config file > default — documented in `internal/config`
 - Application config (talkgroups, systems, api keys, etc.) lives in the `settings` table, not files
 - Encryption key (`SQUELCH_ENCRYPTION_KEY` or `--encryption-key`) is required when `enc::` values exist in the DB; startup fails fast on missing/wrong key
 - Never log decrypted secret values; never return decrypted secrets from API responses unless the route is explicitly for export/reveal and authorized
@@ -138,7 +138,7 @@ backend/
   internal/seed/             ← first-run DB seed (settings, groups, tags)
   internal/logging/          ← slog handler configuration
   internal/cli/              ← CLI flag parsing and help
-  internal/config/           ← server startup config (flags, env vars, INI, encryption key)
+  internal/config/           ← server startup config (flags, env vars, JSON file, encryption key)
   internal/static/           ← embedded frontend assets (go:embed)
   internal/middleware/       ← Gin middleware (JWTAuth, APIKeyAuth, RateLimit, RequestID, Recovery)
   migrations/                ← numbered .sql files (embedded via go:embed)

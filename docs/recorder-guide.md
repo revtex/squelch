@@ -259,3 +259,9 @@ These settings in **Admin → Options** affect how calls are ingested:
 | **API Key Call Rate**              | Default maximum calls per minute an API key can upload. This one lives in **Admin → API Keys**, not Options, and can be overridden per key. |
 
 > **Note:** Auto-populate settings are in **Admin → Systems**, not in Options. **Auto-Populate Systems** is a global toggle at the top of the panel, and each system has its own **TG Auto-Populate** toggle for automatic talkgroup creation.
+
+---
+
+## Calls Not Arriving?
+
+[Troubleshooting](troubleshooting.md#no-calls-are-arriving) works through it from the recorder inward: what each rejection code means, why a successful-looking upload can still be discarded as a duplicate, and what the log says when a directory monitor skips a file.
