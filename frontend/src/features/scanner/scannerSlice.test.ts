@@ -7,6 +7,7 @@ import {
   togglePause,
   setPaused,
   toggleLive,
+  setLive,
   holdSystem,
   holdTG,
   addAvoid,
@@ -100,6 +101,34 @@ describe("scannerSlice", () => {
       expect(state.isPaused).toBe(true);
       state = reducer(state, setPaused(false));
       expect(state.isPaused).toBe(false);
+    });
+  });
+
+  describe("resetting pause", () => {
+    it("clears a pause when LIVE is toggled", () => {
+      // LIVE off and on is how someone restarts listening; coming back to
+      // a silently paused player reads as broken audio.
+      let state = reducer(undefined, togglePause());
+      expect(state.isPaused).toBe(true);
+      state = reducer(state, toggleLive());
+      expect(state.isPaused).toBe(false);
+    });
+
+    it("clears a pause when LIVE is turned off", () => {
+      let state = reducer(undefined, togglePause());
+      state = reducer(state, setLive(true));
+      state = reducer(state, setLive(false));
+      expect(state.isPaused).toBe(false);
+    });
+
+    it("does not restore a pause from a previous page load", async () => {
+      // Pause is about the call playing right now, like backgroundAudio
+      // and streamState beside it — none of them survive a reload.
+      sessionStorage.setItem("squelch-paused", "true");
+      vi.resetModules();
+      const mod = await import("./scannerSlice");
+      const fresh = mod.scannerSlice.reducer(undefined, { type: "@@INIT" });
+      expect(fresh.isPaused).toBe(false);
     });
   });
 

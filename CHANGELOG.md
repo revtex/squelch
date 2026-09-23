@@ -90,6 +90,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A pause no longer outlives the session that made it.** Pausing is about
+  the call playing right now, so turning LIVE off and on resets it, and a
+  reloaded page always comes back playing. Previously the pause was kept in
+  the browser and restored on load, so a page could come up silent with no
+  sign of why — the only clue was a transport button sitting on Resume.
+
 - **Resume starts the call playing again.** Pausing a call and pressing resume
   left the audio stopped: the player still considered the call "playing" while
   it was paused, and resume used that flag to decide whether there was anything
