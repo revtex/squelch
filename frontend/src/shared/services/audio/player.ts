@@ -334,7 +334,13 @@ class AudioPlayer {
     this._paused = false;
     this.ensureContext();
     this.ctx?.resume().catch(() => {});
-    if (this.currentItem && this.audio && !this._playing) {
+    // `_playing` is not the thing to gate on: pause() leaves it true —
+    // the player still owns the call — so this branch never ran and the
+    // element was left paused for good. Only a trip through the
+    // background/foreground stall recovery got it going again, which is
+    // how the bug showed up. play() does not seek, so the call picks up
+    // where it stopped.
+    if (this.currentItem && this.audio) {
       this._playing = true;
       void this.playElement(this.audio, this.currentItem);
     } else if (!this.currentItem && this.queue.length > 0) {

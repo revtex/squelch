@@ -250,6 +250,33 @@ describe("audioPlayer", () => {
     expect(el.paused).toBe(false);
   });
 
+  it("resumes the paused call where it stopped", async () => {
+    // Regression: pause() leaves `_playing` true, and resume() used to
+    // gate the re-play on `!_playing` — so the element stayed paused and
+    // only a background/foreground round trip, which runs the stall
+    // recovery, ever got the call going again.
+    const player = await loadPlayer();
+    player.enqueue(makeCall(1));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    const el = lastElement();
+    expect(el.paused).toBe(false);
+    const playsBeforePause = el.playCalls;
+    el.currentTime = 1.5;
+
+    player.pause();
+    expect(el.paused).toBe(true);
+
+    player.resume();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect(el.paused).toBe(false);
+    expect(el.playCalls).toBeGreaterThan(playsBeforePause);
+    expect(player.isPlaying()).toBe(true);
+    // Resume, not restart — play() must not seek back to the top.
+    expect(el.currentTime).toBe(1.5);
+  });
+
   it("replays the last Call once it has finished", async () => {
     // Replay is reached for after a Call has played out, which is exactly
     // when the player has no current item left — it used to do nothing.

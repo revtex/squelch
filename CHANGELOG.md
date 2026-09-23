@@ -90,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Resume starts the call playing again.** Pausing a call and pressing resume
+  left the audio stopped: the player still considered the call "playing" while
+  it was paused, and resume used that flag to decide whether there was anything
+  to start. Backgrounding the browser and coming back was the only way to get
+  it going again, because the stall recovery that runs on returning to the
+  foreground re-issued playback. The call now resumes from where it stopped.
+
 - **The deployment guide no longer tells you to put the encryption key in the
   config file.** It showed an `encryption_key` field in the saved JSON and said
   the resolved key was written there — the opposite of what the server does. A
