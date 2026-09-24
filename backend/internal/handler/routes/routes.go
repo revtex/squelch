@@ -20,6 +20,7 @@ import (
 
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/downstream"
 	"github.com/revtex/squelch/internal/handler/admin/imports"
@@ -222,16 +223,16 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	// /api/ws is the canonical Squelch listener route. /ws is a temporary
 	// compatibility alias that delegates to the same handler so existing
 	// rdio-scanner-shaped clients keep working during the legacy-API transition.
-	listenerWS := gin.WrapF(ws.HandleListenerWS(deps.Hub, deps.Queries))
+	listenerWS := wsHandler(ws.HandleListenerWS(deps.Hub, deps.Queries))
 	r.GET("/api/ws", dep("/api/v1/ws/listener"), listenerWS)
 	r.GET("/ws", dep("/api/v1/ws/listener"), listenerWS)
-	r.GET("/api/admin/ws", dep("/api/v1/ws/admin"), gin.WrapF(ws.HandleAdminWS(deps.Hub, deps.Queries)))
+	r.GET("/api/admin/ws", dep("/api/v1/ws/admin"), wsHandler(ws.HandleAdminWS(deps.Hub, deps.Queries)))
 
 	// Native (v1) WebSocket endpoints. Registered on the root router rather
 	// than inside the /api/v1 group because the V1ErrorEnvelope middleware
 	// buffers HTTP response bodies, which would corrupt the WebSocket upgrade.
-	r.GET("/api/v1/ws/listener", gin.WrapF(ws.HandleListenerWSv1(deps.Hub, deps.Queries)))
-	r.GET("/api/v1/ws/admin", gin.WrapF(ws.HandleAdminWSv1(deps.Hub, deps.Queries)))
+	r.GET("/api/v1/ws/listener", wsHandler(ws.HandleListenerWSv1(deps.Hub, deps.Queries)))
+	r.GET("/api/v1/ws/admin", wsHandler(ws.HandleAdminWSv1(deps.Hub, deps.Queries)))
 
 	// ----- Native API (Phase N-1, plan §4.1) ---------------------------------
 	// All v1 routes carry the V1Marker so version-aware middleware can branch,
@@ -373,4 +374,15 @@ func serveFrontend(r *gin.Engine) {
 		c.Request.URL.Path = "/"
 		fileServer.ServeHTTP(c.Writer, c.Request)
 	})
+}
+
+// wsHandler mounts a WebSocket handler. It is gin.WrapF plus one thing: the
+// client address gin resolved through the trusted-proxy list rides along on
+// the request context, so the connection list shows the real client rather
+// than the reverse proxy in front of it.
+func wsHandler(h http.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client := connections.ClientFromRequest(c.Request, c.ClientIP())
+		h(c.Writer, c.Request.WithContext(connections.WithClient(c.Request.Context(), client)))
+	}
 }

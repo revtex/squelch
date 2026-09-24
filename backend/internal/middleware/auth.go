@@ -45,6 +45,7 @@ func JWTAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Set("jti", claims.ID)
+		c.Set("fam", claims.FamilyID)
 		c.Next()
 	}
 }
@@ -82,6 +83,7 @@ func OptionalJWTAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Set("jti", claims.ID)
+		c.Set("fam", claims.FamilyID)
 		c.Next()
 	}
 }
@@ -93,6 +95,7 @@ func applyClaimsToContext(c *gin.Context, claims *auth.Claims) {
 	c.Set("username", claims.Username)
 	c.Set("role", claims.Role)
 	c.Set("jti", claims.ID)
+	c.Set("fam", claims.FamilyID)
 }
 
 // claimsValid runs the same revocation, expiration and account-expiration

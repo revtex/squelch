@@ -39,6 +39,7 @@ backend/
     auth/                  JWT, refresh-token, cookie helpers, bcrypt
     cli/                   remote CLI commands (login, config-get/set, user-add/remove)
     config/                config loading + validation
+    connections/           registry of live connections (sockets + streams) for the admin
     db/                    sqlc-generated code + DB connection
     dirmonitor/            filesystem watchers for recorder ingest
     downstream/            forwarding to other rdio-scanner / squelch instances

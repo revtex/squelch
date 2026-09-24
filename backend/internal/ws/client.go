@@ -18,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/logging"
 )
@@ -62,6 +63,15 @@ type Client struct {
 	userID  int64
 	jti     string      // JWT token ID, for single-session disconnect
 	queries *db.Queries // for periodic account revalidation
+
+	// connID, remote, username, role and familyID describe the connection
+	// to the admin's connection list. All are set before hub.Register and
+	// never change afterwards.
+	connID   string
+	remote   connections.Client
+	username string
+	role     string
+	familyID string
 
 	// protocolVersion selects the on-wire encoding for messages sent to
 	// this client. Set once at connect time by the handler that accepted
@@ -118,6 +128,25 @@ type adminRequest struct {
 
 // isV1 reports whether this client negotiated the native v1 protocol.
 func (c *Client) isV1() bool { return c.protocolVersion == protocolV1 }
+
+// connInfo describes this client for the connection registry.
+func (c *Client) connInfo() connections.Conn {
+	kind := connections.KindListener
+	if c.isAdmin {
+		kind = connections.KindAdmin
+	}
+	return connections.Conn{
+		ID:       c.connID,
+		Kind:     kind,
+		UserID:   c.userID,
+		Username: c.username,
+		Role:     c.role,
+		JTI:      c.jti,
+		FamilyID: c.familyID,
+		Client:   c.remote,
+		Protocol: c.protocolVersion,
+	}
+}
 
 // encodeSessionExpired returns the wire bytes for a session-expired
 // notification in the protocol negotiated by this client.
@@ -207,7 +236,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			return
 		}
 
-		slog.Debug("ws: listener connection accepted", "ip", r.RemoteAddr, "v1", isV1)
+		slog.Debug("ws: listener connection accepted", "ip", connections.ClientFrom(r.Context()).IP, "peer", r.RemoteAddr, "v1", isV1)
 
 		ctx := r.Context()
 
@@ -233,6 +262,8 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			send:            make(chan []byte, sendBufSize),
 			queries:         queries,
 			protocolVersion: protoVer,
+			connID:          connections.NewID(),
+			remote:          connections.ClientFrom(r.Context()),
 		}
 
 		if publicAccess {
@@ -310,6 +341,9 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 		}
 		client.userID = user.ID
 		client.jti = claims.ID
+		client.username = user.Username
+		client.role = user.Role
+		client.familyID = claims.FamilyID
 		client.grants = parseGrants(user.SystemsJson)
 		slog.Debug("ws: listener authenticated via jwt", "user_id", user.ID, "grants", len(client.grants), "v1", isV1)
 
@@ -443,6 +477,11 @@ func handleAdminWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc {
 			jti:             claims.ID,
 			queries:         queries,
 			protocolVersion: protoVer,
+			connID:          connections.NewID(),
+			remote:          connections.ClientFrom(r.Context()),
+			username:        user.Username,
+			role:            user.Role,
+			familyID:        claims.FamilyID,
 		}
 
 		hub.Register(client)

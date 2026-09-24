@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/revtex/squelch/internal/admin"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 )
 
@@ -57,6 +58,11 @@ type Hub struct {
 	// continuous audio stream) whenever the hub disconnects a user or a
 	// token, so every revocation path covers both transports.
 	sessionRevoker SessionRevoker
+
+	// conns is the admin's view of live connections. Clients are added and
+	// removed on the Run goroutine alongside h.clients so the two never
+	// disagree. Nil when unset; the registry's methods are nil-safe.
+	conns *connections.Registry
 }
 
 // SessionRevoker ends live sessions that are not WebSocket clients.
@@ -111,6 +117,7 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.Lock()
 			h.clients[c] = struct{}{}
 			h.mu.Unlock()
+			h.conns.Add(c.connInfo(), func() { h.endSession(c) })
 			if !c.isAdmin {
 				h.debounceLSC()
 			}
@@ -120,6 +127,7 @@ func (h *Hub) Run(ctx context.Context) {
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
 				c.closeSend()
+				h.conns.Remove(c.connID)
 			}
 			h.mu.Unlock()
 			if !c.isAdmin {
@@ -213,6 +221,20 @@ func (h *Hub) SendStreamCue(userID int64, sid string, callID int64, offset float
 // DisconnectByJTI also call. Set once at startup.
 func (h *Hub) SetSessionRevoker(r SessionRevoker) {
 	h.sessionRevoker = r
+}
+
+// SetConnections registers the connection registry the hub reports its
+// clients to. Set once at startup, before Run.
+func (h *Hub) SetConnections(r *connections.Registry) {
+	h.conns = r
+}
+
+// endSession tells a client its session is over and drops it — the same
+// thing a sign-out does. Must not be called from the Run goroutine:
+// Unregister hands the client to Run over an unbuffered channel.
+func (h *Hub) endSession(c *Client) {
+	c.trySend(c.encodeSessionExpired())
+	h.Unregister(c)
 }
 
 // SetCallNotifier registers a sink for newly ingested calls. Safe to leave
@@ -394,8 +416,7 @@ func (h *Hub) DisconnectByUser(userID int64) {
 
 	for _, c := range targets {
 		slog.Info("ws: disconnecting user session", "user_id", userID, "is_admin", c.isAdmin)
-		c.trySend(c.encodeSessionExpired())
-		h.Unregister(c)
+		h.endSession(c)
 	}
 }
 
@@ -413,33 +434,35 @@ func (h *Hub) DisconnectAnonymous() {
 	h.mu.RUnlock()
 
 	for _, c := range targets {
-		c.trySend(c.encodeSessionExpired())
-		h.Unregister(c)
+		h.endSession(c)
 	}
 	if len(targets) > 0 {
 		slog.Info("ws: disconnected anonymous listeners after public access was disabled", "count", len(targets))
 	}
 }
 
-// DisconnectByJTI closes the WS connection associated with the given JWT ID.
+// DisconnectByJTI closes every WS connection opened with the given JWT ID.
+// One token can hold several: a listener socket and an admin socket from
+// the same tab, or two tabs that authenticated before the next refresh.
 func (h *Hub) DisconnectByJTI(jti string) {
-	if h.sessionRevoker != nil && jti != "" {
+	if jti == "" {
+		return
+	}
+	if h.sessionRevoker != nil {
 		h.sessionRevoker.DisconnectJTI(jti)
 	}
 	h.mu.RLock()
-	var target *Client
+	var targets []*Client
 	for c := range h.clients {
 		if c.jti == jti {
-			target = c
-			break
+			targets = append(targets, c)
 		}
 	}
 	h.mu.RUnlock()
 
-	if target != nil {
-		slog.Info("ws: disconnecting session by JTI", "jti", jti, "user_id", target.userID)
-		target.trySend(target.encodeSessionExpired())
-		h.Unregister(target)
+	for _, c := range targets {
+		slog.Info("ws: disconnecting session by JTI", "user_id", c.userID, "is_admin", c.isAdmin)
+		h.endSession(c)
 	}
 }
 
@@ -485,6 +508,7 @@ func (h *Hub) closeAll() {
 	for c := range h.clients {
 		c.closeSend()
 		delete(h.clients, c)
+		h.conns.Remove(c.connID)
 	}
 	h.lscMu.Lock()
 	if h.lscTimer != nil {

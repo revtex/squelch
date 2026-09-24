@@ -204,6 +204,10 @@ type Claims struct {
 	Username   string `json:"username"`
 	Role       string `json:"role"`
 	AccountExp int64  `json:"accountExp,omitempty"` // unix epoch; 0 = never expires
+	// FamilyID is the refresh-token family this token was minted from, so a
+	// live connection can be traced to the device session that opened it.
+	// Empty for tokens issued outside a login/refresh.
+	FamilyID string `json:"fam,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -225,6 +229,13 @@ func CheckPassword(password, hash string) bool {
 // accountExp is the user's account expiration as a unix epoch (0 means no expiry).
 // Returns the signed token string and the unique JTI (token ID).
 func GenerateToken(userID int64, username, role string, accountExp int64) (string, string, error) {
+	return GenerateSessionToken(userID, username, role, accountExp, "")
+}
+
+// GenerateSessionToken is GenerateToken for a token minted at login or
+// refresh: it also records the refresh-token family, so signing out one
+// device can find that device's live connections.
+func GenerateSessionToken(userID int64, username, role string, accountExp int64, familyID string) (string, string, error) {
 	now := time.Now()
 	jti := uuid.New().String()
 	claims := Claims{
@@ -232,6 +243,7 @@ func GenerateToken(userID int64, username, role string, accountExp int64) (strin
 		Username:   username,
 		Role:       role,
 		AccountExp: accountExp,
+		FamilyID:   familyID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),

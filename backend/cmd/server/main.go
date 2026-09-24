@@ -41,6 +41,7 @@ import (
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/cli"
 	"github.com/revtex/squelch/internal/config"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/dirmonitor"
 	"github.com/revtex/squelch/internal/downstream"
@@ -897,12 +898,18 @@ func (p *program) run() {
 		RecordingsDir:     cfg.RecordingsDir,
 		EncryptionKey:     cfg.EncryptionKey,
 	})
+	// Every live connection — listener and admin sockets, audio streams —
+	// reports here, for the admin's connection list.
+	conns := connections.New()
+	conns.SetOnChange(func() { hub.BroadcastAdminEvent("connections.updated", nil) })
+	hub.SetConnections(conns)
 	go hub.Run(ctx)
 
 	// Continuous listener audio stream. Startup shells out to FFmpeg to
 	// build the silence filler, so a host without a usable encoder simply
 	// leaves the endpoint answering 503 instead of failing to boot.
 	streamMgr := streamhandler.NewManager(queries, cfg.RecordingsDir)
+	streamMgr.SetConnections(conns)
 	if err := streamMgr.Start(ctx); err != nil {
 		slog.Warn("stream: continuous audio stream disabled", "error", err)
 	} else {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/handler/shared"
 	streamsvc "github.com/revtex/squelch/internal/stream"
@@ -171,7 +172,8 @@ func (h *Handler) GetStream(c *gin.Context) {
 
 	// The token is only checked for signature and expiry; refuse a stream
 	// to an account that has since been disabled or has expired.
-	if user, err := h.queries.GetUser(c.Request.Context(), userID); err != nil || !accountActive(user, time.Now()) {
+	user, err := h.queries.GetUser(c.Request.Context(), userID)
+	if err != nil || !accountActive(user, time.Now()) {
 		shared.WriteAPIError(c, http.StatusUnauthorized, shared.CodeInvalidCredentials,
 			"authentication required", nil)
 		return
@@ -207,9 +209,15 @@ func (h *Handler) GetStream(c *gin.Context) {
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Flush()
 
-	jti, _ := c.Get("jti")
-	jtiStr, _ := jti.(string)
-	err := h.mgr.Serve(c.Request.Context(), userID, jtiStr, sid, c.Writer, c.Writer.Flush)
+	who := connections.Conn{
+		UserID:   userID,
+		Username: user.Username,
+		Role:     user.Role,
+		JTI:      c.GetString("jti"),
+		FamilyID: c.GetString("fam"),
+		Client:   connections.ClientFromRequest(c.Request, c.ClientIP()),
+	}
+	err = h.mgr.Serve(c.Request.Context(), who, sid, c.Writer, c.Writer.Flush)
 	switch {
 	case err == nil, errors.Is(err, context.Canceled):
 		// Client went away — the normal end of a live stream.

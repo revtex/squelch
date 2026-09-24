@@ -194,7 +194,8 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		accountExp = user.Expiration.Int64
 	}
 
-	token, jti, err := auth.GenerateToken(user.ID, user.Username, user.Role, accountExp)
+	familyID := uuid.New().String()
+	token, jti, err := auth.GenerateSessionToken(user.ID, user.Username, user.Role, accountExp, familyID)
 	if err != nil {
 		slog.Error("auth: failed to generate token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
@@ -211,7 +212,6 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		return
 	}
 
-	familyID := uuid.New().String()
 	now := time.Now()
 
 	// Enforce max refresh token families per user.
@@ -461,7 +461,7 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 	if user.Expiration.Valid {
 		accountExp = user.Expiration.Int64
 	}
-	accessToken, jti, err := auth.GenerateToken(user.ID, user.Username, user.Role, accountExp)
+	accessToken, jti, err := auth.GenerateSessionToken(user.ID, user.Username, user.Role, accountExp, rt.FamilyID)
 	if err != nil {
 		slog.Error("auth: failed to generate token on refresh", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
