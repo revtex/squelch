@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -181,5 +182,46 @@ func TestClientContextRoundTrip(t *testing.T) {
 	}
 	if got := ClientFrom(context.Background()); got != (Client{}) {
 		t.Fatalf("ClientFrom(empty) = %+v, want zero", got)
+	}
+}
+
+type recordingObserver struct {
+	mu     sync.Mutex
+	r      *Registry
+	opened []string
+	closed []string // "id:reason"
+}
+
+func (o *recordingObserver) Opened(c Conn) {
+	_ = o.r.Len() // must not deadlock: called outside the registry lock
+	o.mu.Lock()
+	o.opened = append(o.opened, c.ID)
+	o.mu.Unlock()
+}
+
+func (o *recordingObserver) Closed(c Conn, reason string, _ time.Time) {
+	_ = o.r.Len()
+	o.mu.Lock()
+	o.closed = append(o.closed, c.ID+":"+reason)
+	o.mu.Unlock()
+}
+
+func TestRegistry_ObserverSeesOpenAndCloseWithReason(t *testing.T) {
+	r := New()
+	obs := &recordingObserver{r: r}
+	r.SetObserver(obs)
+
+	r.Add(Conn{ID: "a"}, nil)
+	r.Add(Conn{ID: "b"}, nil)
+	r.Remove("a")
+	r.SetCloseReason("b", ReasonSignout)
+	r.Remove("b")
+	r.Remove("b") // already gone: no second close
+
+	if got := strings.Join(obs.opened, ","); got != "a,b" {
+		t.Errorf("opened = %s, want a,b", got)
+	}
+	if got := strings.Join(obs.closed, ","); got != "a:client,b:signout" {
+		t.Errorf("closed = %s, want a:client,b:signout", got)
 	}
 }

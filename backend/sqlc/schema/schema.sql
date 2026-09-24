@@ -194,12 +194,35 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     family_id       TEXT    NOT NULL,
     expires_at      INTEGER NOT NULL,
     revoked         INTEGER NOT NULL DEFAULT 0,
-    created_at      INTEGER NOT NULL
+    created_at      INTEGER NOT NULL,
+    ip              TEXT,
+    user_agent      TEXT,
+    native          INTEGER NOT NULL DEFAULT 0,
+    signed_in_at    INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+
+CREATE TABLE IF NOT EXISTS connection_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind              TEXT    NOT NULL,
+    user_id           INTEGER,
+    username          TEXT,
+    ip                TEXT    NOT NULL,
+    country_code      TEXT,
+    user_agent        TEXT,
+    native            INTEGER NOT NULL DEFAULT 0,
+    family_id         TEXT,
+    connected_at      INTEGER NOT NULL,
+    disconnected_at   INTEGER,
+    disconnect_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_connection_log_connected_at ON connection_log(connected_at);
+CREATE INDEX IF NOT EXISTS idx_connection_log_ip ON connection_log(ip, connected_at);
+CREATE INDEX IF NOT EXISTS idx_connection_log_user ON connection_log(user_id, connected_at);
 
 CREATE TABLE IF NOT EXISTS tr_instances (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,3 +243,12 @@ CREATE TABLE IF NOT EXISTS tr_instances (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tr_instances_enabled ON tr_instances(enabled);
+
+CREATE TABLE IF NOT EXISTS ip_blocks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    cidr       TEXT    NOT NULL UNIQUE,
+    reason     TEXT    NOT NULL DEFAULT '',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER
+);

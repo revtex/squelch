@@ -194,3 +194,29 @@ func TestTrustedProxyList(t *testing.T) {
 		}
 	}
 }
+
+func TestTrustedAddressList(t *testing.T) {
+	cfg := config.Config{TrustedAddresses: " 203.0.113.7, 10.0.0.0/8 ,2001:db8::1,192.168.1.5/24,, ::ffff:198.51.100.0/120"}
+	got, err := cfg.TrustedAddressList()
+	if err != nil {
+		t.Fatalf("TrustedAddressList: %v", err)
+	}
+	var strs []string
+	for _, p := range got {
+		strs = append(strs, p.String())
+	}
+	want := []string{"203.0.113.7/32", "10.0.0.0/8", "2001:db8::1/128", "192.168.1.0/24", "198.51.100.0/24"}
+	if !slices.Equal(strs, want) {
+		t.Fatalf("got %v, want %v", strs, want)
+	}
+
+	empty := config.Config{}
+	if got, err := empty.TrustedAddressList(); err != nil || len(got) != 0 {
+		t.Fatalf("empty setting = %v, %v; want none", got, err)
+	}
+
+	bad := config.Config{TrustedAddresses: "203.0.113.7,office"}
+	if _, err := bad.TrustedAddressList(); err == nil || !strings.Contains(err.Error(), `"office"`) {
+		t.Fatalf("bad entry err = %v, want it named", err)
+	}
+}

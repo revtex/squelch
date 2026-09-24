@@ -13,6 +13,8 @@ This guide walks you through getting Squelch running at home. The Docker path is
 - [Your Data Directory](#your-data-directory)
 - [Backing Up](#backing-up)
 - [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
+- [Addresses That Can Never Be Blocked](#addresses-that-can-never-be-blocked)
+- [Showing Listeners' Countries (Optional)](#showing-listeners-countries-optional)
 - [HTTPS Options](#https-options)
 - [Keeping Secrets Safe](#keeping-secrets-safe)
 - [Transcription (Optional)](#transcription-optional)
@@ -476,6 +478,88 @@ After starting the proxy, open the public URL in a browser and confirm the live 
 
 ---
 
+## Addresses That Can Never Be Blocked
+
+Admins can block an address or range from **Admin → Connections → Blocked addresses**. To make sure nobody can lock you out that way, including someone who has stolen an admin password, list the addresses you manage Squelch from in `--trusted-addresses` or `SQUELCH_TRUSTED_ADDRESSES`. Blocks never apply to them, and the admin dashboard cannot change the list. Only someone who can change the server's configuration can.
+
+1. **Narrow your trusted proxies first.** A trusted address is only as trustworthy as the client address Squelch works out. Under the default trusted proxies, any device on your LAN can claim to be your address. Follow [Showing the Real Client Address](#showing-the-real-client-address) before relying on this list. Squelch logs a warning at startup when trusted addresses are set but trusted proxies are still the default.
+
+2. **Find your address.** Open **Admin → Connections → Blocked addresses**. It shows the address you are connected from.
+
+3. **Set it.** Use comma-separated addresses or CIDR ranges. In Docker Compose:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_TRUSTED_ADDRESSES=203.0.113.7,192.168.1.0/24
+   ```
+
+   Then run `docker compose up -d`. An entry that is not an address or a range stops Squelch from starting, and the log names it.
+
+4. **Check it.** The **Never blocked** list on the Blocked addresses tab shows every trusted address. Rows from those addresses are marked **trusted** and have no **Block address** action.
+
+Things to know:
+
+- **Loopback is always trusted,** but only for a request made on the server itself. In Docker, a request from the host reaches the container from the Docker network's gateway, not from loopback, so it gets no exemption.
+- **Home addresses change.** If your internet provider changes your address, the old entry stops protecting you. Trust the range your provider uses, or the address of a VPN you always connect through.
+- **The list cannot be edited from the dashboard on purpose.** If you are locked out, see [Locked Out](troubleshooting.md#locked-out) in the troubleshooting guide.
+
+## Showing Listeners' Countries (Optional)
+
+**Admin → Connections** can show the country each connection comes from. The lookup uses a country database file that you download and keep on the server. Addresses are looked up locally and never leave the server. Squelch does not include a database, so this is off until you add one. Private and local addresses always show as **Local network**, with or without a database.
+
+Squelch reads any IP-to-country file in the MMDB format. Two free ones work:
+
+| Database | Account needed | Updates | Licence |
+| --- | --- | --- | --- |
+| [DB-IP IP to Country Lite](https://db-ip.com/db/lite.php) | No | Monthly | CC BY 4.0 |
+| [MaxMind GeoLite2-Country](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) | Yes, free | Twice a week | [GeoLite EULA](https://www.maxmind.com/en/geolite/eula) |
+
+You download the file yourself, so you are the licensee. Squelch shows the credit each licence asks for under the country column.
+
+### DB-IP (recommended)
+
+1. **Download it** into your data folder. The file name carries the year and month:
+
+   ```bash
+   cd squelch/data
+   curl -fsSL "https://download.db-ip.com/free/dbip-country-lite-$(date +%Y-%m).mmdb.gz" \
+     | gunzip > country.mmdb.new && mv country.mmdb.new country.mmdb
+   ```
+
+   Early on the 1st of a month the new file may not be published yet. If the download fails, try again later that day.
+
+2. **Point Squelch at it** with `--geoip-db` or `SQUELCH_GEOIP_DB`. In Docker Compose, the data folder is `/data` inside the container:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_GEOIP_DB=/data/country.mmdb
+   ```
+
+   Then run `docker compose up -d`.
+
+3. **Check it.** The log shows `geoip: country lookup is on` at startup, and **Admin → Connections** gains a **Country** column. If the file cannot be opened, Squelch starts anyway with a warning and no country column.
+
+4. **Keep it current.** Run the step 1 command once a month, for example from cron on the 2nd:
+
+   ```bash
+   0 4 2 * * cd /path/to/squelch/data && curl -fsSL "https://download.db-ip.com/free/dbip-country-lite-$(date +\%Y-\%m).mmdb.gz" | gunzip > country.mmdb.new && mv country.mmdb.new country.mmdb
+   ```
+
+   Squelch checks for a replaced file every hour, so no restart is needed. Always download to a new name and then move it into place, as the command does. Overwriting the open file directly can make Squelch read a half-written database.
+
+### MaxMind GeoLite2
+
+1. Create a free account at [maxmind.com](https://www.maxmind.com/en/geolite2/signup) and generate a licence key.
+2. Install MaxMind's [`geoipupdate`](https://dev.maxmind.com/geoip/updating-databases) tool, set `EditionIDs GeoLite2-Country` in its configuration, and point its database directory at your data folder.
+3. Set `SQUELCH_GEOIP_DB=/data/GeoLite2-Country.mmdb` and restart Squelch.
+4. **Update it on a schedule.** The GeoLite EULA requires you to replace the file within 30 days of each MaxMind release, and to delete old copies. Run `geoipupdate` from cron at least weekly. It replaces the file safely, and Squelch picks the new one up within the hour.
+
+This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com.
+
 ## HTTPS Options
 
 You have two choices for serving Squelch over HTTPS:
@@ -846,6 +930,8 @@ Docker users will almost always use environment variables; binary users typicall
 | `--encryption-key-file` | Path to a file containing the encryption key              |                        |
 | `--timezone`            | IANA timezone for recorder timestamps                     | `UTC`                  |
 | `--trusted-proxies`     | Proxy IPs/CIDRs allowed to set `X-Forwarded-For`, or `none` | loopback + private ranges |
+| `--trusted-addresses`   | IPs/CIDRs that can never be blocked (loopback always is)  |                        |
+| `--geoip-db`            | Path to an IP-to-country MMDB file                        | (off)                  |
 | `--admin-password`      | Reset the first admin user's password on startup          |                        |
 | `--config`              | Path to JSON config file                                  | `squelch.json`     |
 | `--config-save`         | Write current flags to JSON config and exit               |                        |
@@ -868,6 +954,8 @@ Docker users will almost always use environment variables; binary users typicall
 | `SQUELCH_ADMIN_PASSWORD`      | `--admin-password`      |
 | `SQUELCH_TIMEZONE`            | `--timezone`            |
 | `SQUELCH_TRUSTED_PROXIES`     | `--trusted-proxies`     |
+| `SQUELCH_TRUSTED_ADDRESSES`   | `--trusted-addresses`   |
+| `SQUELCH_GEOIP_DB`            | `--geoip-db`            |
 | `TZ`                              | `--timezone` (fallback) |
 
 #### Env-Only Settings
@@ -902,7 +990,7 @@ That produces:
 }
 ```
 
-Pass `--recordings-dir` if you want it in the file — left off, it defaults to the directory the executable sits in, and that is what gets saved. Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written. `--trusted-proxies` is written as `trusted_proxies`, and only when you have set it.
+Pass `--recordings-dir` if you want it in the file — left off, it defaults to the directory the executable sits in, and that is what gets saved. Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written. `--trusted-proxies` is written as `trusted_proxies`, `--trusted-addresses` as `trusted_addresses` and `--geoip-db` as `geoip_db`, each only when you have set it.
 
 **The encryption key is never written to this file, and must never be added to it by hand.** Squelch refuses to start if it finds an `encryption_key` field there and prints:
 

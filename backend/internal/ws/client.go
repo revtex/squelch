@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/revtex/squelch/internal/admin"
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
@@ -72,6 +73,7 @@ type Client struct {
 	username string
 	role     string
 	familyID string
+	native   bool
 
 	// protocolVersion selects the on-wire encoding for messages sent to
 	// this client. Set once at connect time by the handler that accepted
@@ -129,6 +131,17 @@ type adminRequest struct {
 // isV1 reports whether this client negotiated the native v1 protocol.
 func (c *Client) isV1() bool { return c.protocolVersion == protocolV1 }
 
+// isNativeSession reports whether the device session behind a token is the
+// Squelch app. Only the login knows (the app does not mark its WebSocket
+// upgrade), so it is read back from the refresh family.
+func isNativeSession(ctx context.Context, queries *db.Queries, familyID string) bool {
+	if familyID == "" {
+		return false
+	}
+	n, err := queries.IsNativeRefreshFamily(ctx, familyID)
+	return err == nil && n != 0
+}
+
 // connInfo describes this client for the connection registry.
 func (c *Client) connInfo() connections.Conn {
 	kind := connections.KindListener
@@ -144,6 +157,7 @@ func (c *Client) connInfo() connections.Conn {
 		JTI:      c.jti,
 		FamilyID: c.familyID,
 		Client:   c.remote,
+		Native:   c.native,
 		Protocol: c.protocolVersion,
 	}
 }
@@ -344,6 +358,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 		client.username = user.Username
 		client.role = user.Role
 		client.familyID = claims.FamilyID
+		client.native = isNativeSession(ctx, queries, claims.FamilyID)
 		client.grants = parseGrants(user.SystemsJson)
 		slog.Debug("ws: listener authenticated via jwt", "user_id", user.ID, "grants", len(client.grants), "v1", isV1)
 
@@ -482,6 +497,7 @@ func handleAdminWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc {
 			username:        user.Username,
 			role:            user.Role,
 			familyID:        claims.FamilyID,
+			native:          isNativeSession(ctx, queries, claims.FamilyID),
 		}
 
 		hub.Register(client)
@@ -579,6 +595,7 @@ func (c *Client) handleAdminRequest(ctx context.Context, req adminRequest) {
 		return
 	}
 
+	ctx = admin.WithCaller(ctx, admin.Caller{ConnID: c.connID, FamilyID: c.familyID})
 	data, err := handler(ctx, req.Params, c.userID)
 	if err != nil {
 		if errMsg, isUser := errorString(err); isUser {
@@ -800,12 +817,14 @@ func (c *Client) writePump(ctx context.Context) {
 			user, err := c.queries.GetUser(ctx, c.userID)
 			if err != nil || user.Disabled != 0 {
 				slog.Info("ws: revalidation failed, disconnecting", "user_id", c.userID, "reason", "disabled or not found")
+				c.hub.conns.SetCloseReason(c.connID, connections.ReasonRevalidation)
 				sendExpiredAndClose(ctx, c.conn, c.isV1())
 				return
 			}
 			if user.Expiration.Valid && user.Expiration.Int64 > 0 {
 				if time.Now().Unix() > user.Expiration.Int64 {
 					slog.Info("ws: revalidation failed, disconnecting", "user_id", c.userID, "reason", "expired")
+					c.hub.conns.SetCloseReason(c.connID, connections.ReasonRevalidation)
 					sendExpiredAndClose(ctx, c.conn, c.isV1())
 					return
 				}

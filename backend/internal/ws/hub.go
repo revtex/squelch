@@ -227,6 +227,9 @@ func (h *Hub) SetSessionRevoker(r SessionRevoker) {
 // clients to. Set once at startup, before Run.
 func (h *Hub) SetConnections(r *connections.Registry) {
 	h.conns = r
+	if h.admin != nil {
+		h.admin.Deps.Connections = r
+	}
 }
 
 // endSession tells a client its session is over and drops it — the same
@@ -416,6 +419,7 @@ func (h *Hub) DisconnectByUser(userID int64) {
 
 	for _, c := range targets {
 		slog.Info("ws: disconnecting user session", "user_id", userID, "is_admin", c.isAdmin)
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
 		h.endSession(c)
 	}
 }
@@ -434,6 +438,7 @@ func (h *Hub) DisconnectAnonymous() {
 	h.mu.RUnlock()
 
 	for _, c := range targets {
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
 		h.endSession(c)
 	}
 	if len(targets) > 0 {
@@ -462,6 +467,7 @@ func (h *Hub) DisconnectByJTI(jti string) {
 
 	for _, c := range targets {
 		slog.Info("ws: disconnecting session by JTI", "user_id", c.userID, "is_admin", c.isAdmin)
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
 		h.endSession(c)
 	}
 }
@@ -508,6 +514,7 @@ func (h *Hub) closeAll() {
 	for c := range h.clients {
 		c.closeSend()
 		delete(h.clients, c)
+		h.conns.SetCloseReason(c.connID, connections.ReasonShutdown)
 		h.conns.Remove(c.connID)
 	}
 	h.lscMu.Lock()

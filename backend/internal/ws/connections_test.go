@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,5 +141,47 @@ func TestHub_DisconnectByJTI_EmptyIsNoop(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if n := hub.ClientCount(); n != 1 {
 		t.Fatalf("ClientCount = %d, want 1: empty JTI disconnected an anonymous listener", n)
+	}
+}
+
+type reasonObserver struct {
+	mu      sync.Mutex
+	reasons map[string]string
+}
+
+func (o *reasonObserver) Opened(connections.Conn) {}
+func (o *reasonObserver) Closed(c connections.Conn, reason string, _ time.Time) {
+	o.mu.Lock()
+	o.reasons[c.ID] = reason
+	o.mu.Unlock()
+}
+func (o *reasonObserver) get(id string) string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.reasons[id]
+}
+
+// History says why a connection ended: a revoked session is a sign-out,
+// not the client going away.
+func TestHub_DisconnectByUser_RecordsSignout(t *testing.T) {
+	hub, reg := newRegistryHub(t)
+	obs := &reasonObserver{reasons: map[string]string{}}
+	reg.SetObserver(obs)
+	target := &Client{hub: hub, send: make(chan []byte, sendBufSize), connID: "t", userID: 5}
+	other := &Client{hub: hub, send: make(chan []byte, sendBufSize), connID: "o", userID: 6}
+	hub.Register(target)
+	hub.Register(other)
+	waitForRegistryLen(t, reg, 2)
+
+	hub.DisconnectByUser(5)
+	waitForRegistryLen(t, reg, 1)
+	hub.Unregister(other)
+	waitForRegistryLen(t, reg, 0)
+
+	if got := obs.get("t"); got != connections.ReasonSignout {
+		t.Errorf("revoked client reason = %q, want signout", got)
+	}
+	if got := obs.get("o"); got != connections.ReasonClient {
+		t.Errorf("departed client reason = %q, want client", got)
 	}
 }

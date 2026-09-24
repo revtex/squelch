@@ -222,6 +222,8 @@ from the command line, environment, or a JSON config file:
 | `--encryption-key-file` | `SQUELCH_ENCRYPTION_KEY_FILE` | Read that key from a file instead |
 | `--timezone` | `SQUELCH_TIMEZONE` / `TZ` | IANA timezone for recorder timestamps |
 | `--trusted-proxies` | `SQUELCH_TRUSTED_PROXIES` | Proxies allowed to set `X-Forwarded-For` (default: loopback and private ranges; `none` to disable) |
+| `--trusted-addresses` | `SQUELCH_TRUSTED_ADDRESSES` | Addresses that can never be blocked from the admin dashboard |
+| `--geoip-db` | `SQUELCH_GEOIP_DB` | IP-to-country database file for the Connections page (optional) |
 
 The full reference is in the
 [Deployment Guide](docs/deployment-guide.md#configuration-reference).

@@ -12,6 +12,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Activity](#activity)
 - [Trunk Recorder Dashboard](#trunk-recorder-dashboard)
 - [Users](#users)
+- [Connections](#connections)
 - [Systems](#systems)
 - [Groups & Tags](#groups--tags)
 - [API Keys](#api-keys)
@@ -31,16 +32,17 @@ The sidebar contains these panels, in order:
 
 1. **Dashboards** — overview stats, and the Trunk Recorder view
 2. **Users** — manage user accounts
-3. **Systems** — manage systems, talkgroups, and units
-4. **Groups & Tags** — organize talkgroups into categories
-5. **API Keys** — manage recorder upload keys
-6. **Monitors** — set up directory-based call import
-7. **Downstreams** — forward calls to other Squelch instances
-8. **Shared Links** — view and manage shared call links
-9. **Transcription** — configure speech-to-text
-10. **Options** — general settings and behavior
-11. **Logs** — view server logs
-12. **Tools** — import, export, and maintenance
+3. **Connections** — who is connected, which devices are signed in, and who has been
+4. **Systems** — manage systems, talkgroups, and units
+5. **Groups & Tags** — organize talkgroups into categories
+6. **API Keys** — manage recorder upload keys
+7. **Monitors** — set up directory-based call import
+8. **Downstreams** — forward calls to other Squelch instances
+9. **Shared Links** — view and manage shared call links
+10. **Transcription** — configure speech-to-text
+11. **Options** — general settings and behavior
+12. **Logs** — view server logs
+13. **Tools** — import, export, and maintenance
 
 **Dashboards** holds two tabs: **Activity** (the default) and **Trunk Recorder**. The tab you're on is kept in the address bar, so you can bookmark or share a link straight to either one.
 
@@ -90,7 +92,75 @@ Each user has:
 | Connection Limit | Optional cap on simultaneous sessions for this user             |
 | System Selection | Optional — restrict which systems/talkgroups this user can hear |
 
-The first admin account cannot be disabled.
+The first admin account cannot be disabled. Disabling an account also signs it out on every device, so after you enable it again the user has to sign in with their password.
+
+---
+
+## Connections
+
+See who is using the server right now, which devices can sign back in, who has connected recently, and which addresses are blocked. The first three tabs share these columns:
+
+- **Address** — the visitor's IP address. Behind a reverse proxy this is only right once Squelch trusts that proxy; if every row shows the same address, see [Showing the Real Client Address](deployment-guide.md#showing-the-real-client-address).
+- **Client** — **Squelch app** for the mobile app, **Browser** for everything else. Hover to see the full browser identification.
+- **Type** — **LIVE** is the listening screen's live feed, **BKGND** is background audio (one listener with BKGND on has both a LIVE and a BKGND connection), **Admin** is someone on the admin dashboard.
+- **Country** — where the address is, when the server has a country database. See [Showing Listeners' Countries](deployment-guide.md#showing-listeners-countries-optional). Private and local addresses show as **Local network**. History shows the country found at the time of the connection.
+
+Click any user name or address to jump to **History** filtered to it.
+
+### Acting on a Connection or Device
+
+Each row has a **⋯** menu. Every action asks you to confirm first and is written to **Logs** with your user name.
+
+| Action | What it does |
+| --- | --- |
+| Disconnect | Closes that one connection. Nothing is signed out, so a signed-in browser or app usually reconnects within seconds. Use it to clear a stuck connection. |
+| Sign out device | Signs that one browser or phone out. It is disconnected straight away and needs the password to get back in. The account's other devices stay signed in. |
+| Sign out everywhere | Signs the account out on every device at once. |
+| Block address | Opens the block form with that row's address filled in. See [Blocked addresses](#blocked-addresses). |
+
+**Disconnect** is on **Live** only. **Sign out device** needs a signed-in device, so it is missing for anonymous visitors. **Block address** is missing on rows marked **trusted**, because those addresses can never be blocked. From **History** you can sign out a device or an account that is not connected right now; if it has already been signed out, you are told so.
+
+Your own admin connection is marked **this session**, and the device you are using is marked **this device**. Signing it out takes you to the sign-in page.
+
+### Live
+
+Every open connection, with how long it has been up. Anonymous visitors (with **Public Access** on) show as **Anonymous**. The list updates on its own as people come and go. Use the filter box to narrow it by user name, address or country.
+
+### Signed-in devices
+
+Every sign-in that can still renew itself without a password: each browser or phone that signed in and has not signed out, been signed out, or gone 30 days without using the server. A browser that signed in without **Remember me** forgets its sign-in when it closes, but stays listed here until that 30 days runs out. **Last address** is where it last renewed its sign-in from — within the last 15 minutes if it is in use. **Online** means it has at least one connection open right now.
+
+### History
+
+A record of every connection: who, from where, when, how long it lasted, and how it **ended**:
+
+| Ended | Meaning |
+| --- | --- |
+| Left | The visitor closed the page or lost their connection |
+| Signed out | The session was ended: they logged out, their password changed, an admin signed the device or account out, or an admin disabled, deleted or edited the account |
+| Account disabled or expired | The periodic account check found the account disabled or past its expiration date |
+| Server stopped | The server shut down or restarted while they were connected |
+| Disconnected by an admin | An admin used **Disconnect** |
+| Blocked | An admin blocked the address it came from |
+
+Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Options → Connections](#connections-1). Setting it to 0 stops recording and leaves the tab empty.
+
+### Blocked addresses
+
+A blocked address cannot reach Squelch at all. It is refused for listening, for the admin dashboard, and for uploads from recorders. Anyone connected from it is dropped as soon as you add the block.
+
+To block an address, choose **Block address** on a row, or **Block an address** on this tab. Enter an address such as `203.0.113.9` or a range such as `203.0.113.0/24`, and optionally a reason. Then choose how long the block lasts: 1 hour, 24 hours, 7 days, or until you remove it. **Remove** lifts a block straight away.
+
+Some blocks are refused:
+
+- **Too wide.** The widest block allowed is `/16` for IPv4 or `/48` for IPv6. Block anything wider at your firewall or reverse proxy.
+- **A range written with host bits.** For example, `192.168.1.5/24` is refused, and the message gives the range you probably meant, `192.168.1.0/24`.
+- **Loopback, or a range that overlaps the Never blocked list.**
+- **Your own address.** If the range includes the address you are connected from, Squelch asks before blocking it. Blocking yourself disconnects this page, and you cannot get back in from that address until the block is removed.
+
+**Never blocked** lists the addresses no block applies to: loopback, plus any addresses set on the server with `--trusted-addresses`. The list cannot be changed from the dashboard, so an admin account alone cannot lock out whoever runs the server. See [Addresses That Can Never Be Blocked](deployment-guide.md#addresses-that-can-never-be-blocked).
+
+A block is only as reliable as the client address Squelch sees. A device that Squelch trusts as a proxy can claim any address and get past a block. Narrow the trusted proxies to your reverse proxy, as described in [Showing the Real Client Address](deployment-guide.md#showing-the-real-client-address).
 
 ---
 
@@ -309,6 +379,12 @@ General settings that control how Squelch behaves. Settings are organized into g
 | --- | --- | --- |
 | Shareable Links | Allow users to create shareable links to specific calls | Off |
 | Shared Link Expiry (days) | How long shared links stay active (0 = never expire) | 0 |
+
+### Connections
+
+| Setting | Description | Default |
+| --- | --- | --- |
+| Keep Connection History (days) | How long **Connections → History** keeps each connection. 0 stops recording; older rows are removed once an hour | 30 |
 
 ### Integrations
 

@@ -38,10 +38,21 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"logs.level":              c.adaptClientOp(c.opLogsLevel),
 
 		// Users
-		"users.list":   o.UsersList,
-		"users.create": o.UsersCreate,
-		"users.update": o.UsersUpdate,
-		"users.delete": o.UsersDelete,
+		"users.list":    o.UsersList,
+		"users.create":  o.UsersCreate,
+		"users.update":  o.UsersUpdate,
+		"users.delete":  o.UsersDelete,
+		"users.signout": o.UsersSignout,
+
+		// Connections
+		"connections.list":       o.ConnectionsList,
+		"connections.history":    o.ConnectionsHistory,
+		"connections.disconnect": o.ConnectionsDisconnect,
+		"sessions.list":          o.SessionsList,
+		"sessions.revoke":        o.SessionsRevoke,
+		"ipblocks.list":          o.IPBlocksList,
+		"ipblocks.create":        o.IPBlocksCreate,
+		"ipblocks.delete":        o.IPBlocksDelete,
 
 		// Systems
 		"systems.list":   o.SystemsList,

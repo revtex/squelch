@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Admin → Connections.** See everyone connected right now — listening
+  (LIVE), on background audio (BKGND) or on the admin dashboard — with their
+  address, whether they are on the Squelch app or a browser, and how long they
+  have been connected. A second tab lists every device that can sign back in
+  without a password, with where it was last used from, and a third keeps a
+  history of every connection and how it ended, so someone who has already
+  left can still be found. Click a user or an address to see everything they
+  did. History is kept for 30 days by default; change it under **Options →
+  Connections**.
+- **See where listeners connect from.** Point the new `--geoip-db` option
+  (`SQUELCH_GEOIP_DB`) at a free country database, DB-IP IP to Country Lite or
+  MaxMind GeoLite2-Country, and Admin → Connections shows each connection's
+  country. Lookups happen on the server, and no address is sent anywhere. The
+  deployment guide explains how to download the database and keep it current.
+- **Block an address from Admin → Connections.** Block one address or a range
+  for an hour, a day, a week or until removed. Blocked addresses are refused
+  everywhere, including recorder uploads, and anyone connected from one is
+  dropped at once. Addresses listed with the new `--trusted-addresses` option
+  (`SQUELCH_TRUSTED_ADDRESSES`) can never be blocked, and that list cannot be
+  changed from the dashboard, so a stolen admin password cannot lock the
+  operator out.
+- **Disconnect or sign out from Admin → Connections.** Close a single
+  connection, sign out one browser or phone, or sign an account out on every
+  device at once. Each action is recorded in **Logs** with who did it.
+
 - **Reverse proxy guide covers the real client address.** The deployment
   guide now explains how to set `SQUELCH_TRUSTED_PROXIES` to just your proxy
   (with a table for where to find its address, including Docker), how to
@@ -97,6 +122,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine and no font is fetched from a third party.
 
 ### Fixed
+
+- **Disabling an account now signs its devices out for good.** Before, a
+  disabled account's browsers and phones stayed signed in behind the scenes.
+  If the account was enabled again, they came straight back without the
+  password.
 
 - **The deployment guide's "bind to localhost" tip broke Docker installs.** It
   set `SQUELCH_LISTEN=127.0.0.1:3022` inside the container, which leaves the

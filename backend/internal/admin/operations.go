@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
+	"github.com/revtex/squelch/internal/geoip"
+	"github.com/revtex/squelch/internal/ipblock"
 )
 
 // ── Public helper types ──
@@ -66,6 +69,13 @@ type Deps struct {
 	WhisperAvailable  bool
 	RecordingsDir     string
 	EncryptionKey     string
+	// Connections is the live connection registry; nil leaves the
+	// connection list empty.
+	Connections *connections.Registry
+	// IPBlocks is the address block list; nil turns blocking off.
+	IPBlocks *ipblock.Matcher
+	// GeoIP resolves addresses to countries; nil hides the country column.
+	GeoIP *geoip.DB
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -263,6 +273,7 @@ var allowedSettingKeys = map[string]bool{
 	"email":                       true,
 	"keypadBeeps":                 true,
 	"logLevel":                    true,
+	"connectionHistoryDays":       true,
 	"maxClients":                  true,
 	"pruneDays":                   true,
 	"publicAccess":                true,

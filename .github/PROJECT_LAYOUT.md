@@ -59,6 +59,8 @@ backend/
         transcriptions/
         trmqtt/
       routes/              wiring: instantiates handlers, calls Register on each
+    geoip/                 country lookup from an operator-supplied MMDB file (geoiptest/: test databases)
+    ipblock/               address blocks and the never-blocked trusted list
     logging/               slog setup
     middleware/            Gin middleware (auth, request-id, recover, ratelimit)
     safehttp/              HTTP client with SSRF-style defaults (no redirects, capped body)

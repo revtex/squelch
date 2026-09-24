@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Globe, Radio, AudioLines, Share2, Plug } from "lucide-react";
+import { Globe, Radio, AudioLines, Share2, Plug, Cable } from "lucide-react";
 import {
   useGetConfigQuery,
   useUpdateConfigMutation,
@@ -72,6 +72,11 @@ const SECTIONS: SettingSection[] = [
     keys: ["shareableLinks", "sharedLinkExpiry"],
   },
   {
+    title: "Connections",
+    icon: <Cable className="w-4 h-4" />,
+    keys: ["connectionHistoryDays"],
+  },
+  {
     title: "Integrations",
     icon: <Plug className="w-4 h-4" />,
     keys: ["trMqttEnabled"],
@@ -96,6 +101,7 @@ const LABELS: Record<string, string> = {
   disableDuplicateDetection: "Disable Duplicate Call Detection",
   duplicateDetectionTimeFrame: "Duplicate Detection Time Frame (ms)",
   pruneDays: "Prune Database After (days)",
+  connectionHistoryDays: "Keep Connection History (days)",
   showListenersCount: "Show Listeners Count",
   trMqttEnabled: "Enable Trunk Recorder MQTT",
 };
@@ -119,6 +125,8 @@ const DESCRIPTIONS: Record<string, string> = {
     "Calls within ±this many milliseconds of an existing call with the same system/talkgroup are rejected as duplicates.",
   pruneDays:
     "Automatically delete calls older than this many days. Set to 0 to disable.",
+  connectionHistoryDays:
+    "How long Admin → Connections keeps a record of who connected, from which address, and when. Set to 0 to stop recording.",
   sharedLinkExpiry:
     "Number of days before shared links expire. Set to 0 to disable (links never expire).",
   trMqttEnabled:
@@ -353,6 +361,7 @@ export default function OptionsPanel() {
     if (
       key === "maxClients" ||
       key === "pruneDays" ||
+      key === "connectionHistoryDays" ||
       key === "duplicateDetectionTimeFrame" ||
       key === "sharedLinkExpiry"
     ) {

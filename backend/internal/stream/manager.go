@@ -351,6 +351,7 @@ func (m *Manager) DisconnectUser(userID int64) {
 	defer m.mu.Unlock()
 	for l := range m.listeners {
 		if l.userID == userID {
+			m.conns.SetCloseReason(l.conn.ID, connections.ReasonSignout)
 			l.cancel()
 		}
 	}
@@ -365,6 +366,7 @@ func (m *Manager) DisconnectJTI(jti string) {
 	defer m.mu.Unlock()
 	for l := range m.listeners {
 		if l.jti == jti {
+			m.conns.SetCloseReason(l.conn.ID, connections.ReasonSignout)
 			l.cancel()
 		}
 	}

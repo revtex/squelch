@@ -23,6 +23,13 @@ import type {
   RRApplyResponse,
   TranscriptionStatus,
   WhisperModel,
+  AdminConnectionsList,
+  AdminSessionsList,
+  AdminConnectionHistoryPage,
+  ConnectionHistoryFilter,
+  AdminIPBlocksList,
+  CreateIPBlockPayload,
+  CreateIPBlockResult,
 } from "@/types";
 
 // ─── Payload types ──────────────────────────────────────────────────────────
@@ -47,6 +54,69 @@ type UpdateApiKeyPayload = {
   order: number;
   key?: string | null;
 };
+
+// ─── Connections ────────────────────────────────────────────────────────────
+
+export function useListConnectionsQuery() {
+  return useWsQuery<AdminConnectionsList>(
+    "connections.list",
+    undefined,
+    "connections.updated",
+  );
+}
+
+// Signing in opens a connection, so a change in connections is the cue to
+// refresh the device list too.
+export function useListSessionsQuery() {
+  return useWsQuery<AdminSessionsList>(
+    "sessions.list",
+    undefined,
+    "connections.updated",
+  );
+}
+
+export function useConnectionHistoryQuery(filter: ConnectionHistoryFilter) {
+  return useWsQuery<AdminConnectionHistoryPage>("connections.history", filter);
+}
+
+export function useDisconnectConnectionMutation() {
+  return useWsMutation<void, string>("connections.disconnect", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useRevokeSessionMutation() {
+  return useWsMutation<void, string>("sessions.revoke", {
+    transformArg: (familyId) => ({ familyId }),
+  });
+}
+
+export function useListIPBlocksQuery() {
+  return useWsQuery<AdminIPBlocksList>(
+    "ipblocks.list",
+    undefined,
+    "ipblocks.updated",
+  );
+}
+
+export function useCreateIPBlockMutation() {
+  return useWsMutation<CreateIPBlockResult, CreateIPBlockPayload>(
+    "ipblocks.create",
+    { transformArg: (p) => ({ ...p }) },
+  );
+}
+
+export function useDeleteIPBlockMutation() {
+  return useWsMutation<void, number>("ipblocks.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useSignOutUserMutation() {
+  return useWsMutation<void, number>("users.signout", {
+    transformArg: (id) => ({ id }),
+  });
+}
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 

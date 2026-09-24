@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const countActiveRefreshTokenFamilies = `-- name: CountActiveRefreshTokenFamilies :one
@@ -26,16 +27,20 @@ func (q *Queries) CountActiveRefreshTokenFamilies(ctx context.Context, arg Count
 }
 
 const createRefreshToken = `-- name: CreateRefreshToken :exec
-INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at, revoked, created_at)
-VALUES (?, ?, ?, ?, 0, ?)
+INSERT INTO refresh_tokens (user_id, token_hash, family_id, expires_at, revoked, created_at, ip, user_agent, native, signed_in_at)
+VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
 `
 
 type CreateRefreshTokenParams struct {
-	UserID    int64  `db:"user_id" json:"user_id"`
-	TokenHash string `db:"token_hash" json:"token_hash"`
-	FamilyID  string `db:"family_id" json:"family_id"`
-	ExpiresAt int64  `db:"expires_at" json:"expires_at"`
-	CreatedAt int64  `db:"created_at" json:"created_at"`
+	UserID     int64          `db:"user_id" json:"user_id"`
+	TokenHash  string         `db:"token_hash" json:"token_hash"`
+	FamilyID   string         `db:"family_id" json:"family_id"`
+	ExpiresAt  int64          `db:"expires_at" json:"expires_at"`
+	CreatedAt  int64          `db:"created_at" json:"created_at"`
+	Ip         sql.NullString `db:"ip" json:"ip"`
+	UserAgent  sql.NullString `db:"user_agent" json:"user_agent"`
+	Native     int64          `db:"native" json:"native"`
+	SignedInAt sql.NullInt64  `db:"signed_in_at" json:"signed_in_at"`
 }
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
@@ -45,6 +50,10 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 		arg.FamilyID,
 		arg.ExpiresAt,
 		arg.CreatedAt,
+		arg.Ip,
+		arg.UserAgent,
+		arg.Native,
+		arg.SignedInAt,
 	)
 	return err
 }
@@ -58,6 +67,36 @@ DELETE FROM refresh_tokens WHERE expires_at < ?
 func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error {
 	_, err := q.db.ExecContext(ctx, deleteExpiredRefreshTokens, expiresAt)
 	return err
+}
+
+const getActiveSessionOwner = `-- name: GetActiveSessionOwner :one
+SELECT rt.user_id, u.username
+FROM refresh_tokens rt
+JOIN users u ON u.id = rt.user_id
+WHERE rt.family_id = ?1
+  AND rt.revoked = 0
+  AND rt.expires_at > ?2
+ORDER BY rt.id DESC
+LIMIT 1
+`
+
+type GetActiveSessionOwnerParams struct {
+	FamilyID string `db:"family_id" json:"family_id"`
+	Now      int64  `db:"now" json:"now"`
+}
+
+type GetActiveSessionOwnerRow struct {
+	UserID   int64  `db:"user_id" json:"user_id"`
+	Username string `db:"username" json:"username"`
+}
+
+// The account a signed-in device belongs to, if the device can still mint
+// an access token. Backed by idx_refresh_tokens_family_id.
+func (q *Queries) GetActiveSessionOwner(ctx context.Context, arg GetActiveSessionOwnerParams) (GetActiveSessionOwnerRow, error) {
+	row := q.db.QueryRowContext(ctx, getActiveSessionOwner, arg.FamilyID, arg.Now)
+	var i GetActiveSessionOwnerRow
+	err := row.Scan(&i.UserID, &i.Username)
+	return i, err
 }
 
 const getOldestActiveRefreshTokenFamily = `-- name: GetOldestActiveRefreshTokenFamily :one
@@ -77,7 +116,7 @@ func (q *Queries) GetOldestActiveRefreshTokenFamily(ctx context.Context, arg Get
 }
 
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
-SELECT id, user_id, token_hash, family_id, expires_at, revoked, created_at FROM refresh_tokens WHERE token_hash = ?
+SELECT id, user_id, token_hash, family_id, expires_at, revoked, created_at, ip, user_agent, native, signed_in_at FROM refresh_tokens WHERE token_hash = ?
 `
 
 func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
@@ -91,8 +130,92 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 		&i.ExpiresAt,
 		&i.Revoked,
 		&i.CreatedAt,
+		&i.Ip,
+		&i.UserAgent,
+		&i.Native,
+		&i.SignedInAt,
 	)
 	return i, err
+}
+
+const isNativeRefreshFamily = `-- name: IsNativeRefreshFamily :one
+SELECT CAST(COALESCE(MAX(native), 0) AS INTEGER) AS native FROM refresh_tokens WHERE family_id = ?
+`
+
+// Whether the device session is the Squelch app. Backed by
+// idx_refresh_tokens_family_id.
+func (q *Queries) IsNativeRefreshFamily(ctx context.Context, familyID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, isNativeRefreshFamily, familyID)
+	var native int64
+	err := row.Scan(&native)
+	return native, err
+}
+
+const listActiveSessions = `-- name: ListActiveSessions :many
+SELECT rt.family_id, rt.user_id, u.username, u.role,
+       rt.ip, rt.user_agent, rt.native, rt.signed_in_at,
+       rt.created_at AS last_used_at, rt.expires_at
+FROM refresh_tokens rt
+JOIN users u ON u.id = rt.user_id
+WHERE rt.revoked = 0
+  AND rt.expires_at > ?1
+  AND (?2 IS NULL OR rt.user_id = ?2)
+  AND rt.id = (SELECT MAX(r2.id) FROM refresh_tokens r2 WHERE r2.family_id = rt.family_id)
+ORDER BY rt.created_at DESC
+`
+
+type ListActiveSessionsParams struct {
+	Now    int64       `db:"now" json:"now"`
+	UserID interface{} `db:"user_id" json:"user_id"`
+}
+
+type ListActiveSessionsRow struct {
+	FamilyID   string         `db:"family_id" json:"family_id"`
+	UserID     int64          `db:"user_id" json:"user_id"`
+	Username   string         `db:"username" json:"username"`
+	Role       string         `db:"role" json:"role"`
+	Ip         sql.NullString `db:"ip" json:"ip"`
+	UserAgent  sql.NullString `db:"user_agent" json:"user_agent"`
+	Native     int64          `db:"native" json:"native"`
+	SignedInAt sql.NullInt64  `db:"signed_in_at" json:"signed_in_at"`
+	LastUsedAt int64          `db:"last_used_at" json:"last_used_at"`
+	ExpiresAt  int64          `db:"expires_at" json:"expires_at"`
+}
+
+// One row per signed-in device: the newest unrevoked, unexpired token of
+// each family. user_id NULL lists every account.
+func (q *Queries) ListActiveSessions(ctx context.Context, arg ListActiveSessionsParams) ([]ListActiveSessionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveSessions, arg.Now, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveSessionsRow{}
+	for rows.Next() {
+		var i ListActiveSessionsRow
+		if err := rows.Scan(
+			&i.FamilyID,
+			&i.UserID,
+			&i.Username,
+			&i.Role,
+			&i.Ip,
+			&i.UserAgent,
+			&i.Native,
+			&i.SignedInAt,
+			&i.LastUsedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeAllRefreshTokensForUser = `-- name: RevokeAllRefreshTokensForUser :exec

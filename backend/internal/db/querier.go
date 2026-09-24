@@ -10,9 +10,14 @@ import (
 )
 
 type Querier interface {
+	CloseConnectionLog(ctx context.Context, arg CloseConnectionLogParams) error
+	// At startup: rows still open were left by a process that did not shut
+	// down cleanly. Their real end time is unknown.
+	CloseOpenConnectionLogs(ctx context.Context, arg CloseOpenConnectionLogsParams) error
 	CountActiveRefreshTokenFamilies(ctx context.Context, arg CountActiveRefreshTokenFamiliesParams) (int64, error)
 	CountCalls(ctx context.Context) (int64, error)
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
+	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error)
 	CreateBookmark(ctx context.Context, arg CreateBookmarkParams) (int64, error)
@@ -20,6 +25,7 @@ type Querier interface {
 	CreateDirMonitor(ctx context.Context, arg CreateDirMonitorParams) (int64, error)
 	CreateDownstream(ctx context.Context, arg CreateDownstreamParams) (int64, error)
 	CreateGroup(ctx context.Context, label string) (int64, error)
+	CreateIPBlock(ctx context.Context, arg CreateIPBlockParams) (int64, error)
 	CreateLog(ctx context.Context, arg CreateLogParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSharedLink(ctx context.Context, arg CreateSharedLinkParams) (SharedLink, error)
@@ -34,12 +40,15 @@ type Querier interface {
 	DeleteAPIKey(ctx context.Context, id int64) error
 	DeleteBookmarkByCallAndUser(ctx context.Context, arg DeleteBookmarkByCallAndUserParams) error
 	DeleteCallBatch(ctx context.Context, id int64) error
+	DeleteConnectionLogBefore(ctx context.Context, connectedAt int64) error
 	DeleteDirMonitor(ctx context.Context, id int64) error
 	DeleteDownstream(ctx context.Context, id int64) error
+	DeleteExpiredIPBlocks(ctx context.Context, expiresAt sql.NullInt64) error
 	// Revoked rows are kept until they expire: they are the tombstones that let
 	// a replayed, already-rotated token be detected as reuse.
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error
 	DeleteGroup(ctx context.Context, id int64) error
+	DeleteIPBlock(ctx context.Context, id int64) error
 	DeleteSharedLink(ctx context.Context, id int64) error
 	DeleteSharedLinkByCallID(ctx context.Context, callID int64) error
 	DeleteSystem(ctx context.Context, id int64) error
@@ -51,6 +60,9 @@ type Querier interface {
 	DeleteWebhook(ctx context.Context, id int64) error
 	GetAPIKey(ctx context.Context, id int64) (ApiKey, error)
 	GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error)
+	// The account a signed-in device belongs to, if the device can still mint
+	// an access token. Backed by idx_refresh_tokens_family_id.
+	GetActiveSessionOwner(ctx context.Context, arg GetActiveSessionOwnerParams) (GetActiveSessionOwnerRow, error)
 	// Returns aggregate stats: today's calls, this week's calls, total calls.
 	GetActivityStats(ctx context.Context, arg GetActivityStatsParams) (GetActivityStatsRow, error)
 	GetAppState(ctx context.Context) (AppState, error)
@@ -63,6 +75,7 @@ type Querier interface {
 	GetDownstream(ctx context.Context, id int64) (Downstream, error)
 	GetGroup(ctx context.Context, id int64) (Group, error)
 	GetGroupByLabel(ctx context.Context, label string) (Group, error)
+	GetIPBlock(ctx context.Context, id int64) (IpBlock, error)
 	GetOldestActiveRefreshTokenFamily(ctx context.Context, arg GetOldestActiveRefreshTokenFamilyParams) (string, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
@@ -87,9 +100,18 @@ type Querier interface {
 	GetWebhook(ctx context.Context, id int64) (Webhook, error)
 	HasCallAtTimestamp(ctx context.Context, arg HasCallAtTimestampParams) (int64, error)
 	HasCallInTimeRange(ctx context.Context, arg HasCallInTimeRangeParams) (int64, error)
+	InsertConnectionLog(ctx context.Context, arg InsertConnectionLogParams) (int64, error)
+	// Whether the device session is the Squelch app. Backed by
+	// idx_refresh_tokens_family_id.
+	IsNativeRefreshFamily(ctx context.Context, familyID string) (int64, error)
 	ListAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListActiveDirMonitors(ctx context.Context) ([]Dirmonitor, error)
 	ListActiveDownstreams(ctx context.Context) ([]Downstream, error)
+	// Every block still in force, newest first, with who added it.
+	ListActiveIPBlocks(ctx context.Context, now sql.NullInt64) ([]ListActiveIPBlocksRow, error)
+	// One row per signed-in device: the newest unrevoked, unexpired token of
+	// each family. user_id NULL lists every account.
+	ListActiveSessions(ctx context.Context, arg ListActiveSessionsParams) ([]ListActiveSessionsRow, error)
 	ListActiveWebhooks(ctx context.Context) ([]Webhook, error)
 	ListAllTalkgroups(ctx context.Context) ([]Talkgroup, error)
 	ListAllUnits(ctx context.Context) ([]Unit, error)
@@ -98,6 +120,7 @@ type Querier interface {
 	ListBookmarksByUser(ctx context.Context, userID sql.NullInt64) ([]Bookmark, error)
 	ListCalls(ctx context.Context, arg ListCallsParams) ([]Call, error)
 	ListCallsAsc(ctx context.Context, arg ListCallsAscParams) ([]Call, error)
+	ListConnectionLog(ctx context.Context, arg ListConnectionLogParams) ([]ConnectionLog, error)
 	ListDirMonitors(ctx context.Context) ([]Dirmonitor, error)
 	ListDownstreams(ctx context.Context) ([]Downstream, error)
 	ListEnabledTRInstances(ctx context.Context) ([]TrInstance, error)

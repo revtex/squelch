@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
+	"github.com/revtex/squelch/internal/admin"
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/config"
 	"github.com/revtex/squelch/internal/connections"
@@ -137,5 +139,99 @@ func TestWebSocket_ClientAddressFollowsTrustedProxies(t *testing.T) {
 				t.Errorf("entry = %+v", got)
 			}
 		})
+	}
+}
+
+// A signed-in device records where it signed in from and whether it is the
+// app; each refresh records where it is now and keeps the sign-in time.
+func TestSessionMetadata_RecordedAtLoginAndRefresh(t *testing.T) {
+	engine, queries := newTestEngine(t)
+	seedAdminUser(t, queries, "alice", "password123")
+
+	_, refresh, _ := nativeLogin(t, engine, "alice", "password123")
+	first, err := queries.GetRefreshTokenByHash(context.Background(), auth.HashRefreshToken(refresh))
+	if err != nil {
+		t.Fatalf("look up login token: %v", err)
+	}
+	// httptest requests come from 192.0.2.1; newTestEngine trusts every proxy
+	// (gin's default), which does not matter without a forwarded header.
+	if first.Ip.String != "192.0.2.1" || first.Native != 1 || !first.SignedInAt.Valid {
+		t.Fatalf("login row = ip %v native %d signedIn %v", first.Ip, first.Native, first.SignedInAt)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+		strings.NewReader(`{"refreshToken":"`+refresh+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "squelch-app/1.0")
+	req.RemoteAddr = "198.51.100.7:4000"
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d; body: %s", w.Code, w.Body.String())
+	}
+	var body struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	second, err := queries.GetRefreshTokenByHash(context.Background(), auth.HashRefreshToken(body.RefreshToken))
+	if err != nil {
+		t.Fatalf("look up rotated token: %v", err)
+	}
+	if second.Ip.String != "198.51.100.7" || second.UserAgent.String != "squelch-app/1.0" || second.Native != 1 {
+		t.Errorf("rotated row = ip %v ua %v native %d", second.Ip, second.UserAgent, second.Native)
+	}
+	if second.SignedInAt != first.SignedInAt {
+		t.Errorf("signed-in time = %v after refresh, want it carried from %v", second.SignedInAt, first.SignedInAt)
+	}
+}
+
+// Signing one device out from the admin must stop that device's refresh
+// token and access token, and leave the account's other devices alone.
+func TestSessionsRevoke_OnlyThatDeviceLosesAccess(t *testing.T) {
+	engine, queries := newTestEngine(t)
+	seedAdminUser(t, queries, "alice", "password123")
+
+	phoneAccess, phoneRefresh, _ := nativeLogin(t, engine, "alice", "password123")
+	laptopAccess, laptopRefresh, _ := nativeLogin(t, engine, "alice", "password123")
+	phone, err := queries.GetRefreshTokenByHash(context.Background(), auth.HashRefreshToken(phoneRefresh))
+	if err != nil {
+		t.Fatalf("look up phone token: %v", err)
+	}
+
+	ops := admin.New(queries, admin.Deps{}, nil)
+	p, _ := json.Marshal(map[string]string{"familyId": phone.FamilyID})
+	if _, err := ops.SessionsRevoke(context.Background(), p, phone.UserID); err != nil {
+		t.Fatalf("SessionsRevoke: %v", err)
+	}
+
+	refresh := func(token string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh",
+			strings.NewReader(`{"refreshToken":"`+token+`"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w.Code
+	}
+	me := func(access string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+		req.Header.Set("Authorization", "Bearer "+access)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	if code := me(phoneAccess); code != http.StatusUnauthorized {
+		t.Errorf("signed-out device's access token: status %d, want 401", code)
+	}
+	if code := me(laptopAccess); code != http.StatusOK {
+		t.Errorf("other device's access token: status %d, want 200", code)
+	}
+	if code := refresh(phoneRefresh); code != http.StatusUnauthorized {
+		t.Errorf("signed-out device's refresh: status %d, want 401", code)
+	}
+	if code := refresh(laptopRefresh); code != http.StatusOK {
+		t.Errorf("other device's refresh: status %d, want 200", code)
 	}
 }

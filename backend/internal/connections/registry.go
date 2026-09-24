@@ -5,6 +5,7 @@
 package connections
 
 import (
+	"net/netip"
 	"sort"
 	"sync"
 	"time"
@@ -25,6 +26,32 @@ const (
 	KindStream Kind = "stream"
 )
 
+// Why a connection ended, as recorded in its history.
+const (
+	// ReasonClient: the client went away (closed the page, lost the network).
+	ReasonClient = "client"
+	// ReasonSignout: the session was revoked — logout, password change, the
+	// account disabled, deleted or edited, or public access turned off.
+	ReasonSignout = "signout"
+	// ReasonRevalidation: the periodic account check found the account
+	// disabled or expired.
+	ReasonRevalidation = "revalidation"
+	// ReasonShutdown: the server stopped.
+	ReasonShutdown = "shutdown"
+	// ReasonAdmin: an admin disconnected it from Admin → Connections.
+	ReasonAdmin = "admin"
+	// ReasonBlocked: an admin blocked the address it came from.
+	ReasonBlocked = "blocked"
+)
+
+// Observer is told as connections open and close. Calls are made outside
+// the registry lock and must not block: they sit on the connect and
+// disconnect paths of every transport.
+type Observer interface {
+	Opened(c Conn)
+	Closed(c Conn, reason string, at time.Time)
+}
+
 // changeDebounce bounds how often the change callback fires. Connections
 // churn in bursts (a reconnect storm after a restart, a page reload opening
 // a socket and a stream together), and one refresh covers the whole burst.
@@ -44,14 +71,21 @@ type Conn struct {
 	// tokens issued before the claim existed.
 	FamilyID string
 	Client
+	// Native is true for the Squelch app, learned from the device session.
+	Native bool
+	// Country is the ISO 3166-1 alpha-2 code for IP, resolved once when the
+	// connection opens; "" without a GeoIP database, for local addresses,
+	// and for addresses the database does not place.
+	Country string
 	// Protocol is the WebSocket framing ("v1" or legacy ""); empty for streams.
 	Protocol    string
 	ConnectedAt time.Time
 }
 
 type entry struct {
-	conn  Conn
-	close func()
+	conn   Conn
+	close  func()
+	reason string // set by SetCloseReason; ReasonClient when empty
 }
 
 // Registry is safe for concurrent use. A nil *Registry is valid and does
@@ -60,6 +94,8 @@ type Registry struct {
 	mu       sync.Mutex
 	conns    map[string]*entry
 	onChange func()
+	observer Observer
+	country  func(netip.Addr) string
 	timer    *time.Timer
 	debounce time.Duration
 }
@@ -86,6 +122,28 @@ func (r *Registry) SetOnChange(fn func()) {
 	r.mu.Unlock()
 }
 
+// SetObserver registers the connection history observer. Set once at
+// startup, before any connection is added.
+func (r *Registry) SetObserver(o Observer) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.observer = o
+	r.mu.Unlock()
+}
+
+// SetCountryLookup registers how a connection's country is found. Set once
+// at startup, before any connection is added.
+func (r *Registry) SetCountryLookup(fn func(netip.Addr) string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.country = fn
+	r.mu.Unlock()
+}
+
 // Add records a connection. close must end it through its own transport's
 // normal teardown, which is expected to call Remove. A zero ConnectedAt is
 // set to now and an empty ID is minted.
@@ -100,10 +158,34 @@ func (r *Registry) Add(c Conn, close func()) string {
 		c.ConnectedAt = time.Now()
 	}
 	r.mu.Lock()
+	lookup := r.country
+	r.mu.Unlock()
+	if lookup != nil && c.Country == "" && c.IP.IsValid() {
+		c.Country = lookup(c.IP)
+	}
+	r.mu.Lock()
 	r.conns[c.ID] = &entry{conn: c, close: close}
 	r.changedLocked()
+	obs := r.observer
 	r.mu.Unlock()
+	if obs != nil {
+		obs.Opened(c)
+	}
 	return c.ID
+}
+
+// SetCloseReason records why a connection is about to end. Transports call
+// it just before tearing a connection down for a reason of their own; a
+// connection removed without one ended because the client went away.
+func (r *Registry) SetCloseReason(id, reason string) {
+	if r == nil || id == "" {
+		return
+	}
+	r.mu.Lock()
+	if e, ok := r.conns[id]; ok {
+		e.reason = reason
+	}
+	r.mu.Unlock()
 }
 
 // Remove forgets a connection. Removing an unknown ID is a no-op, so the
@@ -113,11 +195,20 @@ func (r *Registry) Remove(id string) {
 		return
 	}
 	r.mu.Lock()
-	if _, ok := r.conns[id]; ok {
+	e, ok := r.conns[id]
+	if ok {
 		delete(r.conns, id)
 		r.changedLocked()
 	}
+	obs := r.observer
 	r.mu.Unlock()
+	if ok && obs != nil {
+		reason := e.reason
+		if reason == "" {
+			reason = ReasonClient
+		}
+		obs.Closed(e.conn, reason, time.Now())
+	}
 }
 
 // Len returns the number of live connections.
@@ -150,15 +241,40 @@ func (r *Registry) List() []Conn {
 	return out
 }
 
+// Get returns one live connection.
+func (r *Registry) Get(id string) (Conn, bool) {
+	if r == nil {
+		return Conn{}, false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.conns[id]
+	if !ok {
+		return Conn{}, false
+	}
+	return e.conn, true
+}
+
 // Close ends one connection. It reports whether the ID was live.
 func (r *Registry) Close(id string) bool {
 	return r.CloseWhere(func(c Conn) bool { return c.ID == id }) > 0
 }
 
+// CloseFor ends every connection the predicate selects, recording reason
+// in each one's history, and returns how many it asked to close.
+func (r *Registry) CloseFor(reason string, pred func(Conn) bool) int {
+	return r.closeWhere(reason, pred)
+}
+
 // CloseWhere ends every connection the predicate selects and returns how
-// many it asked to close. The close funcs run after the lock is released:
-// a transport's teardown calls Remove, which takes the same lock.
+// many it asked to close. Each keeps whatever close reason was already set.
 func (r *Registry) CloseWhere(pred func(Conn) bool) int {
+	return r.closeWhere("", pred)
+}
+
+// closeWhere runs the close funcs after the lock is released: a transport's
+// teardown calls Remove, which takes the same lock.
+func (r *Registry) closeWhere(reason string, pred func(Conn) bool) int {
 	if r == nil {
 		return 0
 	}
@@ -166,6 +282,9 @@ func (r *Registry) CloseWhere(pred func(Conn) bool) int {
 	var closers []func()
 	for _, e := range r.conns {
 		if pred(e.conn) && e.close != nil {
+			if reason != "" {
+				e.reason = reason
+			}
 			closers = append(closers, e.close)
 		}
 	}

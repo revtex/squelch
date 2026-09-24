@@ -35,6 +35,7 @@ import (
 	"github.com/revtex/squelch/internal/handler/setup"
 	"github.com/revtex/squelch/internal/handler/share"
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
+	"github.com/revtex/squelch/internal/ipblock"
 	"github.com/revtex/squelch/internal/middleware"
 	"github.com/revtex/squelch/internal/static"
 	streamsvc "github.com/revtex/squelch/internal/stream"
@@ -78,6 +79,8 @@ type Deps struct {
 	// not started) leaves the endpoint responding 503 rather than absent,
 	// so clients get a clear answer instead of a 404.
 	StreamManager *streamsvc.Manager
+	// IPBlocks refuses blocked addresses on every route. Nil blocks nothing.
+	IPBlocks *ipblock.Matcher
 }
 
 // RegisterRoutes wires all API routes onto the Gin engine.
@@ -109,7 +112,10 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	legacyUsageHandler := legacyusage.New(nil, nil)
 	trMqttHandler := trmqttadmin.New(deps.Queries, deps.TRMqttManager, deps.EncryptionKey)
 
-	// Global middleware applied to every request.
+	// Global middleware applied to every request. The address block runs
+	// first so a blocked client is refused before anything else happens;
+	// gin applies middleware only to routes registered after it.
+	r.Use(middleware.IPBlock(deps.IPBlocks))
 	r.Use(middleware.RequestID())
 	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())

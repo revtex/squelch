@@ -65,6 +65,7 @@ func seedSettings(ctx context.Context, tx *sql.Tx) (bool, error) {
 	defaults := []struct{ key, value string }{
 		{"autoPopulateSystems", "true"},
 		{"pruneDays", "7"},
+		{"connectionHistoryDays", "30"},
 		{"maxClients", "200"},
 		{"time12hFormat", "false"},
 		{"keypadBeeps", "uniden"},

@@ -28,6 +28,7 @@ import {
   Menu,
   X,
   AudioLines,
+  Cable,
 } from "lucide-react";
 import { useAppSelector, useAppDispatch } from "@/app/store";
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/features/auth";
 import { useAdminWebSocket } from "./_shell/useAdminWebSocket";
 import UsersPanel from "@/features/admin/users";
+import ConnectionsPanel from "@/features/admin/connections";
 import SystemsPanel from "@/features/admin/systems";
 import GroupsTagsPanel from "@/features/admin/groups-tags";
 import ApiKeysPanel from "@/features/admin/api-keys";
@@ -55,6 +57,7 @@ import LegacyUsageBanner from "@/features/admin/legacy-usage";
 const navItems = [
   { to: "/admin/activity", label: "Dashboards", icon: Activity },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/connections", label: "Connections", icon: Cable },
   { to: "/admin/systems", label: "Systems", icon: Radio },
   { to: "/admin/groups", label: "Groups & Tags", icon: FolderTree },
   { to: "/admin/apikeys", label: "API Keys", icon: Key },
@@ -205,6 +208,7 @@ export default function Admin() {
             <Routes>
               <Route path="activity" element={<DashboardsPanel />} />
               <Route path="users" element={<UsersPanel />} />
+              <Route path="connections" element={<ConnectionsPanel />} />
               <Route path="systems" element={<SystemsPanel />} />
               <Route path="groups" element={<GroupsTagsPanel />} />
               <Route path="apikeys" element={<ApiKeysPanel />} />

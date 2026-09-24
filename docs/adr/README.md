@@ -40,6 +40,8 @@ than invent it: a reconstructed alternative is worse than none.
 | [0005](0005-rename-to-squelch.md) | Rename to Squelch with compatibility shims | Accepted |
 | [0006](0006-rotate-key-derivation-with-an-external-tool.md) | Rotate the key-derivation inputs with an external tool | Accepted |
 | [0007](0007-share-link-app-handoff.md) | Hand share links to the app with a custom scheme, not Universal Links | Accepted |
+| [0008](0008-ip-blocks-are-global-with-a-server-side-trusted-list.md) | IP blocks are global, with a trusted list only the host can change | Accepted |
+| [0009](0009-country-from-a-local-database-only.md) | Country comes from a local database file only | Accepted |
 
 ## Not yet written
 

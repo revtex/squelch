@@ -301,6 +301,30 @@ If every line shows the same `"ip"` — your proxy's or a Docker gateway such as
 The lockout clears on its own after ten minutes, or immediately when the
 server restarts.
 
+**Every page says "access from this address is blocked".**
+An admin has blocked your address, or a range that includes it, from
+**Admin → Connections → Blocked addresses**. Recorders uploading from a
+blocked address get the same answer, as a 403 error in their log. To get back
+in:
+
+1. Add the address you are connecting from to `SQUELCH_TRUSTED_ADDRESSES`, or
+   to `--trusted-addresses` for a binary install. If you do not know it, any
+   "what is my IP" website shows it.
+
+   ```yaml
+   environment:
+     - SQUELCH_TRUSTED_ADDRESSES=203.0.113.7
+   ```
+
+2. Restart Squelch (`docker compose up -d`). Trusted addresses are never
+   blocked, so you can sign in again.
+3. Remove the block under **Blocked addresses**. You can leave your address on
+   the trusted list so this cannot happen again; see
+   [Addresses That Can Never Be Blocked](deployment-guide.md#addresses-that-can-never-be-blocked).
+
+A block that was set to expire also lifts on its own at the time shown in the
+list.
+
 ---
 
 ## Still Stuck

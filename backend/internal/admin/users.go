@@ -149,11 +149,19 @@ func (o *Operations) UsersUpdate(ctx context.Context, params json.RawMessage, ca
 		return nil, fmt.Errorf("failed to update user: %w", err)
 	}
 
-	// Revoke all tokens so stale claims are not trusted after update.
-	auth.Tokens.RevokeAllForUser(req.ID)
+	if req.Disabled != 0 {
+		// A disabled account is signed out for good: its devices must not
+		// come back if the account is enabled again later.
+		if err := o.signOutEverywhere(ctx, req.ID); err != nil {
+			return nil, err
+		}
+	} else {
+		// Revoke all tokens so stale claims are not trusted after update.
+		auth.Tokens.RevokeAllForUser(req.ID)
 
-	// Immediately disconnect all active WS sessions for the updated user.
-	o.disconnectByUser(req.ID)
+		// Immediately disconnect all active WS sessions for the updated user.
+		o.disconnectByUser(req.ID)
+	}
 
 	user, err := o.Queries.GetUser(ctx, req.ID)
 	if err != nil {

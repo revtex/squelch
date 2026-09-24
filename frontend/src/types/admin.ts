@@ -230,6 +230,109 @@ export interface SharedLinkAdmin {
   expiresAt: number | null;
 }
 
+// --- Connections (admin) ---
+
+/** listener = a LIVE socket, admin = the admin dashboard, stream = BKGND audio. */
+export type ConnectionKind = "listener" | "admin" | "stream";
+
+/** Whether countries are shown, and the credit the database asks for. */
+export interface GeoIPInfo {
+  enabled: boolean;
+  credit: { text: string; url: string } | null;
+}
+
+/** Where an address is: a country, the local network, or unknown. */
+export interface AddressPlace {
+  /** ISO 3166-1 alpha-2 code; null when unknown or local. */
+  country: string | null;
+  /** A private, loopback or link-local address. */
+  local: boolean;
+}
+
+export interface AdminConnection extends AddressPlace {
+  id: string;
+  kind: ConnectionKind;
+  /** null for an anonymous (public access) listener. */
+  userId: number | null;
+  username: string;
+  role: string;
+  familyId: string | null;
+  ip: string | null;
+  userAgent: string;
+  native: boolean;
+  protocol: string;
+  connectedAt: number;
+  /** The admin connection this list was requested over. */
+  self: boolean;
+  /** On the server's trusted list: can never be blocked. */
+  trusted: boolean;
+}
+
+export interface AdminConnectionsList {
+  connections: AdminConnection[];
+  geoip: GeoIPInfo;
+}
+
+/** A signed-in device: one refresh-token family, as it was last used. */
+export interface AdminSession extends AddressPlace {
+  familyId: string;
+  userId: number;
+  username: string;
+  role: string;
+  ip: string | null;
+  userAgent: string | null;
+  native: boolean;
+  signedInAt: number | null;
+  lastUsedAt: number;
+  expiresAt: number;
+  liveConnections: number;
+  /** The device this list was requested from. */
+  current: boolean;
+  /** Its last address is on the server's trusted list. */
+  trusted: boolean;
+}
+
+export interface AdminSessionsList {
+  sessions: AdminSession[];
+  geoip: GeoIPInfo;
+}
+
+export interface AdminConnectionHistoryEntry extends AddressPlace {
+  id: number;
+  kind: ConnectionKind;
+  userId: number | null;
+  username: string | null;
+  ip: string;
+  userAgent: string | null;
+  native: boolean;
+  familyId: string | null;
+  connectedAt: number;
+  disconnectedAt: number | null;
+  disconnectReason: string | null;
+  /** On the server's trusted list: can never be blocked. */
+  trusted: boolean;
+}
+
+export interface AdminConnectionHistoryPage {
+  items: AdminConnectionHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** 0 means history is turned off. */
+  retentionDays: number;
+  geoip: GeoIPInfo;
+}
+
+export type ConnectionHistoryFilter = {
+  ip?: string;
+  userId?: number;
+  kind?: ConnectionKind;
+  since?: number;
+  until?: number;
+  page?: number;
+  pageSize?: number;
+};
+
 // --- Server filesystem types ---
 
 export interface ServerDirectoryEntry {
@@ -279,3 +382,40 @@ export interface TranscriptionStats {
   byLanguage: { language: string; count: number }[];
   byModel: { model: string; count: number }[];
 }
+
+/** A blocked address or range. */
+export interface AdminIPBlock {
+  id: number;
+  cidr: string;
+  reason: string;
+  /** Username of the admin who added it; null if that account is gone. */
+  createdBy: string | null;
+  createdAt: number;
+  /** Unix seconds; null = until removed. */
+  expiresAt: number | null;
+}
+
+export interface AdminIPBlocksList {
+  /** False when the server runs without address blocking. */
+  enabled: boolean;
+  blocks: AdminIPBlock[];
+  /** Addresses that can never be blocked: loopback plus the server's list. */
+  trusted: string[];
+  /** The address the admin is connected from, as the server sees it. */
+  yourAddress: string | null;
+}
+
+export interface CreateIPBlockPayload {
+  address: string;
+  reason: string;
+  expiresAt?: number;
+  force?: boolean;
+}
+
+/**
+ * Either the block was made, or it would include the admin's own address
+ * and needs confirming (resend with force).
+ */
+export type CreateIPBlockResult =
+  | { ok: true; id: number; cidr: string; closed: number }
+  | { needsConfirm: true; cidr: string; message: string };

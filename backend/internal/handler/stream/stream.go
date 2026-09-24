@@ -217,6 +217,11 @@ func (h *Handler) GetStream(c *gin.Context) {
 		FamilyID: c.GetString("fam"),
 		Client:   connections.ClientFromRequest(c.Request, c.ClientIP()),
 	}
+	if who.FamilyID != "" {
+		if n, err := h.queries.IsNativeRefreshFamily(c.Request.Context(), who.FamilyID); err == nil {
+			who.Native = n != 0
+		}
+	}
 	err = h.mgr.Serve(c.Request.Context(), who, sid, c.Writer, c.Writer.Flush)
 	switch {
 	case err == nil, errors.Is(err, context.Canceled):

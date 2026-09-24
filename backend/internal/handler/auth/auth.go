@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/handler/shared"
 )
@@ -230,23 +231,29 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		}
 	}
 
+	// A native client carries both tokens itself: the refresh token comes
+	// back in the body below, and the access JWT rides an Authorization
+	// header on every request including audio. Setting either cookie would
+	// hand it credentials it has no way to manage.
+	native := wantsNativeTokens(c)
+	client := connections.ClientFromRequest(c.Request, c.ClientIP())
+
 	if err := h.queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: hashRefresh,
-		FamilyID:  familyID,
-		ExpiresAt: now.Add(auth.RefreshTokenExpiry).Unix(),
-		CreatedAt: now.Unix(),
+		UserID:     user.ID,
+		TokenHash:  hashRefresh,
+		FamilyID:   familyID,
+		ExpiresAt:  now.Add(auth.RefreshTokenExpiry).Unix(),
+		CreatedAt:  now.Unix(),
+		Ip:         nullString(client.IP.String(), client.IP.IsValid()),
+		UserAgent:  nullString(client.UserAgent, client.UserAgent != ""),
+		Native:     boolInt(native),
+		SignedInAt: sql.NullInt64{Int64: now.Unix(), Valid: true},
 	}); err != nil {
 		slog.Error("auth: failed to store refresh token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
-	// A native client carries both tokens itself: the refresh token comes
-	// back in the body below, and the access JWT rides an Authorization
-	// header on every request including audio. Setting either cookie would
-	// hand it credentials it has no way to manage.
-	native := wantsNativeTokens(c)
 	if !native {
 		// Set refresh token cookie. rememberMe defaults to true.
 		rememberMe := req.RememberMe == nil || *req.RememberMe
@@ -478,12 +485,19 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 	}
 
 	now := time.Now()
+	// Each rotation records where the device is now, so the newest row of
+	// a family is its current address; the sign-in time carries forward.
+	client := connections.ClientFromRequest(c.Request, c.ClientIP())
 	if err := h.queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: newHash,
-		FamilyID:  rt.FamilyID,
-		ExpiresAt: now.Add(auth.RefreshTokenExpiry).Unix(),
-		CreatedAt: now.Unix(),
+		UserID:     user.ID,
+		TokenHash:  newHash,
+		FamilyID:   rt.FamilyID,
+		ExpiresAt:  now.Add(auth.RefreshTokenExpiry).Unix(),
+		CreatedAt:  now.Unix(),
+		Ip:         nullString(client.IP.String(), client.IP.IsValid()),
+		UserAgent:  nullString(client.UserAgent, client.UserAgent != ""),
+		Native:     boolInt(viaBody),
+		SignedInAt: rt.SignedInAt,
 	}); err != nil {
 		slog.Error("auth: failed to store rotated refresh token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
@@ -852,4 +866,15 @@ func PostDocsSession(c *gin.Context) {
 	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 	auth.SetSwaggerCookie(c, secure)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func nullString(s string, valid bool) sql.NullString {
+	return sql.NullString{String: s, Valid: valid}
+}
+
+func boolInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

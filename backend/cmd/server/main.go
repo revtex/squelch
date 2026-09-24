@@ -45,8 +45,10 @@ import (
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/dirmonitor"
 	"github.com/revtex/squelch/internal/downstream"
+	"github.com/revtex/squelch/internal/geoip"
 	"github.com/revtex/squelch/internal/handler/routes"
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
+	"github.com/revtex/squelch/internal/ipblock"
 	"github.com/revtex/squelch/internal/logging"
 	"github.com/revtex/squelch/internal/secrets"
 	"github.com/revtex/squelch/internal/seed"
@@ -789,6 +791,38 @@ func (p *program) run() {
 		os.Exit(1)
 	}
 
+	// Address blocks. Loaded before the server listens so they apply from the
+	// first request after a restart; a database that cannot be read here is
+	// fatal rather than silently serving every blocked address.
+	trustedAddrs, err := cfg.TrustedAddressList()
+	if err != nil {
+		slog.Error("invalid trusted addresses", "value", cfg.TrustedAddresses, "error", err)
+		os.Exit(1)
+	}
+	if len(trustedAddrs) > 0 && cfg.ProxiesAreDefault() {
+		slog.Warn("trusted addresses are set but trusted proxies are still the default: " +
+			"any client on a private network can claim a trusted address. Set --trusted-proxies to your reverse proxy's address")
+	}
+	ipBlocks := ipblock.New(trustedAddrs)
+	if err := ipBlocks.Reload(context.Background(), queries); err != nil {
+		slog.Error("failed to load ip blocks", "error", err)
+		os.Exit(1)
+	}
+
+	// Country lookup for the admin's connection list, from a file the
+	// operator supplies. Optional: a missing or unreadable file only turns
+	// the country column off.
+	var geoDB *geoip.DB
+	if cfg.GeoIPDB != "" {
+		d, err := geoip.Open(cfg.GeoIPDB)
+		if err != nil {
+			slog.Warn("geoip: country lookup is off: the database could not be opened", "path", cfg.GeoIPDB, "error", err)
+		} else {
+			geoDB = d
+			slog.Info("geoip: country lookup is on", "path", cfg.GeoIPDB, "type", d.Type())
+		}
+	}
+
 	// Set up Gin router with registered routes.
 	router := gin.New()
 	// Multipart parts beyond this are spooled to temp files rather than held
@@ -866,7 +900,16 @@ func (p *program) run() {
 	// Start background call pruner.
 	go audio.PruneLoop(ctx, queries, cfg.RecordingsDir)
 
-	// Start background refresh token cleanup (every hour).
+	// Connection history. Rows a previous run left open are closed first,
+	// before anything can connect, so no live connection's row is swept.
+	connHistory := connections.NewHistory(queries)
+	if err := connHistory.CloseStale(ctx); err != nil {
+		slog.Error("connections: failed to close stale history rows", "error", err)
+	}
+	connHistory.Prune(ctx)
+	go connHistory.Run(ctx)
+
+	// Hourly cleanup: expired refresh tokens and aged-out connection history.
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
@@ -878,6 +921,9 @@ func (p *program) run() {
 				if err := queries.DeleteExpiredRefreshTokens(ctx, time.Now().Unix()); err != nil {
 					slog.Error("failed to cleanup expired refresh tokens", "error", err)
 				}
+				connHistory.Prune(ctx)
+				ipBlocks.Sweep(ctx, queries)
+				geoDB.ReloadIfChanged()
 			}
 		}
 	}()
@@ -897,10 +943,16 @@ func (p *program) run() {
 		WhisperAvailable:  hasWhisper,
 		RecordingsDir:     cfg.RecordingsDir,
 		EncryptionKey:     cfg.EncryptionKey,
+		IPBlocks:          ipBlocks,
+		GeoIP:             geoDB,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
 	// reports here, for the admin's connection list.
 	conns := connections.New()
+	conns.SetObserver(connHistory)
+	if geoDB != nil {
+		conns.SetCountryLookup(geoDB.Country)
+	}
 	conns.SetOnChange(func() { hub.BroadcastAdminEvent("connections.updated", nil) })
 	hub.SetConnections(conns)
 	go hub.Run(ctx)
@@ -978,6 +1030,7 @@ func (p *program) run() {
 		TRMqttManager:      trManager,
 		EncryptionKey:      cfg.EncryptionKey,
 		StreamManager:      streamMgr,
+		IPBlocks:           ipBlocks,
 	})
 
 	// Create HTTP server.
@@ -1058,6 +1111,7 @@ func (p *program) run() {
 
 	dsService.Stop()
 	trManager.Stop()
+	_ = geoDB.Close()
 	slog.Info("server: shutdown complete")
 }
 
