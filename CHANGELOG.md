@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Reverse proxy guide covers the real client address.** The deployment
+  guide now explains how to set `SQUELCH_TRUSTED_PROXIES` to just your proxy
+  (with a table for where to find its address, including Docker), how to
+  check it in the log, and why the default private ranges let a LAN device
+  fake its address. Adds setups for Nginx Proxy Manager, Traefik, Apache and
+  Cloudflare, and removes a visitor-supplied `X-Real-IP` in the Caddy example.
+  Troubleshooting gains "everyone is locked out at once".
+
 - **A Listener Guide** (`docs/listener-guide.md`), for the person doing the
   listening rather than the one running the server: starting playback, reading
   the display, selection, AVOID and HOLD, transcripts, search, bookmarks,
@@ -89,6 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine and no font is fetched from a third party.
 
 ### Fixed
+
+- **The deployment guide's "bind to localhost" tip broke Docker installs.** It
+  set `SQUELCH_LISTEN=127.0.0.1:3022` inside the container, which leaves the
+  published port with nothing to reach. The tip now keeps the container on
+  `0.0.0.0` and restricts the published port to `127.0.0.1` instead.
 
 - **A pause no longer outlives the session that made it.** Pausing is about
   the call playing right now, so turning LIVE off and on resets it, and a

@@ -152,7 +152,8 @@ means the delivery side rather than the ingest side.
 **The listening screen never connects and no calls appear.**
 Live calls travel over a WebSocket. A reverse proxy that does not pass the
 upgrade headers breaks exactly this and nothing else — the page loads, search
-works, live is dead. The working Caddy and nginx configurations are in
+works, live is dead. Working configurations for Caddy, nginx, Nginx Proxy
+Manager, Traefik, Apache and Cloudflare are in
 [Running Behind a Reverse Proxy](deployment-guide.md#running-behind-a-reverse-proxy).
 
 **Listeners are turned away once the server is busy.**
@@ -282,6 +283,23 @@ access to the server itself, which is the point.
 **A listener forgot theirs.**
 Any administrator can set it in **Admin → Users** — edit the user and enter a
 new password.
+
+**Everyone is locked out at once, with "too many failed attempts, try again
+later".**
+Squelch locks an address out for ten minutes after three wrong passwords. If
+it cannot see visitors' real addresses behind your reverse proxy, every
+visitor shares the proxy's address, so one person's typos lock out everybody.
+Check the request log:
+
+```bash
+docker compose logs squelch | grep '"msg":"request"' | tail -5
+```
+
+If every line shows the same `"ip"` — your proxy's or a Docker gateway such as
+`172.18.0.1` — set `SQUELCH_TRUSTED_PROXIES` to that address, following
+[Showing the Real Client Address](deployment-guide.md#showing-the-real-client-address).
+The lockout clears on its own after ten minutes, or immediately when the
+server restarts.
 
 ---
 

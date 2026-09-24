@@ -274,31 +274,85 @@ To restore, unpack the archive into the same location and start the container ag
 
 Most people already have a web server (Caddy, nginx, Traefik) on their home server. Putting Squelch behind it gives you a clean domain name and one place to manage TLS certificates.
 
-Two rules to remember when proxying:
+Every proxy needs to do three things:
 
-- **Forward WebSocket upgrades** on `/api/ws`, `/ws`, and `/api/admin/ws` — the live call feed and admin events use them. `/api/ws` is the canonical listener endpoint; `/ws` is a compatibility alias kept for legacy clients and should also be proxied. (Audio is delivered separately as a regular HTTP response from `/api/calls/:id/audio` and does not require WebSocket forwarding.)
+- **Forward WebSocket upgrades.** The live call feed uses `/api/v1/ws/listener` and the admin dashboard uses `/api/v1/ws/admin`; older clients still use `/api/ws`, `/ws` and `/api/admin/ws`. Proxying the whole site (`/`) with upgrades allowed covers all of them. Audio and the background stream (`/api/v1/listener/stream`) are ordinary HTTP responses.
 - **Send `X-Forwarded-Proto`** so Squelch knows whether to mark cookies as secure.
-- **Send `X-Forwarded-For`** so login lockout and rate limits see the real client address. Squelch only believes this header when the connection comes from a trusted proxy — by default any loopback or private address (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), which covers a proxy on the same host, LAN, or Docker network. If your proxy connects from anywhere else, list it with `--trusted-proxies` / `SQUELCH_TRUSTED_PROXIES` (comma-separated IPs or CIDRs). Set it to `none` when Squelch is exposed directly with no proxy in front.
+- **Send `X-Forwarded-For`** with the visitor's real address. The proxy examples below all do this.
 
-If the proxy is on the same machine, it's also a good idea to bind Squelch to localhost only so nothing bypasses the proxy. In your compose file:
+Then tell Squelch which address the proxy connects from — see [Showing the Real Client Address](#showing-the-real-client-address). Skipping that step leaves anyone on your network able to fake their address.
+
+### Showing the Real Client Address
+
+Squelch records a client address against every login attempt, rate limit and log line. Behind a proxy, every connection arrives from the proxy, so the real address has to come from the `X-Forwarded-For` header — and Squelch must only believe that header from the proxy itself. Anyone can put any address in it.
+
+**Why it matters:** login lockout counts failed passwords per address. If every visitor appears to come from the proxy, one person mistyping a password three times locks **everyone** out for ten minutes. If Squelch believes the header from anyone, a visitor can dodge the lockout by claiming a different address each time.
+
+Out of the box, Squelch believes `X-Forwarded-For` from any loopback or private address (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). That makes a first install work behind almost any proxy, but it also means **any device on your LAN** that connects to Squelch's port directly can claim to be any address. Narrow it to your proxy:
+
+1. **Find the address your proxy connects from.** It depends on where each one runs:
+
+   | Proxy runs… | Squelch runs… | Squelch sees the proxy as… |
+   | --- | --- | --- |
+   | on the host | on the host (binary install) | `127.0.0.1` |
+   | on the host | in Docker, reached through a published port (`127.0.0.1:3022` or `localhost:3022`) | the gateway of Squelch's Docker network — see the command below |
+   | in Docker, on the same Docker network as Squelch | in Docker | the proxy container's address (pin it, or use the network's subnet if only the proxy and Squelch are on it) |
+   | on another machine | anywhere | that machine's LAN address |
+
+   To find a Docker network's gateway (the project name is usually the folder your compose file is in):
+
+   ```bash
+   docker network inspect squelch_default --format '{{(index .IPAM.Config 0).Gateway}}'
+   ```
+
+   Expected output is a single address such as `172.18.0.1`.
+
+   If you are not sure, set up the proxy first, then look at the log (step 3): with no trusted proxy matching, every request shows the proxy's address, and that is the one to use.
+
+2. **Set it** with `--trusted-proxies` or `SQUELCH_TRUSTED_PROXIES` (comma-separated addresses or CIDR ranges). In Docker Compose:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_TRUSTED_PROXIES=172.18.0.1
+   ```
+
+   Then `docker compose up -d` to apply it. With no proxy in front of Squelch at all, set it to `none`.
+
+3. **Check it.** Browse the site through the proxy from your phone or another computer, then read the request log:
+
+   ```bash
+   docker compose logs squelch | grep '"msg":"request"' | tail -5
+   ```
+
+   Each line ends in `"ip":"…"`. It should be the address of the device you browsed from, not the proxy's. If it shows the proxy's address, the trusted-proxy setting does not match where the proxy connects from — go back to step 1.
+
+> **If a Docker network is recreated** (for example after `docker compose down` removes it), it can come back with a different subnet and gateway. Nothing breaks, but every visitor shows as the new gateway address until you update `SQUELCH_TRUSTED_PROXIES`. Step 3 catches this.
+
+If the proxy is on the same machine, you can also stop anything bypassing it by publishing Squelch's port on localhost only. Keep `SQUELCH_LISTEN` at `0.0.0.0:3022` inside the container — `127.0.0.1` there would make the container unreachable — and restrict the published port instead:
 
 ```yaml
-environment:
-  - SQUELCH_LISTEN=127.0.0.1:3022
 ports:
   - "127.0.0.1:3022:3022"
 ```
 
+Recorders and apps that used `http://<server>:3022` directly then have to go through the proxy's address.
+
 ### Caddy
 
-Caddy is the easiest — it handles TLS, WebSockets, and forwarded headers on its own.
+Caddy handles TLS, WebSockets and forwarded headers on its own. Since v2.5 it also discards any `X-Forwarded-For` a visitor sends and writes the real address, so the header cannot be forged through it. It does pass a visitor's `X-Real-IP` straight through, so remove it:
 
 ```caddy
 scanner.example.com {
     encode gzip zstd
-    reverse_proxy 127.0.0.1:3022
+    reverse_proxy 127.0.0.1:3022 {
+        header_up -X-Real-IP
+    }
 }
 ```
+
+If Caddy itself sits behind Cloudflare's proxy (orange cloud), see [Cloudflare](#cloudflare).
 
 ### nginx
 
@@ -340,6 +394,81 @@ server {
     }
 }
 ```
+
+`$proxy_add_x_forwarded_for` adds the real address to the end of whatever the visitor sent. Squelch reads the list from the end backwards and stops at the first address that is not a trusted proxy, so a forged entry at the front is ignored — **as long as `SQUELCH_TRUSTED_PROXIES` names only nginx**. With the default private ranges, a LAN visitor's own address counts as "trusted" and Squelch reads past it to the forged one.
+
+### Nginx Proxy Manager
+
+1. Add a **Proxy Host** for your domain, forwarding to Squelch's address and port `3022` (`http`).
+2. Turn on **Websockets Support**.
+3. On the **SSL** tab, request a certificate and turn on **Force SSL**.
+
+Nginx Proxy Manager already sends `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`. It runs in Docker, so its address as Squelch sees it is its container address on the shared network, or the Docker gateway if it reaches Squelch through a published port — use the table above.
+
+### Traefik
+
+Traefik forwards WebSockets and sets `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Real-Ip` itself. By default it discards those headers when a visitor sends them, so they cannot be forged through it. With Traefik watching Docker, add labels to the Squelch service:
+
+```yaml
+services:
+  squelch:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.squelch.rule=Host(`scanner.example.com`)
+      - traefik.http.routers.squelch.entrypoints=websecure
+      - traefik.http.routers.squelch.tls.certresolver=letsencrypt
+      - traefik.http.services.squelch.loadbalancer.server.port=3022
+```
+
+Use your own entrypoint and certificate resolver names. Traefik and Squelch must share a Docker network; set `SQUELCH_TRUSTED_PROXIES` to Traefik's container address, or to that network's subnet if nothing else is on it.
+
+### Apache
+
+Needs Apache 2.4.47 or later, with `mod_proxy`, `mod_proxy_http`, `mod_headers` and `mod_ssl` enabled (`a2enmod proxy proxy_http headers ssl` on Debian and Ubuntu).
+
+```apache
+<VirtualHost *:443>
+    ServerName scanner.example.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/scanner.example.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/scanner.example.com/privkey.pem
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader unset X-Real-IP
+
+    ProxyPass        / http://127.0.0.1:3022/ upgrade=websocket
+    ProxyPassReverse / http://127.0.0.1:3022/
+</VirtualHost>
+```
+
+Apache adds `X-Forwarded-For` on its own, appending to anything the visitor sent — the same as nginx, so the same rule applies: set `SQUELCH_TRUSTED_PROXIES` to Apache's address only.
+
+### Cloudflare
+
+**Cloudflare Tunnel** (`cloudflared`): point the tunnel's service at Squelch (`http://localhost:3022`, or `http://squelch:3022` when `cloudflared` runs in the same Compose project). Cloudflare sends the visitor's address in `X-Forwarded-For`, so set `SQUELCH_TRUSTED_PROXIES` to the address `cloudflared` connects from, using the table above.
+
+**Cloudflare's proxy in front of your own proxy** (the orange cloud): your proxy now sees Cloudflare's servers, not visitors, and has to be told to trust them — otherwise every visitor shows up as a Cloudflare address. Cloudflare publishes its ranges at <https://www.cloudflare.com/ips/>. In Caddy, add them to the global options and forward the resolved address:
+
+```caddy
+{
+    servers {
+        trusted_proxies static 173.245.48.0/20 103.21.244.0/22 # …the full list from cloudflare.com/ips
+    }
+}
+
+scanner.example.com {
+    reverse_proxy 127.0.0.1:3022 {
+        header_up X-Forwarded-For {client_ip}
+        header_up -X-Real-IP
+    }
+}
+```
+
+In nginx, use `set_real_ip_from` for each Cloudflare range with `real_ip_header CF-Connecting-IP;` and send `proxy_set_header X-Forwarded-For $remote_addr;`. Either way, Squelch still trusts only your own proxy.
+
+### Checking the Proxy
 
 After starting the proxy, open the public URL in a browser and confirm the live scanner shows new calls and plays audio. New calls arriving prove the WebSocket forwarding is working; audio playing proves the standard HTTPS forwarding (and cookies) are working.
 
