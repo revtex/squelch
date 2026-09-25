@@ -43,6 +43,7 @@ backend/
     db/                    sqlc-generated code + DB connection
     delivery/              per-target delivery tracker shared by downstream and webhook
     dirmonitor/            filesystem watchers for recorder ingest
+      status/              per-monitor runtime state the admin reads (leaf package)
     downstream/            forwarding to other rdio-scanner / squelch instances
     handler/               HTTP handlers (Gin) — feature-scoped
       auth/                /api/v1/auth/*

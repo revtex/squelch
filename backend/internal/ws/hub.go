@@ -481,6 +481,14 @@ func (h *Hub) SetDirMonitorReloader(r Reloader) {
 	}
 }
 
+// SetDirMonitorStatus gives the admin the folder monitors' runtime state,
+// after hub creation for the same reason as SetDirMonitorReloader.
+func (h *Hub) SetDirMonitorStatus(m admin.MonitorStatus) {
+	if h.admin != nil {
+		h.admin.Deps.DirMonitors = m
+	}
+}
+
 // debounceLSC schedules an LSC broadcast, resetting the timer if one is already
 // pending. Ensures at most one LSC broadcast per lscDebounceDuration.
 func (h *Hub) debounceLSC() {

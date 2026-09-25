@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const countLogsSince = `-- name: CountLogsSince :one
+SELECT COUNT(*) FROM logs WHERE date_time >= ?1
+`
+
+func (q *Queries) CountLogsSince(ctx context.Context, since int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLogsSince, since)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLog = `-- name: CreateLog :exec
 INSERT INTO logs (date_time, level, message)
 VALUES (?1, ?2, ?3)
@@ -23,4 +34,68 @@ type CreateLogParams struct {
 func (q *Queries) CreateLog(ctx context.Context, arg CreateLogParams) error {
 	_, err := q.db.ExecContext(ctx, createLog, arg.DateTime, arg.Level, arg.Message)
 	return err
+}
+
+const deleteLogsBefore = `-- name: DeleteLogsBefore :execrows
+DELETE FROM logs WHERE date_time < ?1
+`
+
+func (q *Queries) DeleteLogsBefore(ctx context.Context, before int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteLogsBefore, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const listLogs = `-- name: ListLogs :many
+SELECT id, date_time, level, message FROM logs
+WHERE date_time >= ?1 AND date_time <= ?2
+  AND level LIKE ?3
+  AND message LIKE ?4
+ORDER BY date_time DESC, id DESC
+LIMIT ?5
+`
+
+type ListLogsParams struct {
+	FromTime     int64  `db:"from_time" json:"from_time"`
+	ToTime       int64  `db:"to_time" json:"to_time"`
+	LevelPattern string `db:"level_pattern" json:"level_pattern"`
+	QueryPattern string `db:"query_pattern" json:"query_pattern"`
+	RowLimit     int64  `db:"row_limit" json:"row_limit"`
+}
+
+// level_pattern and query_pattern are LIKE patterns; "%" matches anything.
+func (q *Queries) ListLogs(ctx context.Context, arg ListLogsParams) ([]Log, error) {
+	rows, err := q.db.QueryContext(ctx, listLogs,
+		arg.FromTime,
+		arg.ToTime,
+		arg.LevelPattern,
+		arg.QueryPattern,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Log{}
+	for rows.Next() {
+		var i Log
+		if err := rows.Scan(
+			&i.ID,
+			&i.DateTime,
+			&i.Level,
+			&i.Message,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

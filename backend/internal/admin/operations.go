@@ -87,6 +87,12 @@ type Deps struct {
 	// state and tests; nil reports nothing and refuses tests.
 	Downstreams Forwarder
 	Webhooks    Forwarder
+	// DirMonitors reports what each folder monitor is doing; nil reports
+	// nothing.
+	DirMonitors MonitorStatus
+	// MaskTester parses a filename with a mask, for the admin's mask
+	// tester; nil refuses the test.
+	MaskTester func(mask, filename string) (map[string]string, bool)
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -275,6 +281,7 @@ var serverOnlySettingKeys = map[string]bool{
 var allowedSettingKeys = map[string]bool{
 	"activityDashboard":           true,
 	"apiKeyCallRate":              true,
+	"auditRetentionDays":          true,
 	"audioConversion":             true,
 	"audioEncodingPreset":         true,
 	"autoPopulateSystems":         true,

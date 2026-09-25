@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS logs (
     level     TEXT    NOT NULL,
     message   TEXT    NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_logs_date_time ON logs(date_time DESC);
 
 CREATE TABLE IF NOT EXISTS bookmarks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

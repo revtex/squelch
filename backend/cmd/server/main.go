@@ -955,6 +955,7 @@ func (p *program) run() {
 		LegacyUsage:       middleware.DefaultLegacyUsageStore,
 		Downstreams:       dsService,
 		Webhooks:          whService,
+		MaskTester:        dirmonitor.ParseMask,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
 	// reports here, for the admin's connection list.
@@ -983,9 +984,26 @@ func (p *program) run() {
 		streamMgr.SetCuePublisher(hub.SendStreamCue)
 	}
 
+	// The audit trail is kept for auditRetentionDays; prune at startup and
+	// then once a day.
+	go func() {
+		admin.PruneAuditTrail(ctx, queries)
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				admin.PruneAuditTrail(ctx, queries)
+			}
+		}
+	}()
+
 	dwService := dirmonitor.NewService(queries, processor, hub, forwarders, transcriberMgr)
 	dwService.Start(ctx)
 	hub.SetDirMonitorReloader(dwService)
+	hub.SetDirMonitorStatus(dwService)
 
 	// trunk-recorder MQTT subscriber. One autopaho client per tr_instances row;
 	// supervised reconnect, in-memory snapshot. Events fan out to admin

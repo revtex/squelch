@@ -88,7 +88,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         to: "/admin/dirmonitors",
         label: "Folder monitors",
         icon: FolderSearch,
-        keywords: "directory watch ingest",
+        keywords: "directory watch ingest dirmonitor recorder files",
       },
       {
         to: "/admin/forwarding",

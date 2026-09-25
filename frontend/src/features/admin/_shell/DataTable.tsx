@@ -75,8 +75,10 @@ function compare(a: SortValue, b: SortValue): number {
 
 const CELL_PHONE =
   "max-sm:flex max-sm:items-baseline max-sm:justify-between max-sm:gap-3 max-sm:px-0 max-sm:py-0.5 max-sm:before:shrink-0 max-sm:before:text-xs max-sm:before:text-base-content/60 max-sm:before:content-[attr(data-label)]";
+// The title cell leads the card whatever its column position, with room on
+// the right for the open button.
 const TITLE_PHONE =
-  "max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:pr-10 max-sm:text-base max-sm:font-semibold";
+  "max-sm:order-first max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:pr-10 max-sm:text-base max-sm:font-semibold";
 
 /**
  * The admin's one table: sortable headers, paging, ticking rows for a bulk
@@ -276,7 +278,7 @@ export function DataTable<T, K extends string | number>({
               return (
                 <tr
                   key={k}
-                  className={`max-sm:relative max-sm:block max-sm:border-b max-sm:border-base-300 max-sm:py-3 ${
+                  className={`max-sm:relative max-sm:flex max-sm:flex-col max-sm:border-b max-sm:border-base-300 max-sm:py-3 ${
                     selectable ? "max-sm:pl-8" : ""
                   } ${isOpen ? "bg-base-200" : ""} ${isSelected ? "bg-primary/10" : ""} ${
                     rowClassName?.(row) ?? ""

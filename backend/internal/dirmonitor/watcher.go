@@ -19,6 +19,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/db"
+	"github.com/revtex/squelch/internal/dirmonitor/status"
 	"github.com/revtex/squelch/internal/downstream"
 	"github.com/revtex/squelch/internal/ws"
 )
@@ -35,6 +36,7 @@ type Service struct {
 	hub         *ws.Hub
 	dsNotifier  DownstreamNotifier
 	transcriber audio.Transcriber // nil when transcription is disabled
+	status      *status.Tracker
 	mu          sync.Mutex
 	reloadMu    sync.Mutex // serialises Reload calls to prevent duplicate goroutine spawning
 	appCtx      context.Context
@@ -50,7 +52,18 @@ func NewService(queries *db.Queries, processor *audio.Processor, hub *ws.Hub, ds
 		hub:         hub,
 		dsNotifier:  dsNotifier,
 		transcriber: transcriber,
+		status:      status.New(),
 	}
+}
+
+// Status reports what one monitor is doing, or false when it has never run.
+func (s *Service) Status(id int64) (status.Snapshot, bool) {
+	return s.status.Get(id)
+}
+
+// Forget drops a deleted monitor's status.
+func (s *Service) Forget(id int64) {
+	s.status.Forget(id)
 }
 
 // Start loads all active dirmonitor configs from the DB and starts a watcher
@@ -138,14 +151,25 @@ func (s *Service) runDirMonitor(ctx context.Context, dw db.Dirmonitor) {
 		"polling", dw.UsePolling == 1,
 	)
 
+	var err error
 	if dw.UsePolling == 1 {
 		slog.Debug("dirmonitor: using polling strategy", "id", dw.ID, "dir", dw.Directory)
-		s.runWithPolling(ctx, dw)
+		err = s.runWithPolling(ctx, dw)
 	} else {
 		slog.Debug("dirmonitor: using fsnotify strategy", "id", dw.ID, "dir", dw.Directory)
-		s.runWithFsnotify(ctx, dw)
+		err = s.runWithFsnotify(ctx, dw)
 	}
 
+	if err != nil {
+		s.status.Stopped(dw.ID, err.Error())
+		_ = s.queries.CreateLog(context.Background(), db.CreateLogParams{
+			DateTime: time.Now().Unix(),
+			Level:    "error",
+			Message:  fmt.Sprintf("Folder monitor %s stopped: %s", dw.Directory, err.Error()),
+		})
+	} else {
+		s.status.Stopped(dw.ID, "")
+	}
 	slog.Info("dirmonitor: watcher stopped", "id", dw.ID)
 }
 
@@ -155,19 +179,20 @@ const minDebounceMs = 2000
 // runWithFsnotify watches using kernel inotify/kqueue Create/Write events.
 // A per-file debounce timer ensures we only process a file once its writer
 // has finished — each new Create or Write resets the timer.
-func (s *Service) runWithFsnotify(ctx context.Context, dw db.Dirmonitor) {
+func (s *Service) runWithFsnotify(ctx context.Context, dw db.Dirmonitor) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		slog.Error("dirmonitor: failed to create fsnotify watcher", "id", dw.ID, "error", err)
-		return
+		return fmt.Errorf("cannot watch for file changes on this system: %w", err)
 	}
 	defer watcher.Close()
 
 	if err := watcher.Add(dw.Directory); err != nil {
 		slog.Error("dirmonitor: failed to add directory to watcher",
 			"id", dw.ID, "dir", dw.Directory, "error", err)
-		return
+		return fmt.Errorf("cannot watch the folder: %w", err)
 	}
+	s.status.Running(dw.ID, status.Watching)
 
 	delayMs := int64(minDebounceMs)
 	if dw.Delay.Valid && dw.Delay.Int64 > delayMs {
@@ -192,10 +217,10 @@ func (s *Service) runWithFsnotify(ctx context.Context, dw db.Dirmonitor) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case event, ok := <-watcher.Events:
 			if !ok {
-				return
+				return fmt.Errorf("the file watcher closed unexpectedly")
 			}
 			if !event.Has(fsnotify.Create) && !event.Has(fsnotify.Write) {
 				continue
@@ -216,9 +241,10 @@ func (s *Service) runWithFsnotify(ctx context.Context, dw db.Dirmonitor) {
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
-				return
+				return fmt.Errorf("the file watcher closed unexpectedly")
 			}
 			slog.Warn("dirmonitor: fsnotify error", "id", dw.ID, "error", err)
+			s.status.Trouble(dw.ID, err.Error())
 		}
 	}
 }
@@ -227,7 +253,7 @@ func (s *Service) runWithFsnotify(ctx context.Context, dw db.Dirmonitor) {
 const minPollIntervalMs = 500
 
 // runWithPolling scans the directory on a regular ticker.
-func (s *Service) runWithPolling(ctx context.Context, dw db.Dirmonitor) {
+func (s *Service) runWithPolling(ctx context.Context, dw db.Dirmonitor) error {
 	delayMs := int64(2000)
 	if dw.Delay.Valid && dw.Delay.Int64 > 0 {
 		delayMs = dw.Delay.Int64
@@ -243,17 +269,27 @@ func (s *Service) runWithPolling(ctx context.Context, dw db.Dirmonitor) {
 	defer ticker.Stop()
 
 	seen := make(map[string]bool)
+	s.status.Running(dw.ID, status.Polling)
+	trouble := false
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			entries, err := os.ReadDir(dw.Directory)
 			if err != nil {
 				slog.Warn("dirmonitor: failed to read directory",
 					"id", dw.ID, "dir", dw.Directory, "error", err)
+				if !trouble {
+					trouble = true
+					s.status.Trouble(dw.ID, "cannot read the folder: "+err.Error())
+				}
 				continue
+			}
+			if trouble {
+				trouble = false
+				s.status.Trouble(dw.ID, "")
 			}
 			for _, entry := range entries {
 				if entry.IsDir() {
@@ -324,6 +360,7 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 	parsed, err := parse(dw, fileReal)
 	if err != nil {
 		slog.Error("dirmonitor: parse error", "id", dw.ID, "file", filePath, "error", err)
+		s.status.Seen(dw.ID, filePath, "could not be read: "+err.Error(), 0)
 		return
 	}
 	if parsed == nil {
@@ -335,13 +372,16 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 	// zero-valued fields (e.g. TalkgroupID, SystemID) that the parser did
 	// not extract but the mask can provide. Fields already set by the parser
 	// or config overrides are never overwritten.
+	maskNote := ""
 	if dw.Mask.Valid && dw.Mask.String != "" {
 		base := strings.TrimSuffix(filepath.Base(fileReal), filepath.Ext(fileReal))
 		if values, ok := ParseMask(dw.Mask.String, base); ok {
 			ApplyMaskValues(parsed, values)
+			maskNote = ", mask matched"
 		} else {
 			slog.Debug("dirmonitor: mask did not match filename",
 				"id", dw.ID, "mask", dw.Mask.String, "filename", base)
+			maskNote = ", mask did not match"
 		}
 	}
 
@@ -357,6 +397,7 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 		if err != nil {
 			slog.Warn("dirmonitor: companion file outside watched directory, rejected",
 				"id", dw.ID, "file", p, "error", err)
+			s.status.Seen(dw.ID, filePath, "rejected: a companion file lies outside the folder", 0)
 			return
 		}
 		_ = f.Close()
@@ -367,10 +408,12 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 	const minAudioBytes = 44
 	if fi, err := os.Stat(parsed.AudioFilePath); err != nil {
 		slog.Warn("dirmonitor: cannot stat audio file", "id", dw.ID, "file", parsed.AudioFilePath, "error", err)
+		s.status.Seen(dw.ID, filePath, "skipped: the audio file could not be read", 0)
 		return
 	} else if fi.Size() < minAudioBytes {
 		slog.Info("dirmonitor: file too small, skipping",
 			"id", dw.ID, "file", parsed.AudioFilePath, "size", fi.Size(), "min", minAudioBytes)
+		s.status.Seen(dw.ID, filePath, "skipped: the audio file is too small to be a call", 0)
 		return
 	}
 
@@ -378,17 +421,27 @@ func (s *Service) handleFile(ctx context.Context, dw db.Dirmonitor, filePath str
 	if parsed.DateTime.IsZero() {
 		slog.Info("dirmonitor: missing or zero datetime, skipping",
 			"id", dw.ID, "file", parsed.AudioFilePath)
+		s.status.Seen(dw.ID, filePath, "skipped: no date and time could be found"+maskNote, 0)
 		return
 	}
 
-	if err := s.ingestCall(ctx, dw, parsed); err != nil {
+	callID, err := s.ingestCall(ctx, dw, parsed)
+	if err != nil {
 		slog.Error("dirmonitor: ingest failed", "id", dw.ID, "file", filePath, "error", err)
+		s.status.Seen(dw.ID, filePath, "failed: "+err.Error()+maskNote, 0)
+		return
 	}
+	if callID == 0 {
+		s.status.Seen(dw.ID, filePath, "skipped: duplicate or not accepted"+maskNote, 0)
+		return
+	}
+	s.status.Seen(dw.ID, filePath, fmt.Sprintf("became call %d on system %d, talkgroup %d%s",
+		callID, parsed.SystemID, parsed.TalkgroupID, maskNote), callID)
 }
 
 // ingestCall runs the full call ingest pipeline for a parsed file, mirroring
 // the logic in api/calls.go but without an HTTP context.
-func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *ParsedCall) error {
+func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *ParsedCall) (int64, error) {
 	slog.Debug("dirmonitor: ingest pipeline start",
 		"id", dw.ID,
 		"system_id", parsed.SystemID,
@@ -409,10 +462,10 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 
 	// Validate required IDs before touching the DB.
 	if parsed.SystemID == 0 && strings.TrimSpace(parsed.SystemLabel) == "" {
-		return fmt.Errorf("no system ID in parsed call for file %s", parsed.AudioFilePath)
+		return 0, fmt.Errorf("no system ID in parsed call for file %s", parsed.AudioFilePath)
 	}
 	if parsed.TalkgroupID == 0 {
-		return fmt.Errorf("no talkgroup ID in parsed call for file %s", parsed.AudioFilePath)
+		return 0, fmt.Errorf("no talkgroup ID in parsed call for file %s", parsed.AudioFilePath)
 	}
 
 	// ── Resolve system ──────────────────────────────────────────────────────
@@ -425,10 +478,10 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		system, err = s.queries.GetSystemBySystemID(ctx, parsed.SystemID)
 		if err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("query system %d: %w", parsed.SystemID, err)
+				return 0, fmt.Errorf("query system %d: %w", parsed.SystemID, err)
 			}
 			if !autoPopulateSystems {
-				return fmt.Errorf("system %d not found and autoPopulateSystems is disabled", parsed.SystemID)
+				return 0, fmt.Errorf("system %d not found and autoPopulateSystems is disabled", parsed.SystemID)
 			}
 			label := strings.TrimSpace(parsed.SystemLabel)
 			if label == "" {
@@ -440,7 +493,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 				AutoPopulateTalkgroups: 1,
 			})
 			if cerr != nil {
-				return fmt.Errorf("auto-create system %d: %w", parsed.SystemID, cerr)
+				return 0, fmt.Errorf("auto-create system %d: %w", parsed.SystemID, cerr)
 			}
 			slog.Info("dirmonitor: auto-populated system", "system_id", parsed.SystemID, "label", label, "db_id", newID)
 			system = db.System{ID: newID, SystemID: parsed.SystemID, Label: label, AutoPopulateTalkgroups: 1}
@@ -451,15 +504,15 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		system, err = s.queries.GetSystemByLabel(ctx, label)
 		if err != nil {
 			if !errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("query system label %q: %w", label, err)
+				return 0, fmt.Errorf("query system label %q: %w", label, err)
 			}
 			if !autoPopulateSystems {
-				return fmt.Errorf("system %q not found and autoPopulateSystems is disabled", label)
+				return 0, fmt.Errorf("system %q not found and autoPopulateSystems is disabled", label)
 			}
 
 			systems, lerr := s.queries.ListSystems(ctx)
 			if lerr != nil {
-				return fmt.Errorf("list systems for auto-create: %w", lerr)
+				return 0, fmt.Errorf("list systems for auto-create: %w", lerr)
 			}
 			nextSystemID := int64(1)
 			for _, existing := range systems {
@@ -474,7 +527,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 				AutoPopulateTalkgroups: 1,
 			})
 			if cerr != nil {
-				return fmt.Errorf("auto-create system %q: %w", label, cerr)
+				return 0, fmt.Errorf("auto-create system %q: %w", label, cerr)
 			}
 			slog.Info("dirmonitor: auto-populated system from label", "system_label", label, "system_id", nextSystemID, "db_id", newID)
 			system = db.System{ID: newID, SystemID: nextSystemID, Label: label, AutoPopulateTalkgroups: 1}
@@ -487,7 +540,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 	if isBlacklisted(system.BlacklistsJson, parsed.TalkgroupID) {
 		slog.Info("dirmonitor: talkgroup is blacklisted, skipping",
 			"system_id", system.SystemID, "talkgroup_id", parsed.TalkgroupID)
-		return nil
+		return 0, nil
 	}
 
 	// ── Resolve talkgroup ───────────────────────────────────────────────────
@@ -497,10 +550,10 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 	})
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("query talkgroup %d: %w", parsed.TalkgroupID, err)
+			return 0, fmt.Errorf("query talkgroup %d: %w", parsed.TalkgroupID, err)
 		}
 		if system.AutoPopulateTalkgroups == 0 {
-			return fmt.Errorf("talkgroup %d not found and auto-populate is disabled for this system", parsed.TalkgroupID)
+			return 0, fmt.Errorf("talkgroup %d not found and auto-populate is disabled for this system", parsed.TalkgroupID)
 		}
 		var tgLabel, tgName sql.NullString
 		if parsed.TalkgroupTitle != "" {
@@ -526,7 +579,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 			TagID:       tagID,
 		})
 		if cerr != nil {
-			return fmt.Errorf("auto-create talkgroup %d: %w", parsed.TalkgroupID, cerr)
+			return 0, fmt.Errorf("auto-create talkgroup %d: %w", parsed.TalkgroupID, cerr)
 		}
 		slog.Info("dirmonitor: auto-populated talkgroup",
 			"system_id", system.SystemID, "talkgroup_id", parsed.TalkgroupID, "label", tgLabel.String, "db_id", newID)
@@ -581,7 +634,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		} else if dup {
 			slog.Info("dirmonitor: duplicate call rejected",
 				"system_id", system.SystemID, "talkgroup_id", parsed.TalkgroupID)
-			return nil
+			return 0, nil
 		}
 	}
 
@@ -599,12 +652,12 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 	// ── Store audio ─────────────────────────────────────────────────────────────────────────
 	audioFile, err := openWithinDir(dw.Directory, parsed.AudioFilePath)
 	if err != nil {
-		return fmt.Errorf("open audio: %w", err)
+		return 0, fmt.Errorf("open audio: %w", err)
 	}
 	defer audioFile.Close()
 	relPath, err := s.processor.StoreReader(ctx, audioFile, filepath.Base(parsed.AudioFilePath), convMode, convPreset)
 	if err != nil {
-		return fmt.Errorf("store audio: %w", err)
+		return 0, fmt.Errorf("store audio: %w", err)
 	}
 
 	// Determine MIME type.  When conversion is enabled the output format
@@ -679,7 +732,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		Decoder:         decoderCol,
 	})
 	if err != nil {
-		return fmt.Errorf("insert call record: %w", err)
+		return 0, fmt.Errorf("insert call record: %w", err)
 	}
 
 	slog.Debug("dirmonitor: call record inserted", "call_id", callID, "audio_path", relPath)
@@ -803,7 +856,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		if rootErr != nil {
 			slog.Warn("dirmonitor: failed to open watched directory root",
 				"dir", dw.Directory, "error", rootErr)
-			return nil
+			return callID, nil
 		}
 		defer root.Close()
 
@@ -829,7 +882,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 		}
 	}
 
-	return nil
+	return callID, nil
 }
 
 // mimeFromExt maps a file extension (including leading dot) to an audio MIME type.

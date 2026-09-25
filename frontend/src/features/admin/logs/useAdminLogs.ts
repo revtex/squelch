@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { adminWsClient } from "@/shared/services/ws/adminClient";
-import type { AdminLog } from "@/types";
+import type { AdminAuditRow, AdminLog } from "@/types";
 
-interface LogQueryParams {
-  from?: number;
-  to?: number;
+export interface LogQueryParams {
+  /** How far back to read, in seconds; the bound is computed at fetch time. */
+  sinceSeconds?: number;
   level?: string;
   q?: string;
   limit?: number;
@@ -13,62 +13,77 @@ interface LogQueryParams {
 const LIVE_POLL_MS = 5_000;
 const DEBOUNCE_MS = 2_000;
 
-export function useAdminLogs(params: LogQueryParams, autoRefresh: boolean) {
-  const [logs, setLogs] = useState<AdminLog[] | null>(null);
+interface QueryState<T> {
+  rows: T[] | null;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch: () => Promise<void>;
+}
+
+function useWsRows<T>(op: string, params: LogQueryParams, following: boolean, paused: boolean): QueryState<T> {
+  const [rows, setRows] = useState<T[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchRows = useCallback(async () => {
     if (!adminWsClient.isConnected()) return;
     setIsFetching(true);
     try {
-      const result = await adminWsClient.request<AdminLog[]>(
-        "logs.query",
-        paramsRef.current as Record<string, unknown>,
-      );
-      setLogs(result);
+      const { sinceSeconds, ...rest } = paramsRef.current;
+      const request: Record<string, unknown> = { ...rest };
+      if (sinceSeconds !== undefined) request.from = Math.floor(Date.now() / 1000) - sinceSeconds;
+      const result = await adminWsClient.request<T[]>(op, request);
+      setRows(result);
     } catch {
-      // Silent fail
+      // The socket layer reports outages; a failed poll just keeps the last rows.
     } finally {
       setIsLoading(false);
       setIsFetching(false);
     }
-  }, []);
+  }, [op]);
 
-  // Initial fetch and when params change
+  const paramsKey = `${params.sinceSeconds ?? ""}|${params.level ?? ""}|${params.q ?? ""}|${params.limit ?? ""}`;
   useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs, params.from, params.to, params.level, params.q, params.limit]);
+    void fetchRows();
+  }, [fetchRows, paramsKey]);
 
-  // Re-fetch when WS (re)connects — first load may race with socket open
+  useEffect(() => adminWsClient.on("__connected__", () => void fetchRows()), [fetchRows]);
+
   useEffect(() => {
-    return adminWsClient.on("__connected__", () => {
-      fetchLogs();
-    });
-  }, [fetchLogs]);
-
-  // Live mode: poll on interval + refresh on new call activity (debounced)
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(fetchLogs, LIVE_POLL_MS);
-
-    const unsubActivity = adminWsClient.on("activity.updated", () => {
+    if (!following) return;
+    const tick = () => {
+      if (!pausedRef.current) void fetchRows();
+    };
+    const interval = setInterval(tick, LIVE_POLL_MS);
+    const unsub = adminWsClient.on("activity.updated", () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(fetchLogs, DEBOUNCE_MS);
+      debounceRef.current = setTimeout(tick, DEBOUNCE_MS);
     });
-
     return () => {
       clearInterval(interval);
-      unsubActivity();
+      unsub();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [autoRefresh, fetchLogs]);
+  }, [following, fetchRows]);
 
-  return { logs, isLoading, isFetching, refetch: fetchLogs };
+  return { rows, isLoading, isFetching, refetch: fetchRows };
+}
+
+/** The server's in-memory log, newest first. */
+export function useAdminLogs(params: LogQueryParams, following: boolean, paused = false) {
+  const q = useWsRows<AdminLog>("logs.query", params, following, paused);
+  return { logs: q.rows, isLoading: q.isLoading, isFetching: q.isFetching, refetch: q.refetch };
+}
+
+/** The audit trail from the logs table, newest first. */
+export function useAuditTrail(params: LogQueryParams, following: boolean, paused = false) {
+  const q = useWsRows<AdminAuditRow>("logs.audit", params, following, paused);
+  return { rows: q.rows, isLoading: q.isLoading, isFetching: q.isFetching, refetch: q.refetch };
 }
 
 export function useAdminLogLevel() {
@@ -77,28 +92,19 @@ export function useAdminLogLevel() {
   const fetchLevel = useCallback(async () => {
     if (!adminWsClient.isConnected()) return;
     try {
-      const result = await adminWsClient.request<{ level: string }>(
-        "logs.level",
-      );
+      const result = await adminWsClient.request<{ level: string }>("logs.level");
       setLevel(result.level);
     } catch {
-      // Silent fail
+      // Keep the last known level.
     }
   }, []);
 
   useEffect(() => {
-    // Defer initial fetch to a microtask so the effect body doesn't
-    // trigger a synchronous setState cascade during commit.
     queueMicrotask(() => {
       void fetchLevel();
     });
-    // Re-fetch on WS connect and config changes
-    const unsubConnect = adminWsClient.on("__connected__", () => {
-      fetchLevel();
-    });
-    const unsubConfig = adminWsClient.on("config.updated", () => {
-      fetchLevel();
-    });
+    const unsubConnect = adminWsClient.on("__connected__", () => void fetchLevel());
+    const unsubConfig = adminWsClient.on("config.updated", () => void fetchLevel());
     return () => {
       unsubConnect();
       unsubConfig();

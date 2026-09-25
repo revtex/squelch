@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/auth"
@@ -68,6 +69,11 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 		if s.Key == "logLevel" {
 			if _, ok := logging.ParseLevel(s.Value); !ok {
 				return nil, UserError("invalid logLevel; expected debug, info, warn, or error")
+			}
+		}
+		if s.Key == "auditRetentionDays" {
+			if n, err := strconv.Atoi(strings.TrimSpace(s.Value)); err != nil || n < 1 || n > 3650 {
+				return nil, UserError("auditRetentionDays must be a number of days from 1 to 3650")
 			}
 		}
 		if s.Key == "audioEncodingPreset" {

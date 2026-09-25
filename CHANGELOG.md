@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Logs & audit, rebuilt.** The server log is a real table with the level
+  as text, range and level chips that apply at once, a **Following** switch
+  that pauses while you read, and **Download**. A line opens in the side
+  panel with its attributes, raw JSON, newer/older navigation, a similar-lines
+  search and a link to the page it is about. A new **Audit trail** tab reads
+  the events the server has always written to the database (sign-ins, admin
+  changes, blocks, delivery failures) but nothing showed until now; they are
+  kept for `auditRetentionDays` (90 by default) and pruned daily.
+- **Folder monitors, rebuilt.** The list now shows what each monitor is
+  doing (**watching**, **polling**, **stopped** with the reason, or
+  **disabled**), where its calls go, the last file it saw and what came of
+  it, and calls in the last 24 hours. A stopped monitor can be restarted
+  from its details. The form shows only the fields the chosen recorder
+  needs, browses the server's folders inside the panel, takes the wait in
+  seconds, and tests a filename mask against a real filename as you type.
 - **Forwarding, rebuilt.** Downstreams and webhooks share one **Forwarding**
   page with two tabs. Each target has a label, a status badge that explains
   a failing delivery, the last delivery time and failures in the last 24

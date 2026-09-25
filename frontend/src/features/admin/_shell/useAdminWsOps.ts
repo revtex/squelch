@@ -11,6 +11,10 @@ import type {
   AdminApiKey,
   AdminApiKeyCreateResponse,
   AdminDirMonitor,
+  AdminDirMonitorCreate,
+  AdminDirMonitorUpdate,
+  MaskTestResult,
+  MonitorStatus,
   AdminDownstream,
   AdminDownstreamCreate,
   AdminDownstreamUpdate,
@@ -313,30 +317,40 @@ export function useRotateApiKeyMutation() {
 
 // ─── DirMonitors ────────────────────────────────────────────────────────────
 
+/** Polls every 15 s so the runtime state and last file stay fresh. */
 export function useListDirMonitorsQuery() {
   return useWsQuery<AdminDirMonitor[]>(
     "dirmonitors.list",
     undefined,
     "dirmonitors.updated",
+    15_000,
   );
 }
 
 export function useCreateDirMonitorMutation() {
-  return useWsMutation<AdminDirMonitor, CreatePayload<AdminDirMonitor>>(
-    "dirmonitors.create",
-  );
+  return useWsMutation<AdminDirMonitor, AdminDirMonitorCreate>("dirmonitors.create");
 }
 
 export function useUpdateDirMonitorMutation() {
-  return useWsMutation<AdminDirMonitor, UpdatePayload<AdminDirMonitor>>(
-    "dirmonitors.update",
-  );
+  return useWsMutation<AdminDirMonitor, AdminDirMonitorUpdate>("dirmonitors.update");
 }
 
 export function useDeleteDirMonitorMutation() {
   return useWsMutation<void, number>("dirmonitors.delete", {
     transformArg: (id) => ({ id }),
   });
+}
+
+export function useRestartDirMonitorMutation() {
+  return useWsMutation<{ ok: boolean; status: MonitorStatus }, number>("dirmonitors.restart", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useTestMaskMutation() {
+  return useWsMutation<MaskTestResult, { mask: string; filename: string }>(
+    "dirmonitors.test-mask",
+  );
 }
 
 export function useLazyListServerDirectoriesQuery() {

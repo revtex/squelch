@@ -16,12 +16,12 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Systems](#systems)
 - [Groups & Tags](#groups--tags)
 - [API Keys](#api-keys)
-- [Monitors (Directory Monitors)](#monitors-directory-monitors)
+- [Folder monitors](#folder-monitors)
 - [Forwarding](#forwarding)
 - [Shared Links](#shared-links)
 - [Transcription](#transcription)
 - [Settings](#settings)
-- [Logs](#logs)
+- [Logs & audit](#logs--audit)
 - [Tools](#tools)
 
 ---
@@ -252,36 +252,48 @@ See the [Recorder Guide](recorder-guide.md) for how to configure your recorder w
 
 ---
 
-## Monitors (Directory Monitors)
+## Folder monitors
 
-Directory monitors watch a local folder and automatically import call audio files. This is an alternative to API-based upload — useful when your recorder writes files to a shared directory.
+Folder monitors watch a folder on the server and import the recordings a recorder writes into it, so a recorder on the same machine (or a mounted share) needs no upload at all.
 
-Each monitor has:
+The list shows each monitor's folder and recorder type, its **runtime state**, where its calls go, the last file it saw and how many calls it made in the last 24 hours. The state is one of **watching** (kernel file events), **polling** (scanning on a timer), **stopped** (with the reason on the row, e.g. the folder is gone or cannot be read) or **disabled**. A running monitor that hit a read error keeps its state and shows the error beside it. Search by folder, recorder or destination, and filter to **Running**, **Stopped** or **Disabled**.
 
-| Field              | Description                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| Directory          | Folder path to watch (browseable from the UI)                                                      |
-| Type               | Recorder type: **Default**, **DSDPlus**, **SDR-Trunk**, or **Trunk-Recorder**                      |
-| Mask               | Filename pattern using tokens to extract metadata (see below)                                      |
-| Extension          | File extension filter (e.g. `wav`, `mp3`)                                                          |
-| Delay              | Wait time in milliseconds before processing a new file (allows writes to complete)                 |
-| Use Polling        | Use polling instead of filesystem events (for network drives or mounts that don't support inotify) |
-| Delete After       | Remove the source file after successful import                                                     |
-| System Override    | Force all files to a specific system                                                               |
-| Talkgroup Override | Force all files to a specific talkgroup                                                            |
-| Frequency          | Optional frequency override in Hz                                                                  |
-| Disabled           | Temporarily stop watching                                                                          |
-| Order              | Display position                                                                                   |
+The **›** button opens the monitor's details: its settings in plain words, when the current state began, the last file and what came of it ("became call 44 on system 101, talkgroup 5200", "skipped: the audio file is too small to be a call", "could not be read: …"), a **Restart** button for a stopped monitor whose folder has come back, a link to that monitor's log lines, **Edit**, **Disable** or **Enable**, and **Delete**. Every change is written to the audit log.
 
-### Filename Mask Tokens
+### Adding a monitor
 
-The mask extracts metadata from filenames. Available tokens:
+The form shows only the fields the chosen **recorder** needs:
 
-`#DATE`, `#TIME`, `#SYS`, `#TG`, `#HZ`, `#GROUP`, `#TAG`, `#UNIT`
+| Recorder             | What the monitor reads                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| Trunk Recorder       | The JSON file written next to each recording                                            |
+| SDRTrunk             | The tags inside its MP3 files                                                           |
+| DSD+ Fast Lane       | The system and talkgroup in the filename                                                |
+| ProScan              | The ProScan filename, plus a mask for anything it lacks                                 |
+| RTLSDR-Airband       | Conventional recordings; the system and frequency come from the monitor                 |
+| Other (filename mask) | Any recorder; a mask says which parts of the filename are the date, system and talkgroup |
 
-Example: a file named `2025-01-15_143022_101_5200.wav` with mask `#DATE_#TIME_#SYS_#TG` would extract the date, time, system 101, and talkgroup 5200.
+Every monitor has a **folder** (an absolute path on the server; **Browse** walks the server's folders inside the panel), an optional file **extension** filter, a **wait before ingest** in seconds, and three switches: **Poll instead of watching** for network shares (NFS, CIFS/SMB) and other mounts that do not report new files, **Delete the file after import** (Squelch keeps its own copy), and **Enabled**.
 
-The UI includes a help section with the full token reference.
+The wait means two things: when watching, how long a file must sit unchanged before it is read, so the recorder can finish writing (at least 2 seconds); when polling, how often the folder is scanned (at least half a second).
+
+Recorders that do not name the system in their files can **send every call to** a fixed system and, optionally, talkgroup. Others read it from the files.
+
+### Filename masks
+
+A mask says which parts of the filename carry the call's details. Tokens stand for the parts that vary; everything else must match exactly. Type a real filename into **Try it on a filename** and the form shows what the mask reads from it as you type.
+
+| Token                            | Meaning                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| `#DATE`                          | date: `20201231`, `2020-12-31` or `2020_12_31`       |
+| `#TIME`, `#ZTIME`                | local or UTC time: `085430`, `08-54-30` or `08:54:30` |
+| `#SYS`, `#SYSLBL`                | system id or label                                   |
+| `#TG`, `#TGLBL`, `#TGAFS`        | talkgroup id, label, or id in AFS form (`11-061`)    |
+| `#HZ`, `#KHZ`, `#MHZ`            | frequency                                            |
+| `#TGHZ`, `#TGKHZ`, `#TGMHZ`      | frequency used as the talkgroup id                   |
+| `#GROUP`, `#TAG`, `#UNIT`        | group label, tag label, unit id                      |
+
+Example: `2025-01-15_143022_101_5200.wav` with the mask `#DATE_#TIME_#SYS_#TG` gives the date, the time, system 101 and talkgroup 5200.
 
 ---
 
@@ -419,28 +431,25 @@ Turning this on only enables the feature. You still need to add one instance row
 
 ---
 
-## Logs
+## Logs & audit
 
-View and search server logs in real time.
+Two tabs: the **Server log**, what the server is doing right now, and the **Audit trail**, who changed what.
 
-### Filters
+Both are tables you can search, with **Range** chips (last hour, 24 h, 7 days, all) that apply at once, a choice of how many lines to load (200 to 5,000), **Refresh**, and **Download**, which saves what is loaded as a text file. **Following** reloads every 5 seconds and after new calls; it pauses while you have scrolled down into older lines or have a line open, and resumes when you come back up.
 
-- **Date Range** — select a range or use quick shortcuts (last 1, 6, or 24 hours)
-- **Level** — filter by debug, info, warn, or error
-- **Search** — text search across log messages
-- **Limit** — number of entries to load (200 / 500 / 1,000 / 2,500 / 5,000)
+### Server log
 
-### Controls
+The server keeps its recent log lines in memory. Each row shows the time (the full date on hover), the level as text, and the message with a few short chips for its attributes, for example `call=1234 sys=7 tg=5200` for an ingested call or `try=3 error=…` for a failed delivery. HTTP requests show the method, path, status and latency. **Level** chips filter the list and show how many lines each level has.
 
-- **Auto-Refresh** — stream new log entries as they arrive via WebSocket
-- **Auto-Scroll** — keep the view scrolled to the latest entry
-- **Refresh** — manually reload logs
-- **Clear Filters** — reset all filters to defaults
-- **Log Level** — change the server's runtime log level (debug, info, warn, error) without restarting
+The **›** button opens a line in the side panel: every attribute, the raw JSON with a **Copy** button, **Newer** and **Older** to step through the list, **Show similar lines** to search for the same message, and a link to the page the line is about (a folder monitor, a forwarding target, a user, an API key, and so on).
 
-HTTP request logs are color-coded by status: green for 2xx, gray for 3xx, yellow for 4xx, red for 5xx.
+**Server log level** changes how much the server logs, from `error` up to `debug`. It applies at once, without a restart; `debug` is noisy.
 
-Each log row also shows short contextual chips next to the message for common events — for example `call=1234 sys=7 tg=5200 dur=3400` for an ingested call, or `downstream=2 call=1234 try=3` for a failed downstream push. Click a row to open a details panel with the full attribute list.
+### Audit trail
+
+Sign-ins and failed sign-ins, lockouts, every admin change (users, systems, groups and tags, API keys, forwarding, folder monitors, shared links, settings), address blocks, and delivery failures are written to the database and listed here newest first, with the acting admin named in each line. Opening an event offers **Show similar events** and a link to the page it is about.
+
+Events are kept for **90 days** by default; change `auditRetentionDays` in **Settings** to keep them longer or shorter. Older rows are pruned once a day.
 
 ---
 

@@ -212,6 +212,14 @@ export interface AdminLog {
   attrs?: Record<string, string>;
 }
 
+/** One row of the audit trail: what the server wrote to the logs table. */
+export interface AdminAuditRow {
+  id: number;
+  dateTime: number;
+  level: string;
+  message: string;
+}
+
 // User create/update payload
 export interface CreateUserPayload {
   username: string;
@@ -239,13 +247,29 @@ export interface UpdateUserPayload {
   signOut?: boolean;
 }
 
-export interface AdminDirMonitor {
-  id: number;
+export type MonitorState = "watching" | "polling" | "stopped" | "disabled" | "unknown";
+
+/** What a folder monitor is doing right now, from the running service. */
+export interface MonitorStatus {
+  state: MonitorState;
+  /** Why it stopped, or a problem it keeps running through. */
+  error: string;
+  since: number | null;
+  lastFile: string;
+  lastFileAt: number | null;
+  /** What came of the last file, in words. */
+  lastResult: string;
+  lastCallId: number | null;
+  ingested24h: number;
+}
+
+export interface AdminDirMonitorCreate {
   directory: string;
   type: string;
   mask: string | null;
   extension: string | null;
   frequency: number | null;
+  /** Milliseconds to wait before reading a new file, or between polls. */
   delay: number | null;
   deleteAfter: number;
   usePolling: number;
@@ -253,6 +277,20 @@ export interface AdminDirMonitor {
   systemId: number | null;
   talkgroupId: number | null;
   order: number;
+}
+
+export interface AdminDirMonitorUpdate extends AdminDirMonitorCreate {
+  id: number;
+}
+
+export interface AdminDirMonitor extends AdminDirMonitorCreate {
+  id: number;
+  status: MonitorStatus;
+}
+
+export interface MaskTestResult {
+  ok: boolean;
+  values: Record<string, string>;
 }
 
 // --- RadioReference enrichment types ---

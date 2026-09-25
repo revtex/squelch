@@ -36,6 +36,7 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"activity.top-talkgroups": c.adaptClientOp(c.opTopTalkgroups),
 		"logs.query":              c.adaptClientOp(c.opLogsQuery),
 		"logs.level":              c.adaptClientOp(c.opLogsLevel),
+		"logs.audit":              o.LogsAudit,
 
 		// Users
 		"users.list":     o.UsersList,
@@ -94,10 +95,12 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"apikeys.rotate": o.APIKeysRotate,
 
 		// DirMonitors
-		"dirmonitors.list":   o.DirMonitorsList,
-		"dirmonitors.create": o.DirMonitorsCreate,
-		"dirmonitors.update": o.DirMonitorsUpdate,
-		"dirmonitors.delete": o.DirMonitorsDelete,
+		"dirmonitors.list":      o.DirMonitorsList,
+		"dirmonitors.create":    o.DirMonitorsCreate,
+		"dirmonitors.update":    o.DirMonitorsUpdate,
+		"dirmonitors.delete":    o.DirMonitorsDelete,
+		"dirmonitors.restart":   o.DirMonitorsRestart,
+		"dirmonitors.test-mask": o.DirMonitorsTestMask,
 
 		// Downstreams
 		"downstreams.list":   o.DownstreamsList,

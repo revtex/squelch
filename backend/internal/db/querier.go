@@ -22,6 +22,7 @@ type Querier interface {
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
 	CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) ([]CountCallsPerAPIKeySinceRow, error)
 	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
+	CountLogsSince(ctx context.Context, since int64) (int64, error)
 	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
 	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
@@ -55,6 +56,7 @@ type Querier interface {
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error
 	DeleteGroup(ctx context.Context, id int64) error
 	DeleteIPBlock(ctx context.Context, id int64) error
+	DeleteLogsBefore(ctx context.Context, before int64) (int64, error)
 	DeleteSharedLink(ctx context.Context, id int64) error
 	DeleteSharedLinkByCallID(ctx context.Context, callID int64) error
 	DeleteSystem(ctx context.Context, id int64) error
@@ -133,6 +135,8 @@ type Querier interface {
 	ListEnabledTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListGroupsWithUsage(ctx context.Context) ([]ListGroupsWithUsageRow, error)
+	// level_pattern and query_pattern are LIKE patterns; "%" matches anything.
+	ListLogs(ctx context.Context, arg ListLogsParams) ([]Log, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListSharedLinks(ctx context.Context) ([]ListSharedLinksRow, error)
 	ListSystems(ctx context.Context) ([]System, error)
