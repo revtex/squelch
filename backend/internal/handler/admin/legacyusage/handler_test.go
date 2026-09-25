@@ -139,6 +139,42 @@ func TestGetLegacyUsage_PopulatedAfterLegacyHit(t *testing.T) {
 	}
 }
 
+// TestGetLegacyUsage_CarriesKeyID — the report keeps the id of the key that
+// made each hit, so the admin can tell apart keys whose idents share a prefix.
+func TestGetLegacyUsage_CarriesKeyID(t *testing.T) {
+	middleware.DefaultLegacyUsageStore = middleware.NewLegacyUsageStore(nil)
+	middleware.DefaultLegacyUsageStore.RecordKey("/api/call-upload", http.MethodPost, "TR-Lak", 7, http.StatusOK)
+	middleware.DefaultLegacyUsageStore.RecordKey("/api/call-upload", http.MethodPost, "TR-Lak", 9, http.StatusOK)
+
+	r, q := newEngine(t)
+	_, tok := makeUser(t, q, auth.RoleAdmin)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/legacy-usage", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Entries []struct {
+			APIKeyID int64 `json:"apiKeyId"`
+			Count    int   `json:"count"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; body=%s", err, w.Body.String())
+	}
+	got := map[int64]int{}
+	for _, e := range resp.Entries {
+		got[e.APIKeyID] += e.Count
+	}
+	if got[7] != 1 || got[9] != 1 || len(got) != 2 {
+		t.Errorf("counts by key id = %v, want map[7:1 9:1]", got)
+	}
+}
+
 // TestGetLegacyUsage_ListenerForbidden — JWT must have admin role.
 func TestGetLegacyUsage_ListenerForbidden(t *testing.T) {
 	middleware.DefaultLegacyUsageStore = middleware.NewLegacyUsageStore(nil)
