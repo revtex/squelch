@@ -23,6 +23,7 @@ import {
   NAV_ITEMS,
   NavigationGuardProvider,
   ToastProvider,
+  formatAgo,
   useAdminWebSocket,
   useAdminWsStatus,
   useNavigationGuard,
@@ -38,11 +39,16 @@ import ForwardingPanel from "@/features/admin/forwarding";
 import SettingsPanel, { SETTINGS_INDEX } from "@/features/admin/settings";
 import LogsPanel from "@/features/admin/logs";
 import ToolsPanel from "@/features/admin/tools";
-import DashboardsPanel, { ActivityPanel } from "@/features/admin/dashboards";
+import DashboardsPanel from "@/features/admin/dashboards";
+import OverviewPanel, {
+  OverviewDataContext,
+  useOverviewData,
+  useOverviewSources,
+  type NavBadge,
+} from "@/features/admin/overview";
 import { TrunkRecorderPanel } from "@/features/admin/trunk-recorder";
 import SharedLinksPanel from "@/features/admin/shared-links";
 import TranscriptionPanel from "@/features/admin/transcription";
-import LegacyUsageBanner from "@/features/admin/legacy-usage";
 
 /** Follows a nav link unless the page has unsaved changes. */
 function useGuardedNavigate() {
@@ -74,6 +80,29 @@ function useHostname(): string {
   return typeof window === "undefined" ? "" : window.location.hostname;
 }
 
+const BADGE_TONE: Record<NavBadge["tone"], string> = {
+  neutral: "bg-base-300 text-base-content-dim",
+  warn: "bg-admin-warn-bg text-admin-warn-fg",
+  bad: "bg-admin-red-bg text-admin-red-fg",
+};
+
+/** A count beside a section: neutral for sizes, amber or red for trouble. */
+function Badge({ badge, rail }: { badge: NavBadge; rail: boolean }) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className={`ml-auto rounded-full px-1.5 py-px text-[11px] font-medium leading-4 tabular-nums ${BADGE_TONE[badge.tone]} ${
+          rail ? "max-lg:absolute max-lg:right-1 max-lg:top-1 max-lg:ml-0 max-lg:px-1 max-lg:text-[10px]" : ""
+        }`}
+      >
+        {badge.count}
+      </span>
+      <span className="sr-only"> ({badge.sr})</span>
+    </>
+  );
+}
+
 function NavGroups({
   go,
   rail = false,
@@ -81,6 +110,7 @@ function NavGroups({
   go: (to: string) => (e: MouseEvent<HTMLAnchorElement>) => void;
   rail?: boolean;
 }) {
+  const badges = useOverviewData()?.badges ?? {};
   return (
     <>
       {NAV_GROUPS.map((g) => (
@@ -114,6 +144,7 @@ function NavGroups({
                       item.label
                     )}
                   </span>
+                  {badges[item.to] && <Badge badge={badges[item.to]} rail={rail} />}
                 </NavLink>
               </li>
             ))}
@@ -205,6 +236,8 @@ const STATUS_DOT = {
 
 function SocketStatus() {
   const status = useAdminWsStatus();
+  const overview = useOverviewData();
+  const lastCall = overview?.stats?.lastCallAt ?? 0;
   return (
     <div
       role="status"
@@ -215,7 +248,17 @@ function SocketStatus() {
         className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[status]}`}
         aria-hidden="true"
       />
-      <span className="max-md:sr-only">{STATUS_LABEL[status]}</span>
+      <span className="max-md:sr-only">
+        {STATUS_LABEL[status]}
+        {status === "connected" && lastCall > 0 && overview && (
+          <>
+            <span className="max-lg:hidden">
+              <span aria-hidden="true"> · </span>
+              ingest {formatAgo(lastCall, overview.now)}
+            </span>
+          </>
+        )}
+      </span>
     </div>
   );
 }
@@ -362,12 +405,14 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const overview = useOverviewSources();
   const title = currentItem(location.pathname)?.label ?? "Admin";
   useEffect(() => {
     document.title = `${title} · Squelch admin`;
   }, [title]);
 
   return (
+    <OverviewDataContext.Provider value={overview}>
     <div className="flex min-h-screen">
       <Sidebar username={username} onSignOut={onSignOut} />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -376,9 +421,8 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           onMenu={() => setMoreOpen(true)}
         />
         <main className="flex w-full max-w-[1288px] flex-1 flex-col gap-[18px] px-4 pb-[100px] pt-3.5 sm:px-6 sm:pt-[22px] md:pb-[90px]">
-          <LegacyUsageBanner />
           <Routes>
-            <Route path="overview" element={<ActivityPanel />} />
+            <Route path="overview" element={<OverviewPanel />} />
             <Route path="activity" element={<DashboardsPanel />} />
             <Route path="users" element={<UsersPanel />} />
             <Route path="connections" element={<ConnectionsPanel />} />
@@ -415,6 +459,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
         <CommandPalette settings={SETTINGS_INDEX} onClose={() => setPaletteOpen(false)} />
       )}
     </div>
+    </OverviewDataContext.Provider>
   );
 }
 

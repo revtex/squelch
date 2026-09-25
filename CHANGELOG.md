@@ -252,6 +252,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Overview matches the redesign.** A Needs attention card lists what
+  wants you now, worst first, each with a button that opens the place to
+  fix it: a stopped folder monitor, a disk under 10% free, a failing
+  downstream or webhook, a Trunk Recorder broker that will not connect,
+  transcription failures or a queue of 25 or more, legacy `/api/*` uploads by
+  key, and users still on a temporary password. The legacy-API banner is
+  gone; its rows live here now. Service health pills cover ingest,
+  listeners, Trunk Recorder, transcription, forwarding and storage. Ingest
+  turns amber after 30 minutes without a call. Five linked tiles show
+  calls today against the same time yesterday, the week with its daily
+  average, listeners now, calls transcribed in 24 hours and uptime with
+  the version. The calls chart and Busiest talkgroups take a range of
+  24 hours, 7 days or 30 days, kept in the link, and a talkgroup opens in
+  Systems & talkgroups. Recent admin activity shows the last four audit
+  lines. The sidebar shows counts beside Overview, Users, Connections, API
+  keys, Folder monitors and Forwarding, and the top bar says how long ago the last call
+  came in. The `activity.stats`, `activity.chart` and
+  `activity.top-talkgroups` operations take an optional `range`; stats add
+  `callsYesterday`, `lastCallAt`, `startedAt` and `version`, and top
+  talkgroups add `systemId` and `talkgroupNumber`.
 - **Settings, Logs & audit, Trunk Recorder and Backup & import match the
   redesign.** Settings lists its groups down the left side and marks the
   one you are reading as you scroll. Log lines show the time as a clock

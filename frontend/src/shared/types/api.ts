@@ -11,6 +11,8 @@ export interface LegacyUsageEntry {
   path: string;
   method: string;
   apiKeyIdent: string;
+  /** The key that made the requests; absent when none did. */
+  apiKeyId?: number;
   count: number;
   lastSeen: string;
 }

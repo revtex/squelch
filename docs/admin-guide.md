@@ -36,7 +36,9 @@ The sidebar groups the admin into five areas:
 - **Ingest & delivery** — **Folder monitors** and **Forwarding**
 - **Server** — **Settings** and **Backup & import**
 
-The search field in the top bar (or **Ctrl K**) opens a search box. Type a few letters to jump to any page, or straight to a user, talkgroup, API key, setting, folder monitor or downstream server; choosing one opens its details (a setting opens **Settings** filtered to it). The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
+The search field in the top bar (or **Ctrl K**) opens a search box. Type a few letters to jump to any page, or straight to a user, talkgroup, API key, setting, folder monitor or downstream server; choosing one opens its details (a setting opens **Settings** filtered to it). The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back. On a wide window it also says how long ago the last call came in.
+
+Some sidebar items carry a count. **Overview** shows how many problems need attention, amber or red by the worst one. **Users**, **Connections** and **API keys** show how many there are (live connections for Connections). **Folder monitors** shows how many have stopped, and **Forwarding** how many targets are failing. A count only appears when it is above zero.
 
 On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users**, **Systems** and **Logs**; **More**, or the menu button at the top left, lists every section. On a narrow desktop window the sidebar shrinks to icons with short labels.
 
@@ -46,15 +48,29 @@ On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users
 
 ## Overview
 
-**Overview** gives you a quick overview of your system:
+**Overview** is the admin's landing page. It answers three questions in order: does anything need you, is ingest healthy, and how busy has it been.
 
-- **Calls Today** — number of calls ingested today
-- **This Week** — calls over the last 7 days
-- **Total Calls** — all-time call count
-- **Active Listeners** — currently connected scanner clients
-- **Server Uptime** — how long the server has been running
-- **24-Hour Activity Chart** — visual breakdown of call volume by hour
-- **Top Talkgroups** — most active talkgroups
+**Needs attention** lists problems worst first. Each row says what is wrong and has a button that opens the place to fix it. A row clears by itself once the problem is gone, and the card reads "Nothing needs you right now." when the list is empty. It watches for:
+
+- a folder monitor that has stopped or is reporting errors
+- the recordings disk under 10% free (red under 5%)
+- a downstream server or webhook whose recent deliveries are failing
+- a Trunk Recorder instance whose broker will not connect
+- transcriptions that failed in the last 24 hours, or a queue of 25 calls or more
+- uploads still arriving on the deprecated `/api/*` surface, one row per API key, with a button that opens the key
+- users who still have to change a temporary password
+
+**Service health** is a row of pills for Ingest, Listeners, Trunk Recorder, Transcription, Forwarding and Storage. Green is healthy, amber wants a look and grey means the feature is off. Ingest turns amber when no call has arrived for 30 minutes; the time comes from the last call's own timestamp. Transcription turns amber on any failure in the last 24 hours or a long queue.
+
+Five tiles follow. Each opens the page behind it.
+
+- **Calls today** — calls since midnight, with the change against the same time yesterday
+- **This week** — calls over the last 7 days and the average per day
+- **Listeners now** — live scanner connections; admins are not counted
+- **Transcribed 24 h** — calls transcribed in the last 24 hours and the queue. It can include older calls that were retried or caught up
+- **Uptime** — how long the server has run, its version and when it last restarted
+
+The **24 h**, **7 d** and **30 d** chips at the top choose the range for the calls chart and **Busiest talkgroups**. The choice stays in the page's link. The chart shows calls per hour, or per day over 30 days, and marks the peak. Choose a talkgroup to open it in **Systems & talkgroups**. **Recent admin activity** shows the last four lines of the audit log; **Audit log** opens the rest.
 
 ---
 

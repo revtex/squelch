@@ -112,3 +112,12 @@ export function formatClock(unix: number, { hour12 = false }: { hour12?: boolean
     hour12,
   });
 }
+
+/** A clock time to the minute, "18:02", or "6:02 PM" on a 12-hour server. */
+export function formatTime(unix: number, { hour12 = false }: { hour12?: boolean } = {}): string {
+  return new Date(unix * 1000).toLocaleTimeString([], {
+    hour: hour12 ? "numeric" : "2-digit",
+    minute: "2-digit",
+    hour12,
+  });
+}

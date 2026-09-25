@@ -56,6 +56,7 @@ import type {
   TranscriptionJob,
   TranscriptionJobStatus,
   TranscriptionStats,
+  ActivityStats,
 } from "@/types";
 
 // ─── Payload types ──────────────────────────────────────────────────────────
@@ -161,7 +162,9 @@ export function useClearLockoutMutation() {
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export function useListUsersQuery() {
-  return useWsQuery<AdminUser[]>("users.list", undefined, "users.updated");
+  // A user who sets their own password does not raise users.updated, so a
+  // minute's poll keeps "temporary password" honest away from this page.
+  return useWsQuery<AdminUser[]>("users.list", undefined, "users.updated", 60_000);
 }
 
 export function useCreateUserMutation() {
@@ -422,10 +425,12 @@ export function useLazyListServerDirectoriesQuery() {
 // ─── Downstreams ────────────────────────────────────────────────────────────
 
 export function useListDownstreamsQuery() {
+  // Delivery results are not broadcast; the poll keeps "failing" current.
   return useWsQuery<AdminDownstream[]>(
     "downstreams.list",
     undefined,
     "downstreams.updated",
+    30_000,
   );
 }
 
@@ -460,6 +465,7 @@ export function useListWebhooksQuery() {
     "webhooks.list",
     undefined,
     "webhooks.updated",
+    30_000,
   );
 }
 
@@ -620,3 +626,15 @@ export function useTranscriptionStatsQuery() {
   );
 }
 
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+
+/**
+ * Call counts, the newest call's time, listeners, uptime and version. Every
+ * ingested call raises activity.updated, so refetches wait for a lull.
+ */
+export function useActivityStatsQuery() {
+  return useWsQuery<ActivityStats>("activity.stats", undefined, "activity.updated", 60_000, {
+    debounceMs: 5_000,
+  });
+}

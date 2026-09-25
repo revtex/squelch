@@ -193,9 +193,14 @@ frontend/
                            TalkgroupsTab/TalkgroupDetails/TalkgroupForm/
                            TalkgroupFields, UnitsTab, BlockedTab (Import uses
                            tools/ImportWizard), systems.ts helpers
-        dashboards/        the old Dashboards page: a redirect, plus
-          DashboardsPanel.tsx
-          activity/        ActivityPanel + activitySlice + useAdminActivity
+        overview/          OverviewPanel (needs attention, health strip,
+                           tiles, calls chart, busiest talkgroups, recent
+                           admin activity), CallsChart + chart.ts series,
+                           attention.ts (the attention, health and sidebar
+                           count rules), useOverviewSources (the Shell reads
+                           it once and shares it through OverviewDataContext)
+        dashboards/        the old Dashboards page: DashboardsPanel, a
+                           redirect for `/admin/activity` links
         trunk-recorder/    TrunkRecorderPanel (switcher, banner, tiles, tabs) +
                            InstancePanel/InstanceForm, DashboardTab/CallsTab/
                            RecordersTab/UnitsTab/MessagesTab/ConfigTab,
@@ -206,7 +211,7 @@ frontend/
                            (review → mode → typed word), ImportWizard (one
                            wizard for talkgroups/units/groups/tags and
                            RadioReference), tools.ts review + restore helpers
-        legacy-usage/  settings/  dir-monitor/  forwarding/  shared-links/
+        settings/  dir-monitor/  forwarding/  shared-links/
         transcription/     TranscriptionPanel (banner, tiles, tabs) +
                            SettingsTab/ModelsTab/JobsTab, useModelDownloads
                            (download progress events), transcription.ts catalogue
@@ -249,7 +254,7 @@ Industry analogue: [Bulletproof React](https://github.com/alan2207/bulletproof-r
 ### 3.3 State
 
 - **Server data:** RTK Query, single shared `api` object in [frontend/src/app/api.ts](../frontend/src/app/api.ts). Feature-specific endpoints attach via `api.injectEndpoints` from inside the feature folder. **No per-feature `createApi`.**
-- **Client state:** Redux Toolkit slices live **next to the feature that owns them** (`features/scanner/scannerSlice.ts`, `features/admin/dashboards/activity/activitySlice.ts`, `features/admin/trunk-recorder/trMqttSlice.ts`, `features/admin/_shell/adminSlice.ts`). Slices that are genuinely cross-feature are rare; promote to `shared/` only when ≥ 2 features need them.
+- **Client state:** Redux Toolkit slices live **next to the feature that owns them** (`features/scanner/scannerSlice.ts`, `features/admin/trunk-recorder/trMqttSlice.ts`, `features/admin/_shell/adminSlice.ts`). Slices that are genuinely cross-feature are rare; promote to `shared/` only when ≥ 2 features need them.
 - WebSocket events dispatch into Redux via the WS client + middleware — components never parse WS frames.
 - JWT tokens live in **Redux memory only**. No `localStorage`, no `sessionStorage`. Refresh token is an httpOnly cookie scoped to `/api`.
 

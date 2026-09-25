@@ -746,3 +746,47 @@ export interface CreateIPBlockPayload {
 export type CreateIPBlockResult =
   | { ok: true; id: number; cidr: string; closed: number }
   | { needsConfirm: true; cidr: string; message: string };
+
+// ── Activity (Overview) ──
+
+export type ActivityRange = "24h" | "7d" | "30d";
+
+export interface ActivityStats {
+  callsToday: number;
+  /** Yesterday's calls up to this time of day. */
+  callsYesterday: number;
+  callsThisWeek: number;
+  callsTotal: number;
+  /** Unix seconds of the newest call; 0 when there are none. */
+  lastCallAt: number;
+  activeListeners: number;
+  uptime: number;
+  /** Unix seconds the server started. */
+  startedAt: number;
+  version: string;
+}
+
+export interface ActivityBucket {
+  /** Unix seconds at the start of the hour. */
+  hour: number;
+  count: number;
+}
+
+export interface ActivityChart {
+  buckets: ActivityBucket[];
+}
+
+export interface TopTalkgroup {
+  /** The talkgroup's database id; 0 for calls without one. */
+  talkgroupId: number;
+  systemId: number;
+  talkgroupNumber: number;
+  talkgroupLabel: string;
+  talkgroupName: string;
+  systemLabel: string;
+  callCount: number;
+}
+
+export interface TopTalkgroups {
+  talkgroups: TopTalkgroup[];
+}
