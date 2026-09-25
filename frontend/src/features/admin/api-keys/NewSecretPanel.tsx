@@ -27,8 +27,8 @@ export default function NewSecretPanel({
   const origin = window.location.origin;
   return (
     <DetailsPanel
-      title={previousUntil ? `New secret for ${keyName(apiKey)}` : `${keyName(apiKey)} is ready`}
-      subtitle="Copy the secret now. It is shown once and cannot be looked up later."
+      title={previousUntil ? `New secret for ${keyName(apiKey)}` : `${keyName(apiKey)} created`}
+      subtitle="Copy it now. It's not shown again."
       size="wide"
       onClose={onClose}
       footer={
@@ -38,7 +38,7 @@ export default function NewSecretPanel({
       }
     >
       {previousUntil && (
-        <div className="alert alert-warning text-sm">
+        <div className="alert alert-warning">
           The old secret keeps working until {formatDateTime(previousUntil)}, so
           you can update the recorder without a gap.
         </div>

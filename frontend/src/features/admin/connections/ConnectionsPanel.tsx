@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  COUNT,
+  PageHeader,
+  SearchBox,
   useDetails,
   useListConnectionsQuery,
   useListIPBlocksQuery,
@@ -18,22 +21,24 @@ import { useConnectionActions } from "./useConnectionActions";
 
 const TABS = [
   { id: "live", label: "Live" },
-  { id: "devices", label: "Devices" },
+  { id: "devices", label: "Signed-in devices" },
   { id: "history", label: "History" },
   { id: "blocks", label: "Blocked addresses" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
 export default function ConnectionsPanel() {
-  // Users links here with ?user=<id>&name=<username> to show one account.
+  // Users links here with ?user=<id>&name=<username> to show one account's
+  // history, or with ?tab=live|devices&q=<text> to open a tab filtered.
   const [params] = useSearchParams();
+  const linkedTab = TABS.find((t) => t.id === params.get("tab"))?.id;
   const linkedUser = Number(params.get("user"));
   const linked: HistoryScope | null =
     linkedUser > 0
       ? { userId: linkedUser, label: params.get("name") ?? `user #${linkedUser}` }
       : null;
-  const [tab, setTab] = useState<Tab>(linked ? "history" : "live");
-  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<Tab>(linkedTab ?? (linked ? "history" : "live"));
+  const [search, setSearch] = useState(params.get("q") ?? "");
   const [scope, setScope] = useState<HistoryScope>(linked ?? {});
   const actions = useConnectionActions();
   const { setNotice, blockAddress, closeBlock } = actions;
@@ -63,20 +68,11 @@ export default function ConnectionsPanel() {
   };
 
   return (
-    <div className="space-y-[18px]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl font-bold">Connections</h2>
-        {(tab === "live" || tab === "devices") && (
-          <input
-            type="search"
-            className="input input-sm w-full sm:w-64"
-            placeholder="Filter by user, address or country"
-            aria-label="Filter by user, address or country"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        )}
-      </div>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Connections"
+        subtitle="Who is listening right now, which devices can sign back in, and what has been blocked."
+      />
 
       <div role="tablist" className="tabs tabs-border">
         {TABS.map((t) => (
@@ -85,21 +81,27 @@ export default function ConnectionsPanel() {
             type="button"
             role="tab"
             aria-selected={tab === t.id}
-            className={`tab ${tab === t.id ? "tab-active" : ""}`}
+            className={`tab gap-2 ${tab === t.id ? "tab-active" : ""}`}
             onClick={() => changeTab(t.id)}
           >
             {t.label}
             {counts[t.id] !== undefined && (
-              <span
-                className="badge badge-ghost badge-sm ml-2"
-                aria-hidden="true"
-              >
+              <span className={COUNT} aria-hidden="true">
                 {counts[t.id]}
               </span>
             )}
           </button>
         ))}
       </div>
+
+      {(tab === "live" || tab === "devices") && (
+        <SearchBox
+          label="Filter by user, address or country"
+          value={search}
+          onChange={setSearch}
+          className="w-full md:max-w-[340px]"
+        />
+      )}
 
       <div role="tabpanel">
         {tab === "live" && (

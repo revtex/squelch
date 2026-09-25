@@ -92,10 +92,13 @@ describe("ApiKeysPanel", () => {
     const north = within(table).getByText("TR North").closest("tr")!;
     expect(within(north).getByText("County PD")).toBeInTheDocument();
     expect(within(north).getByText("412")).toBeInTheDocument();
-    expect(within(north).getByText("legacy uploads")).toBeInTheDocument();
-    expect(within(north).getByText("2m ago")).toBeInTheDocument();
+    expect(within(north).getByText("legacy")).toBeInTheDocument();
+    expect(within(north).getByText("198.51.100.7")).toBeInTheDocument();
+    expect(within(north).getByText(/^2 min ago/)).toBeInTheDocument();
+    expect(within(north).getByText("enabled")).toBeInTheDocument();
     const spare = within(table).getByText("Spare").closest("tr")!;
-    expect(within(spare).getByText("Disabled")).toBeInTheDocument();
+    expect(within(spare).getByText("disabled")).toBeInTheDocument();
+    expect(within(spare).getByText("30 / min")).toBeInTheDocument();
     expect(within(spare).getByText("All systems")).toBeInTheDocument();
     expect(within(spare).getByText("never")).toBeInTheDocument();
   });
@@ -111,11 +114,11 @@ describe("ApiKeysPanel", () => {
   it("creates a key and shows the secret once with a test command", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: "Add key" }));
-    const form = within(screen.getByRole("dialog", { name: "New API key" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    const form = within(screen.getByRole("dialog", { name: "Create API key" }));
     await user.type(form.getByLabelText("Label"), "Site B");
     await user.click(form.getByRole("button", { name: "Fire" }));
-    await user.type(form.getByLabelText("Rate limit"), "120");
+    await user.type(form.getByLabelText("Rate limit (calls per minute)"), "120");
     await user.click(form.getByRole("button", { name: "Create key" }));
     expect(createOp).toHaveBeenCalledWith({
       ident: "Site B",
@@ -124,7 +127,7 @@ describe("ApiKeysPanel", () => {
       callRateLimit: 120,
       order: 2,
     });
-    const secret = within(await screen.findByRole("dialog", { name: "Site B is ready" }));
+    const secret = within(await screen.findByRole("dialog", { name: "Site B created" }));
     expect(secret.getByLabelText("Secret")).toHaveValue("new-secret-123");
     expect(secret.getByText(/Bearer new-secret-123/)).toBeInTheDocument();
     expect(secret.getByText(/librdioscanner_uploader\.so/)).toBeInTheDocument();
@@ -135,8 +138,8 @@ describe("ApiKeysPanel", () => {
     renderPanel();
     await user.click(screen.getByRole("button", { name: "Details for TR North" }));
     const details = within(screen.getByRole("dialog", { name: "TR North" }));
-    expect(details.getByText("2m ago from 198.51.100.7")).toBeInTheDocument();
-    expect(details.getByText(/12 requests in the last 24 hours/)).toBeInTheDocument();
+    expect(details.getByText("198.51.100.7")).toBeInTheDocument();
+    expect(details.getByText(/12 requests in 24 h/)).toBeInTheDocument();
     await user.click(details.getByRole("button", { name: "Rotate secret" }));
     await user.click(details.getByRole("button", { name: "Rotate secret" }));
     expect(rotateOp).toHaveBeenCalledWith(1);
@@ -156,9 +159,9 @@ describe("ApiKeysPanel", () => {
     renderPanel();
     await user.click(screen.getByRole("button", { name: "Details for Spare" }));
     const details = within(screen.getByRole("dialog", { name: "Spare" }));
-    await user.click(details.getByRole("button", { name: "Delete" }));
+    await user.click(details.getByRole("button", { name: "Delete key" }));
     expect(deleteOp).not.toHaveBeenCalled();
-    await user.click(details.getByRole("button", { name: "Delete" }));
+    await user.click(details.getByRole("button", { name: "Delete key" }));
     expect(deleteOp).toHaveBeenCalledWith(2);
     expect(await details.findByRole("alert")).toHaveTextContent("API key not found");
   });
@@ -168,8 +171,8 @@ describe("ApiKeysPanel", () => {
     renderPanel();
     await user.click(screen.getByRole("button", { name: "Details for Spare" }));
     const details = within(screen.getByRole("dialog", { name: "Spare" }));
-    await user.click(details.getByRole("button", { name: "Enable" }));
-    await user.click(details.getByRole("button", { name: "Enable" }));
+    await user.click(details.getByRole("button", { name: "Enable key" }));
+    await user.click(details.getByRole("button", { name: "Enable key" }));
     expect(updateOp).toHaveBeenCalledWith({
       id: 2,
       ident: "Spare",
@@ -179,5 +182,45 @@ describe("ApiKeysPanel", () => {
       order: 1,
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Enabled Spare.");
+  });
+
+  it("edits a key in its details panel and keeps it enabled or not", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Details for Spare" }));
+    const details = within(screen.getByRole("dialog", { name: "Spare" }));
+    expect(details.getByRole("button", { name: "Save" })).toBeDisabled();
+    const label = details.getByLabelText("Label");
+    await user.clear(label);
+    await user.type(label, "Spare 2");
+    await user.click(details.getByRole("button", { name: "Fire" }));
+    expect(details.getByRole("button", { name: "All systems" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await user.click(details.getByRole("button", { name: "Save" }));
+    expect(updateOp).toHaveBeenCalledWith({
+      id: 2,
+      ident: "Spare 2",
+      disabled: 1,
+      systemsJson: "[11]",
+      callRateLimit: 30,
+      order: 1,
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved Spare 2.");
+  });
+
+  it("keeps Save available when saving fails so it can be tried again", async () => {
+    const user = userEvent.setup();
+    updateOp.mockRejectedValueOnce(new Error("label already in use"));
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Details for Spare" }));
+    const details = within(screen.getByRole("dialog", { name: "Spare" }));
+    await user.type(details.getByLabelText("Label"), "!");
+    await user.click(details.getByRole("button", { name: "Save" }));
+    expect(await details.findByRole("alert")).toHaveTextContent("label already in use");
+    expect(details.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.click(details.getByRole("button", { name: "Save" }));
+    expect(updateOp).toHaveBeenCalledTimes(2);
   });
 });

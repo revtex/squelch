@@ -87,20 +87,20 @@ See the [Trunk Recorder MQTT guide](tr-mqtt-guide.md) for the plugin config, mul
 
 Who can sign in, what they can hear, and where they are signed in.
 
-The table shows each account's role, status, systems, how many connections it has open right now, how many browsers and phones can sign back in without a password (**Devices**), and when it was last seen. Search by name, role or system, and use the status chips to show only active, disabled, expired or temporary-password accounts. Tick rows to sign out, disable or delete several accounts at once.
+The table shows each account's name with an **admin** badge for admins, its status, the systems it can hear, its **Sessions** (connections open right now and browsers or phones that can sign back in without a password) and its last sign-in with the address. A grey line under the name says when an account is the primary admin, when it expires and whether it has a connection limit. Search by name, role or system, and use the chips to show only admins, temporary-password, expired or disabled accounts. Tick rows to sign out, disable or delete several accounts at once.
 
 Choose **Add user** to create an account. You set a temporary password (or **Generate** one) and hand it to the user; by default they must pick their own password the first time they sign in. Turn **Require a new password at first sign-in** off if the user chose the password themselves.
 
-Choose the **›** button on a row for the account's details and actions:
+Choose the **›** button on a row for the account's details. They list its role, systems, expiry, connection limit, devices and last sign-in. **Live now** lists the account's open connections, each with **Open** to see it under **Connections**, and **See devices** lists the browsers and phones that can sign back in. The actions are:
 
 | Action | What it does |
 | --- | --- |
-| Edit | Change the name, role, systems, expiry date and connection limit. |
+| Edit details | Change the name, role, systems, expiry date and connection limit. |
 | Reset password | Set a new temporary password for someone who lost theirs. By default they must change it at their next sign-in and are signed out everywhere, so anyone holding the old password is out. |
 | Require password change | A switch. On, the user is asked for a new password the next time they sign in. Accounts with it on show a **temporary password** badge in the table. |
 | Sign out everywhere | Every device needs the password again. Use it if you think someone else has the account. |
-| Disable / Enable | Disabling keeps the account but refuses sign-in and signs it out everywhere. Nothing is deleted. |
-| Delete | Removes the account, its devices and its bookmarks for good. |
+| Disable account / Enable account | Disabling keeps the account but refuses sign-in and signs it out everywhere. Nothing is deleted. |
+| Delete user | Removes the account, its devices and its bookmarks for good. Calls and recordings are not affected. |
 
 Each account has:
 
@@ -110,7 +110,7 @@ Each account has:
 | Role             | **Admin** (full access) or **Listener** (scanner only)          |
 | Expires          | Optional date after which the account is locked out             |
 | Connection limit | Optional cap on simultaneous connections for this user          |
-| Systems          | Optional — restrict which systems this user can hear; none picked means all |
+| Systems          | **All systems**, which includes systems added later, or only the ones you pick |
 
 The primary admin (the first account) cannot be disabled or deleted, and its role, expiry, limit and systems are fixed. You cannot disable or delete your own account.
 
@@ -124,7 +124,7 @@ After three failed sign-ins an address is locked out for ten minutes (both numbe
 
 See who is using the server right now, which devices can sign back in, who has connected recently, and which addresses are blocked. The tabs show how many connections, devices and blocks there are. On the first three tabs each row shows:
 
-- **Who** — the user name, or **Anonymous**, with **Squelch app** (the mobile app) or **Browser** under it. Hover over the client to see the full browser identification.
+- **Who** — the user name, or **Public listener**, with the browser and system under it, such as **Chrome 129 · Windows** or **Squelch app · Android**. Hover over it to see the full browser identification.
 - **Address** — the visitor's IP address. Behind a reverse proxy this is only right once Squelch trusts that proxy; if every row shows the same address, see [Showing the Real Client Address](deployment-guide.md#showing-the-real-client-address).
 - **Type** — **LIVE** is the listening screen's live feed, **BKGND** is background audio (one listener with BKGND on has both a LIVE and a BKGND connection), **Admin** is someone on the admin dashboard.
 - **Country** — shown under the address when the server has a country database. See [Showing Listeners' Countries](deployment-guide.md#showing-listeners-countries-optional). Private and local addresses show as **Local network**. History shows the country found at the time of the connection.
@@ -142,17 +142,17 @@ Choose the **›** button at the end of a row to open its details. They slide in
 | Sign out everywhere | Signs the account out on every device at once. |
 | Block this address | Opens the block form with that row's address filled in. See [Blocked addresses](#blocked-addresses). |
 
-**Disconnect** is on **Live** only. **Sign out this device** needs a signed-in device, so it is missing for anonymous visitors. **Block this address** is missing on rows marked **trusted**, because those addresses can never be blocked, and the details say so. From **History** you can sign out a device or an account that is not connected right now; if it has already been signed out, you are told so.
+**Disconnect** is on **Live** only. **Sign out this device** needs a signed-in device, so it is missing for public listeners. **Block this address** is missing on rows marked **trusted**, because those addresses can never be blocked, and the details say so. From **History** you can sign out a device or an account that is not connected right now; if it has already been signed out, you are told so.
 
 Your own admin connection is marked **you**, and the device you are using is marked **this device**. Signing it out takes you to the sign-in page.
 
 ### Live
 
-Every open connection, with how long it has been up. Anonymous visitors (with **Public Access** on) show as **Anonymous**. The list updates on its own as people come and go. Use the filter box to narrow it by user name, address or country.
+Every open connection, with how long it has been up. Visitors who have not signed in (with **Public Access** on) show as **Public listener**. The list updates on its own as people come and go. Use the filter box to narrow it by user name, address or country.
 
-### Devices
+### Signed-in devices
 
-Every sign-in that can still renew itself without a password: each browser or phone that signed in and has not signed out, been signed out, or gone 30 days without using the server. A browser that signed in without **Remember me** forgets its sign-in when it closes, but stays listed here until that 30 days runs out. **Last seen from** is where it last renewed its sign-in from — within the last 15 minutes if it is in use. **Online** means it has at least one connection open right now.
+Every sign-in that can still renew itself without a password: each browser or phone that signed in and has not signed out, been signed out, or gone 30 days without using the server. A browser that signed in without **Remember me** forgets its sign-in when it closes, but stays listed here until that 30 days runs out. **Last seen from** is where it last renewed its sign-in from — within the last 15 minutes if it is in use. **online** means it has at least one connection open right now.
 
 ### History
 
@@ -167,13 +167,13 @@ A record of every connection: who, from where, when, how long it lasted, and how
 | Disconnected by an admin | An admin used **Disconnect** |
 | Blocked | An admin blocked the address it came from |
 
-Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Settings → Storage](#storage). Setting it to 0 stops recording and leaves the tab empty.
+Pick a time range (**24 h**, **7 days**, **30 days** or **Everything kept**) and a connection type with the chips, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Settings → Storage](#storage). Setting it to 0 stops recording and leaves the tab empty.
 
 ### Blocked addresses
 
 A blocked address cannot reach Squelch at all. It is refused for listening, for the admin dashboard, and for uploads from recorders. Anyone connected from it is dropped as soon as you add the block.
 
-To block an address, choose **Block this address** in a row's details, or **Block an address** on this tab. Enter an address such as `203.0.113.9` or a range such as `203.0.113.0/24`, and optionally a reason. Then choose how long the block lasts: 1 hour, 24 hours, 7 days, or until you remove it. **Remove** lifts a block straight away.
+To block an address, choose **Block this address** in a row's details, or **Block an address** on this tab. Enter an address such as `203.0.113.9` or a range such as `203.0.113.0/24`, and optionally a reason. Then choose how long the block lasts: 1 hour, 24 hours, 7 days, or until you remove it. **Remove** asks first, then lifts the block straight away.
 
 Some blocks are refused:
 
@@ -256,27 +256,27 @@ Assign groups and tags to talkgroups in the **Systems** panel. Squelch ships wit
 
 ## API Keys
 
-API keys authenticate recorders that upload calls to Squelch over HTTP. **Admin → API keys** lists every key by its label with its status, the systems it may upload to (by name), calls uploaded in the last 24 hours and when it was last used. Search by label, fingerprint, system or address, and filter to active, disabled, **Legacy uploads** (keys still sending to the deprecated `/api/*` path) or **Never used** keys.
+API keys authenticate recorders that upload calls to Squelch over HTTP. **Admin → API keys** lists every key by its label, with its fingerprint and creation date under it, the systems it may upload to (by name), its rate limit, when and from where it was last used, calls uploaded in the last 24 hours and its status. Search by label, fingerprint, system or address, and filter to enabled, disabled, **Legacy uploads** (keys still sending to the deprecated `/api/*` path) or **Never used** keys.
 
-**Add key** asks for:
+**Create key** asks for:
 
 | Field      | Description                                                        |
 | ---------- | ------------------------------------------------------------------ |
-| Label      | Where the key is used, e.g. the recorder's name or site. Required. |
-| Systems    | Which systems the key may upload to. Pick none to allow them all.  |
-| Rate limit | Calls a minute this key may upload. Empty uses the server default. |
-| Enabled    | Turn off to refuse uploads with this key without deleting it.      |
+| Label      | Name the recorder or site, so the audit log reads well. Required.  |
+| Systems    | **All systems**, which includes systems added later, or only the ones you pick. |
+| Rate limit | Calls a minute this key may upload. Blank uses the server default. |
+| Enabled    | Turn off to prepare a key you will switch on later.                |
 
 After you save, the **secret is shown once**, with a copy button, a `curl` test command and a ready-made Trunk-Recorder plugin entry. It cannot be looked up later; rotate the key if it is lost.
 
-The **›** button opens a key's details: its fingerprint (a short, stable handle that never reveals the secret), where and when it was last used, and these actions:
+The **›** button opens a key's details. The header shows its fingerprint (a short, stable handle that never reveals the secret). The details show where and when it was last used, and its label, systems and rate limit can be changed there and saved with **Save**. The actions are:
 
-- **Edit** — label, systems and rate limit.
-- **Rotate secret** — issues a new secret. The old one keeps working for 24 hours so the recorder can be updated without a gap; the key shows as **Rotating** until then.
-- **Disable / Enable** — refuse or accept uploads without deleting the key.
-- **Delete** — asks first. Calls the key uploaded are kept.
+- **Copy test command** — a `curl` command that checks the key and the address, with `<secret>` to fill in.
+- **Disable key / Enable key** — refuse or accept uploads without deleting the key. A disabled key's uploads get 401.
+- **Rotate secret** — issues a new secret. The old one keeps working for 24 hours so the recorder can be updated without a gap; the key shows as **rotating** until then.
+- **Delete key** — asks first. Uploads with it fail at once. Calls the key uploaded are kept.
 
-A key that sent requests to the deprecated `/api/*` path in the last 24 hours carries a **legacy uploads** badge, and its details explain what to change. Every create, edit, rotate, disable and delete is recorded in **Logs**.
+A key that sent requests to the deprecated `/api/*` path in the last 24 hours carries a **legacy** badge beside its call count, and its details explain what to change. Every create, edit, rotate, disable and delete is recorded in **Logs**.
 
 See the [Recorder Guide](recorder-guide.md) for how to configure your recorder with the key.
 
@@ -354,7 +354,7 @@ A webhook posts a message to a URL for every accepted call. Each one has a **lab
 
 Lists every call a listener has shared by link, newest first: the talkgroup and system, when the call was recorded and how long it is, who shared it and when, how many times the public page has been opened, and when the link expires. Expired links are dimmed and labelled. Search by talkgroup, system or user, and filter to **Active** or **Expired**.
 
-The **›** button opens a link's details with **Copy link**, **Open shared page** (plays the call the way a visitor sees it) and **Revoke**. Revoking asks first and offers a ten-second **Undo** that puts the link back with the same address. Tick rows to revoke several at once, or use **Revoke N expired links** in the header to clear the ones that no longer work.
+Each row has **Copy link**, **Listen** (opens the shared page in a new tab, the way a visitor sees it) and **Revoke**. Revoking offers a ten-second **Undo** that puts the link back with the same address. An expired link has **Remove** instead. Tick rows to revoke several at once, or use **Revoke expired** in the header to clear the ones that no longer work.
 
 Revoking a link makes the call eligible for normal pruning again. Whether links can be created and how long they last are set in **Settings → Sharing**.
 

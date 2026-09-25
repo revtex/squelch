@@ -110,13 +110,17 @@ export function PanelSection({
   title: string;
   children: ReactNode;
 }) {
+  const id = useId();
   return (
-    <div className="space-y-2">
-      <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-base-content-dim">
+    <section aria-labelledby={id} className="space-y-2">
+      <h3
+        id={id}
+        className="text-[11px] font-medium uppercase tracking-[0.06em] text-base-content-dim"
+      >
         {title}
-      </p>
+      </h3>
       {children}
-    </div>
+    </section>
   );
 }
 

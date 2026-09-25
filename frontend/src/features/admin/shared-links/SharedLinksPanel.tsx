@@ -1,37 +1,35 @@
 import { useMemo, useState } from "react";
-import { Copy, ExternalLink, Link2Off, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Copy } from "lucide-react";
 import {
-  ActionButton,
+  COUNT,
   DataTable,
   DetailsPanel,
-  FactList,
   FilterChips,
   InlineConfirm,
   PageHeader,
-  PanelSection,
   SearchBox,
   formatAgo,
   formatDateTime,
-  formatDuration,
+  formatDay,
   formatUntil,
+  formatWhen,
   plural,
   useDeleteSharedLinkMutation,
   useDetails,
+  useGetConfigQuery,
   useGetSharedLinksQuery,
+  useHour12,
   useRestoreSharedLinkMutation,
   useRevokeExpiredSharedLinksMutation,
   useToast,
   type Column,
-  type Fact,
 } from "@/features/admin/_shell";
 import type { SharedLinkAdmin } from "@/types";
 
 type Filter = "all" | "active" | "expired";
 
-type Panel =
-  | { key: string; kind: "details"; id: number }
-  | { key: string; kind: "bulk" }
-  | { key: string; kind: "expired" };
+type Panel = { key: string; kind: "bulk" };
 
 function callTitle(l: SharedLinkAdmin): string {
   return l.talkgroupLabel || l.talkgroupName || `Call ${l.callId}`;
@@ -39,6 +37,12 @@ function callTitle(l: SharedLinkAdmin): string {
 
 function linkUrl(l: SharedLinkAdmin): string {
   return `${window.location.origin}/call/${l.token}`;
+}
+
+/** "0:41", "1:12", "12:05". */
+function clock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 function matches(l: SharedLinkAdmin, q: string): boolean {
@@ -56,16 +60,17 @@ function message(e: unknown, fallback: string): string {
 /** Calls listeners have shared by link: who, when, how often opened, and a way to take a link back. */
 export default function SharedLinksPanel() {
   const { data: links, isLoading, isError } = useGetSharedLinksQuery();
+  const { data: config } = useGetConfigQuery();
   const [deleteLink] = useDeleteSharedLinkMutation();
   const [restoreLink] = useRestoreSharedLinkMutation();
-  const [revokeExpired] = useRevokeExpiredSharedLinksMutation();
+  const [revokeExpired, { isLoading: revokingExpired }] = useRevokeExpiredSharedLinksMutation();
   const toast = useToast();
+  const hour12 = useHour12();
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
   const p = panel.selected;
@@ -80,7 +85,9 @@ export default function SharedLinksPanel() {
       ),
     [all, filter, query],
   );
-  const current = p?.kind === "details" ? (all.find((l) => l.id === p.id) ?? null) : null;
+  const expiryDays = Number(
+    config?.settings.find((s) => s.key === "sharedLinkExpiry")?.value ?? "0",
+  );
 
   const copy = async (l: SharedLinkAdmin) => {
     try {
@@ -105,16 +112,15 @@ export default function SharedLinksPanel() {
     }
   };
 
-  const revokeOne = async (l: SharedLinkAdmin): Promise<string | null> => {
-    setBusy(true);
+  const revokeOne = async (l: SharedLinkAdmin) => {
     try {
       await deleteLink(l.id).unwrap();
-      toast.success(`Revoked the link to ${callTitle(l)}.`, { undo: undoRevoke(l) });
-      return null;
+      toast.success(
+        l.expired ? `Removed the link to ${callTitle(l)}.` : `Revoked the link to ${callTitle(l)}.`,
+        { undo: undoRevoke(l) },
+      );
     } catch (e) {
-      return message(e, "Could not revoke the link.");
-    } finally {
-      setBusy(false);
+      toast.error(message(e, "Could not revoke the link."));
     }
   };
 
@@ -144,18 +150,13 @@ export default function SharedLinksPanel() {
   };
 
   const revokeAllExpired = async () => {
-    setBusy(true);
-    setError(null);
     try {
       const { revoked } = await revokeExpired().unwrap();
-      panel.close();
       toast.success(
         revoked === 0 ? "No expired links to revoke." : `Revoked ${plural(revoked, "expired link")}.`,
       );
     } catch (e) {
-      setError(message(e, "Could not revoke expired links."));
-    } finally {
-      setBusy(false);
+      toast.error(message(e, "Could not revoke expired links."));
     }
   };
 
@@ -164,45 +165,45 @@ export default function SharedLinksPanel() {
       id: "call",
       header: "Call",
       phone: "title",
-      sortValue: callTitle,
+      sortValue: (l) => -l.dateTime,
       cell: (l) => (
-        <span className={`block ${l.expired ? "opacity-60" : ""}`}>
-          <span className="font-medium">{callTitle(l)}</span>
+        <>
+          <span>
+            <b className="font-semibold">{callTitle(l)}</b>
+            {" · "}
+            <span title={formatDateTime(l.dateTime)}>{formatWhen(l.dateTime, { hour12 })}</span>
+            {" · "}
+            <span className="tabular-nums">{clock(l.duration / 1000)}</span>
+          </span>
           <span className="block text-xs text-base-content-dim">
             {l.systemLabel || "Unknown system"}
             {l.talkgroupName && l.talkgroupLabel ? ` · ${l.talkgroupName}` : ""}
           </span>
-        </span>
-      ),
-    },
-    {
-      id: "when",
-      header: "Recorded",
-      sortValue: (l) => l.dateTime,
-      cell: (l) => (
-        <span>
-          {formatDateTime(l.dateTime)}
-          <span className="ml-1 text-xs text-base-content-dim">{formatDuration(l.duration)}</span>
-        </span>
+        </>
       ),
     },
     {
       id: "shared",
-      header: "Shared",
-      sortValue: (l) => l.createdAt,
+      header: "Shared by",
+      sortValue: (l) => -l.createdAt,
       cell: (l) => (
-        <span>
-          {formatAgo(l.createdAt)}
-          <span className="block text-xs text-base-content-dim">by {l.sharedBy || "unknown"}</span>
+        <span title={formatDateTime(l.createdAt)}>
+          {l.sharedBy || "unknown"} · {formatAgo(l.createdAt)}
         </span>
       ),
     },
     {
       id: "opens",
-      header: "Opens",
-      align: "right",
+      header: "Opened",
       sortValue: (l) => l.opens,
-      cell: (l) => (l.opens > 0 ? l.opens.toLocaleString() : "—"),
+      cell: (l) => (
+        <span
+          className="tabular-nums"
+          title={l.lastOpenedAt ? `Last opened ${formatDateTime(l.lastOpenedAt)}` : undefined}
+        >
+          {plural(l.opens, "time")}
+        </span>
+      ),
     },
     {
       id: "expires",
@@ -210,82 +211,89 @@ export default function SharedLinksPanel() {
       sortValue: (l) => l.effectiveExpiresAt ?? Number.MAX_SAFE_INTEGER,
       cell: (l) =>
         l.expired ? (
-          <span className="badge badge-ghost badge-sm">expired</span>
+          <span className="badge badge-neutral">
+            expired{l.effectiveExpiresAt ? ` ${formatDay(l.effectiveExpiresAt)}` : ""}
+          </span>
         ) : l.effectiveExpiresAt ? (
-          formatUntil(l.effectiveExpiresAt)
+          <span title={formatDateTime(l.effectiveExpiresAt)}>
+            {formatUntil(l.effectiveExpiresAt)}
+          </span>
         ) : (
-          <span className="text-base-content-dim">never</span>
+          "Never"
         ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      phone: "wide",
+      cell: (l) => (
+        <span className="inline-flex flex-wrap justify-end gap-1.5 max-sm:flex max-sm:justify-start">
+          {!l.expired && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              aria-label={`Copy the link to ${callTitle(l)}`}
+              onClick={() => void copy(l)}
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              Copy link
+            </button>
+          )}
+          <a
+            href={`/call/${l.token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost btn-sm"
+            aria-label={`Listen to ${callTitle(l)}`}
+          >
+            Listen
+          </a>
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${l.expired ? "" : "text-error"}`}
+            aria-label={`${l.expired ? "Remove" : "Revoke"} the link to ${callTitle(l)}`}
+            onClick={() => void revokeOne(l)}
+          >
+            {l.expired ? "Remove" : "Revoke"}
+          </button>
+        </span>
+      ),
     },
   ];
 
-  const facts: Fact[] = current
-    ? [
-        { label: "System", value: current.systemLabel || "Unknown" },
-        {
-          label: "Talkgroup",
-          value: current.talkgroupName
-            ? `${current.talkgroupLabel} · ${current.talkgroupName}`
-            : current.talkgroupLabel || "Unknown",
-        },
-        {
-          label: "Recorded",
-          value: `${formatDateTime(current.dateTime)} · ${formatDuration(current.duration)}`,
-        },
-        { label: "Shared", value: `${formatDateTime(current.createdAt)} by ${current.sharedBy || "unknown"}` },
-        {
-          label: "Expires",
-          value: current.expired
-            ? `Expired ${formatAgo(current.effectiveExpiresAt ?? current.createdAt)}`
-            : current.effectiveExpiresAt
-              ? formatDateTime(current.effectiveExpiresAt)
-              : "Never",
-        },
-        {
-          label: "Opened",
-          value:
-            current.opens > 0
-              ? `${plural(current.opens, "time")}, last ${formatAgo(current.lastOpenedAt ?? current.createdAt)}`
-              : "Not yet",
-        },
-        { label: "Link", value: <span className="break-all font-mono text-xs">{linkUrl(current)}</span> },
-      ]
-    : [];
-
   return (
-    <div className="space-y-[18px]">
+    <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Shared links"
-        subtitle="Calls listeners have shared by link. Anyone with a link can play that one call until it expires or you revoke it."
+        subtitle="Calls listeners have shared publicly. A shared call is kept past the prune window until its link expires or is revoked."
         actions={
           expiredCount > 0 ? (
             <button
               type="button"
-              className="btn btn-sm"
-              onClick={() => {
-                setError(null);
-                panel.open({ key: "expired", kind: "expired" });
-              }}
+              className="btn"
+              disabled={revokingExpired}
+              onClick={() => void revokeAllExpired()}
             >
-              <Link2Off className="h-4 w-4" aria-hidden="true" />
-              Revoke {plural(expiredCount, "expired link")}
+              Revoke expired
+              <span className={COUNT}>{expiredCount}</span>
             </button>
           ) : undefined
         }
       />
 
       {isError && (
-        <div role="alert" className="alert alert-error text-sm">
+        <div role="alert" className="alert alert-error">
           Failed to load shared links.
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2.5">
         <SearchBox
           value={query}
           onChange={setQuery}
-          label="Search by talkgroup, system or user"
-          className="w-full sm:w-80"
+          label="Filter by talkgroup, system or user"
+          className="w-full md:min-w-[200px] md:max-w-[340px] md:flex-[1_1_240px]"
         />
         <FilterChips
           label="Show"
@@ -304,15 +312,16 @@ export default function SharedLinksPanel() {
         columns={columns}
         rows={rows}
         rowKey={(l) => l.id}
+        rowLabel={callTitle}
         loading={isLoading}
         empty={all.length === 0 ? "No calls have been shared yet." : "No link matches that search."}
-        defaultSort={{ id: "shared", dir: "desc" }}
+        defaultSort={{ id: "shared", dir: "asc" }}
         selected={selected}
         onSelectedChange={setSelected}
         bulkActions={
           <button
             type="button"
-            className="btn btn-xs btn-error btn-outline"
+            className="btn btn-sm btn-error"
             onClick={() => {
               setError(null);
               panel.open({ key: "bulk", kind: "bulk" });
@@ -321,86 +330,18 @@ export default function SharedLinksPanel() {
             Revoke
           </button>
         }
-        onOpen={(l, trigger) => panel.open({ key: `details:${l.id}`, kind: "details", id: l.id }, trigger)}
-        rowLabel={callTitle}
-        openKey={p?.kind === "details" ? p.id : null}
-        rowClassName={(l) => (l.expired ? "text-base-content-dim" : "")}
+        rowClassName={(l) => (l.expired ? "opacity-60" : "")}
       />
 
-      {p?.kind === "details" && current && (
-        <DetailsPanel
-          key={current.id}
-          title={callTitle(current)}
-          subtitle="Shared link"
-          badges={
-            current.expired ? (
-              <span className="badge badge-ghost badge-sm">expired</span>
-            ) : (
-              <span className="badge badge-success badge-sm">active</span>
-            )
-          }
-          onClose={() => {
-            setPending(false);
-            setError(null);
-            panel.close();
-          }}
-        >
-          <FactList facts={facts} />
-          {error && (
-            <div role="alert" className="alert alert-error text-sm">
-              {error}
-            </div>
-          )}
-          {pending ? (
-            <InlineConfirm
-              title="Revoke this link?"
-              text="Anyone who has the link loses access to the call. The call itself is kept. You can undo for ten seconds."
-              button="Revoke"
-              danger
-              busy={busy}
-              onCancel={() => setPending(false)}
-              onConfirm={() =>
-                void revokeOne(current).then((failed) => {
-                  setPending(false);
-                  if (failed !== null) setError(failed);
-                  else panel.close();
-                })
-              }
-            />
-          ) : (
-            <PanelSection title="Link">
-              <ActionButton
-                icon={<Copy className="h-4 w-4" />}
-                label="Copy link"
-                hint="Puts the public address on the clipboard."
-                disabled={current.expired}
-                onClick={() => void copy(current)}
-              />
-              <a
-                href={`/call/${current.token}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-block justify-start gap-3 text-left font-normal"
-              >
-                <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                <span>
-                  <span className="block font-medium">Open shared page</span>
-                  <span className="block text-xs text-base-content-dim">
-                    Plays the call the way a visitor sees it, in a new tab.
-                  </span>
-                </span>
-              </a>
-              <ActionButton
-                icon={<Trash2 className="h-4 w-4" />}
-                label="Revoke"
-                hint="The link stops working. The call is kept."
-                danger
-                onClick={() => setPending(true)}
-              />
-            </PanelSection>
-          )}
-        </DetailsPanel>
-      )}
+      <p className="text-xs text-base-content-dim">
+        {expiryDays > 0
+          ? `Links expire after ${plural(expiryDays, "day")}.`
+          : "Links don't expire unless their own share set a date."}{" "}
+        <Link to="/admin/settings?q=Links%20expire" className="link text-secondary">
+          Change in Settings
+        </Link>
+        .
+      </p>
 
       {p?.kind === "bulk" && (
         <DetailsPanel
@@ -408,7 +349,7 @@ export default function SharedLinksPanel() {
           onClose={panel.close}
         >
           {error && (
-            <div role="alert" className="alert alert-error text-sm">
+            <div role="alert" className="alert alert-error">
               {error}
             </div>
           )}
@@ -420,24 +361,6 @@ export default function SharedLinksPanel() {
             busy={busy}
             onCancel={panel.close}
             onConfirm={() => void revokeSelected()}
-          />
-        </DetailsPanel>
-      )}
-
-      {p?.kind === "expired" && (
-        <DetailsPanel title="Revoke expired links" onClose={panel.close}>
-          {error && (
-            <div role="alert" className="alert alert-error text-sm">
-              {error}
-            </div>
-          )}
-          <InlineConfirm
-            title={`Revoke ${plural(expiredCount, "expired link")}?`}
-            text="They no longer work anyway; this just tidies the list. The calls are kept."
-            button="Revoke expired"
-            busy={busy}
-            onCancel={panel.close}
-            onConfirm={() => void revokeAllExpired()}
           />
         </DetailsPanel>
       )}

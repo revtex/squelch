@@ -483,6 +483,7 @@ export interface SharedLinkAdmin {
   createdAt: number;
   sharedBy: string;
   dateTime: number;
+  /** The call's length in milliseconds. */
   duration: number;
   systemLabel: string;
   talkgroupLabel: string;

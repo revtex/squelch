@@ -17,7 +17,7 @@ const links: SharedLinkAdmin[] = [
     createdAt: now - 3600,
     sharedBy: "alice",
     dateTime: now - 7200,
-    duration: 65,
+    duration: 41_000,
     systemLabel: "County PD",
     talkgroupLabel: "PD Disp",
     talkgroupName: "Police Dispatch",
@@ -35,7 +35,7 @@ const links: SharedLinkAdmin[] = [
     createdAt: now - 10 * 86_400,
     sharedBy: "bob",
     dateTime: now - 11 * 86_400,
-    duration: 12,
+    duration: 72_000,
     systemLabel: "Fire",
     talkgroupLabel: "FD Tac 1",
     talkgroupName: "",
@@ -85,12 +85,15 @@ describe("SharedLinksPanel", () => {
     renderPanel();
     const table = screen.getByRole("table", { name: "Shared links" });
     const active = within(table).getByText("PD Disp").closest("tr")!;
-    expect(within(active).getByText("by alice")).toBeInTheDocument();
-    expect(within(active).getByText("3")).toBeInTheDocument();
-    expect(within(active).getByText(/in 1d|in 23h/)).toBeInTheDocument();
+    expect(within(active).getByText(/^alice · /)).toBeInTheDocument();
+    expect(within(active).getByText("3 times")).toBeInTheDocument();
+    expect(within(active).getByText("0:41")).toBeInTheDocument();
+    expect(within(active).getByText(/in 1 d|in 23 h/)).toBeInTheDocument();
     const old = within(table).getByText("FD Tac 1").closest("tr")!;
-    expect(within(old).getByText("expired")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Revoke 1 expired link" })).toBeInTheDocument();
+    expect(within(old).getByText(/^expired/)).toBeInTheDocument();
+    expect(within(old).getByText("1:12")).toBeInTheDocument();
+    expect(within(old).queryByRole("button", { name: /Copy the link/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Revoke expired/ })).toHaveTextContent("1");
   });
 
   it("filters to expired links and searches by user", async () => {
@@ -105,28 +108,21 @@ describe("SharedLinksPanel", () => {
     expect(screen.queryByText("FD Tac 1")).toBeNull();
   });
 
-  it("copies the public link from the details panel", async () => {
+  it("copies the public link and opens the call from its row", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: "Details for PD Disp" }));
-    const details = within(screen.getByRole("dialog", { name: "PD Disp" }));
-    expect(details.getByText("3 times, last 1m ago")).toBeInTheDocument();
-    await user.click(details.getByRole("button", { name: "Copy link" }));
+    await user.click(screen.getByRole("button", { name: "Copy the link to PD Disp" }));
     expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/call/tok-active`);
-    expect(details.getByRole("link", { name: /Open shared page/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Listen to PD Disp" })).toHaveAttribute(
       "href",
       "/call/tok-active",
     );
   });
 
-  it("revokes with confirmation and offers an undo that restores the same token", async () => {
+  it("revokes from the row and offers an undo that restores the same token", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: "Details for PD Disp" }));
-    const details = within(screen.getByRole("dialog", { name: "PD Disp" }));
-    await user.click(details.getByRole("button", { name: "Revoke" }));
-    expect(deleteOp).not.toHaveBeenCalled();
-    await user.click(details.getByRole("button", { name: "Revoke" }));
+    await user.click(screen.getByRole("button", { name: "Revoke the link to PD Disp" }));
     expect(deleteOp).toHaveBeenCalledWith(1);
     const toast = await screen.findByRole("status");
     await user.click(within(toast).getByRole("button", { name: "Undo" }));
@@ -142,9 +138,7 @@ describe("SharedLinksPanel", () => {
   it("revokes every expired link from the header button", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("button", { name: "Revoke 1 expired link" }));
-    const sheet = within(screen.getByRole("dialog", { name: "Revoke expired links" }));
-    await user.click(sheet.getByRole("button", { name: "Revoke expired" }));
+    await user.click(screen.getByRole("button", { name: /Revoke expired/ }));
     expect(revokeExpiredOp).toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("Revoked 1 expired link.");
   });

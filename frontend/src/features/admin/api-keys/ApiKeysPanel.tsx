@@ -6,6 +6,7 @@ import {
   PageHeader,
   SearchBox,
   formatAgo,
+  formatDay,
   useCreateApiKeyMutation,
   useDeleteApiKeyMutation,
   useDetails,
@@ -33,7 +34,6 @@ import {
 
 type Panel =
   | { key: string; kind: "details"; id: number }
-  | { key: string; kind: "edit"; id: number }
   | { key: string; kind: "create" }
   | {
       key: string;
@@ -105,9 +105,64 @@ export default function ApiKeysPanel() {
       phone: "title",
       sortValue: (k) => keyName(k),
       cell: (k) => (
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <>
           <span className="font-medium">{keyName(k)}</span>
-          <span className="font-mono text-xs text-base-content-dim">{k.fingerprint}</span>
+          <span className="block text-xs text-base-content-dim">
+            <span className="font-mono">{k.fingerprint}</span> · created{" "}
+            {formatDay(k.createdAt)}
+          </span>
+        </>
+      ),
+    },
+    {
+      id: "systems",
+      header: "Systems",
+      cell: (k) => systemsLabel(k, systemList),
+    },
+    {
+      id: "rate",
+      header: "Rate limit",
+      sortValue: (k) => k.callRateLimit ?? defaultRate,
+      cell: (k) =>
+        k.callRateLimit != null ? (
+          `${k.callRateLimit} / min`
+        ) : (
+          <>
+            {defaultRate} / min <span className="text-base-content-dim">(default)</span>
+          </>
+        ),
+    },
+    {
+      id: "lastUsed",
+      header: "Last used",
+      sortValue: (k) => -(k.lastUsedAt ?? 0),
+      cell: (k) =>
+        k.lastUsedAt ? (
+          <>
+            {formatAgo(k.lastUsedAt)}
+            {k.lastUsedIp && (
+              <>
+                {" · "}
+                <span className="font-mono">{k.lastUsedIp}</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="text-base-content-dim">never</span>
+        ),
+    },
+    {
+      id: "calls",
+      header: "Calls 24 h",
+      sortValue: (k) => k.calls24h,
+      cell: (k) => (
+        <span className="inline-flex flex-wrap items-center gap-1.5 tabular-nums">
+          {k.calls24h.toLocaleString()}
+          {k.legacy24h > 0 && (
+            <span className="badge badge-warning" title="Uploads on the deprecated /api/* endpoints">
+              legacy
+            </span>
+          )}
         </span>
       ),
     },
@@ -117,51 +172,15 @@ export default function ApiKeysPanel() {
       sortValue: (k) => keyStatus(k).id,
       cell: (k) => {
         const s = keyStatus(k);
-        return (
-          <span className="flex flex-wrap gap-1">
-            <span className={`badge badge-sm ${s.badge}`}>{s.label}</span>
-            {k.legacy24h > 0 && (
-              <span className="badge badge-warning badge-sm">legacy uploads</span>
-            )}
-          </span>
-        );
+        return <span className={`badge ${s.badge}`}>{s.label}</span>;
       },
-    },
-    {
-      id: "systems",
-      header: "Systems",
-      cell: (k) => systemsLabel(k, systemList),
-    },
-    {
-      id: "rate",
-      header: "Rate",
-      align: "right",
-      phone: "hide",
-      sortValue: (k) => k.callRateLimit ?? defaultRate,
-      cell: (k) => (k.callRateLimit != null ? `${k.callRateLimit}/min` : "default"),
-    },
-    {
-      id: "calls",
-      header: "Calls, 24 h",
-      align: "right",
-      sortValue: (k) => k.calls24h,
-      cell: (k) => (k.calls24h > 0 ? k.calls24h.toLocaleString() : "—"),
-    },
-    {
-      id: "lastUsed",
-      header: "Last used",
-      sortValue: (k) => k.lastUsedAt ?? 0,
-      cell: (k) =>
-        k.lastUsedAt ? (
-          <span title={k.lastUsedIp ?? undefined}>{formatAgo(k.lastUsedAt)}</span>
-        ) : (
-          <span className="text-base-content-dim">never</span>
-        ),
     },
   ];
 
-  const openDetails = (k: AdminApiKey, trigger: HTMLElement) =>
+  const openDetails = (k: AdminApiKey, trigger: HTMLElement) => {
+    setFormError(null);
     panel.open({ key: `details:${k.id}`, kind: "details", id: k.id }, trigger);
+  };
 
   const closeForm = () => {
     setFormError(null);
@@ -187,15 +206,16 @@ export default function ApiKeysPanel() {
     }
   };
 
-  const onUpdate = async (k: AdminApiKey, values: ApiKeyFormValues) => {
+  const onUpdate = async (k: AdminApiKey, values: ApiKeyFormValues): Promise<boolean> => {
     setBusy(true);
     setFormError(null);
     try {
       await updateKey({ id: k.id, ...values, order: k.order }).unwrap();
       toast.success(`Saved ${values.ident || keyName(k)}.`);
-      panel.replace({ key: `details:${k.id}`, kind: "details", id: k.id });
+      return true;
     } catch (e) {
       setFormError(message(e, "Failed to save the key."));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -246,15 +266,21 @@ export default function ApiKeysPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="API keys"
-        subtitle="What recorders use to upload calls. Each key can be limited to some systems and rate-limited."
+        subtitle={
+          <>
+            Each recorder that uploads calls gets its own key, sent as{" "}
+            <span className="font-mono">Authorization: Bearer</span>. Restrict a key to
+            the systems it should feed.
+          </>
+        }
         actions={
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary"
             onClick={() => panel.open({ key: "create", kind: "create" })}
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Add key
+            Create key
           </button>
         }
       />
@@ -263,8 +289,8 @@ export default function ApiKeysPanel() {
         <SearchBox
           value={query}
           onChange={setQuery}
-          label="Search by label, fingerprint, system or address"
-          className="w-full sm:w-80"
+          label="Filter by label, system or address"
+          className="w-full md:min-w-[200px] md:max-w-[340px] md:flex-[1_1_240px]"
         />
         <FilterChips
           label="Show"
@@ -272,7 +298,7 @@ export default function ApiKeysPanel() {
           onChange={setFilter}
           options={[
             { id: "all", label: "All", count: counts.all },
-            { id: "active", label: "Active", count: counts.active },
+            { id: "active", label: "Enabled", count: counts.active },
             { id: "disabled", label: "Disabled", count: counts.disabled },
             { id: "legacy", label: "Legacy uploads", count: counts.legacy },
             { id: "unused", label: "Never used", count: counts.unused },
@@ -288,7 +314,7 @@ export default function ApiKeysPanel() {
         loading={isLoading}
         empty={
           all.length === 0
-            ? "No keys yet. Add one and put its secret in your recorder."
+            ? "No keys yet. Create one and put its secret in your recorder."
             : "No key matches that search."
         }
         defaultSort={{ id: "label", dir: "asc" }}
@@ -304,7 +330,8 @@ export default function ApiKeysPanel() {
           systems={systemList}
           defaultRate={defaultRate}
           busy={busy}
-          onEdit={() => panel.replace({ key: `edit:${current.id}`, kind: "edit", id: current.id })}
+          saveError={formError}
+          onSave={(values) => onUpdate(current, values)}
           onAction={(action) => act(current, action)}
           onClose={panel.close}
         />
@@ -312,25 +339,11 @@ export default function ApiKeysPanel() {
 
       {p?.kind === "create" && (
         <ApiKeyForm
-          apiKey={null}
           systems={systemList}
           defaultRate={defaultRate}
           busy={busy}
           error={formError}
           onSubmit={(values) => void onCreate(values)}
-          onClose={closeForm}
-        />
-      )}
-
-      {p?.kind === "edit" && current && (
-        <ApiKeyForm
-          key={current.id}
-          apiKey={current}
-          systems={systemList}
-          defaultRate={defaultRate}
-          busy={busy}
-          error={formError}
-          onSubmit={(values) => void onUpdate(current, values)}
           onClose={closeForm}
         />
       )}

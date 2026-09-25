@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import UsersPanel from "./UsersPanel";
 import { ToastProvider } from "@/features/admin/_shell";
-import type { AdminLockoutsList, AdminSystem, AdminUser } from "@/types";
+import type {
+  AdminConnectionsList,
+  AdminLockoutsList,
+  AdminSystem,
+  AdminUser,
+} from "@/types";
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -83,6 +88,26 @@ const deleteOp = vi.fn<Op>();
 const signOutOp = vi.fn<Op>();
 const clearLockoutOp = vi.fn<Op>();
 let lockouts: AdminLockoutsList;
+const connections: AdminConnectionsList = {
+  geoip: { enabled: false, credit: null },
+  connections: [
+    {
+      id: "c1",
+      kind: "listener",
+      userId: 1,
+      username: "admin",
+      role: "admin",
+      familyId: null,
+      ip: "203.0.113.9",
+      userAgent: "Squelch/1.4 (Android)",
+      native: true,
+      protocol: "v1",
+      connectedAt: now - 7800,
+      self: false,
+      trusted: false,
+    },
+  ],
+} as AdminConnectionsList;
 const mutation = (fn: Op) => [
   (arg: unknown) => ({ unwrap: () => fn(arg) }),
   { isLoading: false, isError: false },
@@ -103,6 +128,7 @@ vi.mock("@/features/admin/_shell", async (importOriginal) => ({
   useSignOutUserMutation: () => mutation(signOutOp),
   useListLockoutsQuery: () => ({ data: lockouts, refetch: vi.fn() }),
   useClearLockoutMutation: () => mutation(clearLockoutOp),
+  useListConnectionsQuery: () => ({ data: connections }),
 }));
 
 function renderPanel(url = "/admin/users") {
@@ -139,9 +165,13 @@ describe("UsersPanel", () => {
     const alice = within(table).getByText("alice").closest("tr")!;
     expect(within(alice).getByText("temporary password")).toBeInTheDocument();
     expect(within(alice).getByText("County PD")).toBeInTheDocument();
-    expect(within(alice).getByText("2h ago")).toBeInTheDocument();
+    expect(within(alice).getByText(/^(Today|Yesterday) .* · 198\.51\.100\.4$/)).toBeInTheDocument();
+    expect(within(alice).getByText("limit 2 connections")).toBeInTheDocument();
     const bob = within(table).getByText("bob").closest("tr")!;
-    expect(within(bob).getByText("Disabled")).toBeInTheDocument();
+    expect(within(bob).getByText("disabled")).toBeInTheDocument();
+    expect(within(bob).getByText("never")).toBeInTheDocument();
+    const admin = within(table).getByRole("button", { name: "Details for admin" }).closest("tr")!;
+    expect(within(admin).getByText(/^Primary admin/)).toBeInTheDocument();
     expect(screen.getByText("you")).toBeInTheDocument();
   });
 
@@ -185,7 +215,8 @@ describe("UsersPanel", () => {
     const user = userEvent.setup();
     renderPanel();
     const panel = await openDetails(user, "alice");
-    expect(panel.getByText("1 signed-in device")).toBeInTheDocument();
+    expect(panel.getByText("1 signed in")).toBeInTheDocument();
+    expect(panel.getByText("Temporary. Must change it at next sign in.")).toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: "Reset password" }));
     const reset = within(
       screen.getByRole("dialog", { name: "Reset password for alice" }),
@@ -208,6 +239,19 @@ describe("UsersPanel", () => {
     );
   });
 
+  it("shows who is live now and keeps the primary admin's account actions", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const panel = await openDetails(user, "admin");
+    expect(panel.getByText(/can't be disabled, deleted or demoted/)).toBeInTheDocument();
+    const live = within(panel.getByRole("region", { name: "Live now · 1" }));
+    expect(live.getByText("LIVE")).toBeInTheDocument();
+    expect(live.getByText("Squelch app")).toBeInTheDocument();
+    expect(live.getByText(/connected 2 h 10 m/)).toBeInTheDocument();
+    expect(panel.queryByRole("button", { name: "Delete user" })).toBeNull();
+    expect(panel.queryByRole("button", { name: "Disable account" })).toBeNull();
+  });
+
   it("toggles the require-change flag in place", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -225,10 +269,10 @@ describe("UsersPanel", () => {
     deleteOp.mockRejectedValueOnce(new Error("cannot delete the primary admin account"));
     renderPanel();
     const panel = await openDetails(user, "bob");
-    await user.click(panel.getByRole("button", { name: "Delete" }));
+    await user.click(panel.getByRole("button", { name: "Delete user" }));
     expect(deleteOp).not.toHaveBeenCalled();
     expect(panel.getByText("Delete bob?")).toBeInTheDocument();
-    await user.click(panel.getByRole("button", { name: "Delete" }));
+    await user.click(panel.getByRole("button", { name: "Delete user" }));
     expect(deleteOp).toHaveBeenCalledWith(3);
     expect(await panel.findByRole("alert")).toHaveTextContent(
       "cannot delete the primary admin account",
@@ -259,7 +303,7 @@ describe("UsersPanel", () => {
     renderPanel();
     const card = within(screen.getByRole("region", { name: "Sign-in lockouts" }));
     expect(card.getByText("203.0.113.50")).toBeInTheDocument();
-    expect(card.getByText(/locked, lifts in/)).toBeInTheDocument();
+    expect(card.getByText(/lifts in/)).toBeInTheDocument();
     await user.click(card.getByRole("button", { name: "Clear" }));
     expect(clearLockoutOp).toHaveBeenCalledWith("203.0.113.50");
   });

@@ -56,7 +56,7 @@ export function useConnectionActions() {
 
   const disconnect = useCallback(
     async (t: DisconnectTarget): Promise<string | null> => {
-      const who = t.username || "the anonymous listener";
+      const who = t.username || "the public listener";
       try {
         await disconnectOp(t.id).unwrap();
         setNotice({ kind: "success", text: `Disconnected ${who}.` });

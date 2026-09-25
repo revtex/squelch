@@ -252,6 +252,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Users, Connections, API keys and Shared links match the redesign.**
+  Users shows each account's role, sessions and last sign-in in the table,
+  with an Admins chip. A user's panel lists who is live now, with links to
+  their connections and devices. Sign-in lockouts sit in a card below the
+  table. Connections tables turn into cards on a phone. Each connection
+  names its browser and system, such as "Chrome 129 · Windows". History
+  filters by range and type with chips, and removing a block asks first in
+  the page. API keys are edited in their details panel, which also copies
+  a test command. The user and key forms pick systems with an "All
+  systems" chip that covers systems added later. Shared links has Copy
+  link, Listen and Revoke on each row, with Undo, and Revoke expired in
+  the header. Across the admin, times read as the redesign writes them:
+  "2 h 41 m", "3 min ago", "in 28 d", and dates as 2026-09-22.
 - **The admin's sidebar and top bar are laid out like the redesign.**
   Trunk Recorder and Logs & audit sit under Overview. API keys and Shared
   links moved to People & access, and Transcription to Radio data. Systems
@@ -302,6 +315,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Shared links show each call's real length.** The page read the call's
+  length in milliseconds as seconds, so an eight-second call showed as over
+  two hours.
 - **Text on coloured badges, buttons and alerts is readable in every
   theme.** The themes gave no text colour for their info, success,
   warning, error, accent and secondary fills, so labels such as

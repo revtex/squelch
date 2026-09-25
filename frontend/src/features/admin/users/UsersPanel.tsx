@@ -10,11 +10,12 @@ import {
   PageHeader,
   SearchBox,
   formatAgo,
-  formatDate,
+  formatWhen,
   plural,
   useCreateUserMutation,
   useDeleteUserMutation,
   useDetails,
+  useHour12,
   useOpenParam,
   useListSystemsQuery,
   useListUsersQuery,
@@ -33,6 +34,7 @@ import {
   matchesStatus,
   systemsSummary,
   userStatus,
+  userSubline,
   type StatusFilter,
 } from "./status";
 
@@ -98,6 +100,7 @@ export default function UsersPanel() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
+  const hour12 = useHour12();
   const userIds = useMemo(() => users?.map((u) => u.id), [users]);
   useOpenParam(userIds, (id) => panel.open({ key: `user:${id}`, kind: "details", id }));
 
@@ -112,9 +115,10 @@ export default function UsersPanel() {
     [all, status, search, systemList, now],
   );
   const counts = useMemo(() => {
-    const c = { all: all.length, active: 0, disabled: 0, expired: 0, temporary: 0 };
+    const c = { all: all.length, admins: 0, active: 0, disabled: 0, expired: 0, temporary: 0 };
     for (const u of all) {
       c[userStatus(u, now).id]++;
+      if (u.role === "admin") c.admins++;
       if (u.passwordNeedChange === 1) c.temporary++;
     }
     return c;
@@ -251,15 +255,19 @@ export default function UsersPanel() {
       header: "User",
       phone: "title",
       sortValue: (u) => u.username,
-      cell: (u) => (
-        <span className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium">{u.username}</span>
-          {u.role === "admin" && (
-            <span className="badge badge-primary badge-xs">admin</span>
-          )}
-          {isSelf(u) && <span className="badge badge-ghost badge-xs">you</span>}
-        </span>
-      ),
+      cell: (u) => {
+        const sub = userSubline(u, now);
+        return (
+          <>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium">{u.username}</span>
+              {u.role === "admin" && <span className="badge admin-badge-role">admin</span>}
+              {isSelf(u) && <span className="badge badge-secondary">you</span>}
+            </span>
+            {sub && <span className="mt-0.5 block text-xs text-base-content-dim">{sub}</span>}
+          </>
+        );
+      },
     },
     {
       id: "status",
@@ -269,9 +277,9 @@ export default function UsersPanel() {
         const s = userStatus(u, now);
         return (
           <span className="flex flex-wrap gap-1">
-            <span className={`badge badge-sm ${s.badge}`}>{s.label}</span>
+            <span className={`badge ${s.badge}`}>{s.label}</span>
             {u.passwordNeedChange === 1 && (
-              <span className="badge badge-info badge-sm">temporary password</span>
+              <span className="badge badge-warning">temporary password</span>
             )}
           </span>
         );
@@ -280,42 +288,31 @@ export default function UsersPanel() {
     {
       id: "systems",
       header: "Systems",
+      cell: (u) => systemsSummary(u, systemList),
+    },
+    {
+      id: "sessions",
+      header: "Sessions",
+      sortValue: (u) => u.liveConnections * 10_000 + u.devices,
       cell: (u) => (
-        <span className="text-base-content/80">{systemsSummary(u, systemList)}</span>
+        <span className="tabular-nums">
+          {u.liveConnections} live · {plural(u.devices, "device")}
+        </span>
       ),
     },
     {
-      id: "live",
-      header: "Live",
-      align: "right",
-      sortValue: (u) => u.liveConnections,
-      cell: (u) => (u.liveConnections > 0 ? u.liveConnections : "—"),
-    },
-    {
-      id: "devices",
-      header: "Devices",
-      align: "right",
-      sortValue: (u) => u.devices,
-      cell: (u) => (u.devices > 0 ? u.devices : "—"),
-    },
-    {
       id: "lastSeen",
-      header: "Last seen",
+      header: "Last sign-in",
       sortValue: (u) => u.lastSeenAt ?? 0,
       cell: (u) =>
         u.lastSeenAt ? (
-          <span title={u.lastSeenIp ?? undefined}>{formatAgo(u.lastSeenAt, now)}</span>
+          <span title={formatAgo(u.lastSeenAt, now)}>
+            {formatWhen(u.lastSeenAt, { hour12, now })}
+            {u.lastSeenIp && ` · ${u.lastSeenIp}`}
+          </span>
         ) : (
-          <span className="text-admin-dim2">—</span>
+          <span className="text-base-content-dim">never</span>
         ),
-    },
-    {
-      id: "expiration",
-      header: "Expires",
-      phone: "hide",
-      sortValue: (u) => u.expiration ?? Number.MAX_SAFE_INTEGER,
-      cell: (u) =>
-        u.expiration ? formatDate(u.expiration) : <span className="text-admin-dim2">Never</span>,
     },
   ];
 
@@ -327,11 +324,11 @@ export default function UsersPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="Users"
-        subtitle="Who can sign in, what they can hear, and where they are signed in."
+        subtitle="Accounts that can sign in. Listeners hear the scanner; admins also get this panel."
         actions={
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary"
             onClick={(e) =>
               panel.open({ key: "create", kind: "create" }, e.currentTarget)
             }
@@ -342,12 +339,12 @@ export default function UsersPanel() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2.5">
         <SearchBox
           value={search}
           onChange={setSearch}
-          label="Search by name, role or system"
-          className="w-full sm:w-72"
+          label="Filter by name, role or system"
+          className="w-full md:max-w-[340px] md:min-w-[200px] md:flex-[1_1_240px]"
         />
         <FilterChips
           label="Status"
@@ -355,10 +352,10 @@ export default function UsersPanel() {
           onChange={setStatus}
           options={[
             { id: "all", label: "All", count: counts.all },
-            { id: "active", label: "Active", count: counts.active },
-            { id: "disabled", label: "Disabled", count: counts.disabled },
-            { id: "expired", label: "Expired", count: counts.expired },
+            { id: "admins", label: "Admins", count: counts.admins },
             { id: "temporary", label: "Temporary password", count: counts.temporary },
+            { id: "expired", label: "Expired", count: counts.expired },
+            { id: "disabled", label: "Disabled", count: counts.disabled },
           ]}
         />
       </div>
@@ -379,21 +376,21 @@ export default function UsersPanel() {
           <>
             <button
               type="button"
-              className="btn btn-xs"
+              className="btn btn-sm"
               onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "signout" })}
             >
               Sign out
             </button>
             <button
               type="button"
-              className="btn btn-xs"
+              className="btn btn-sm"
               onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "disable" })}
             >
               Disable
             </button>
             <button
               type="button"
-              className="btn btn-xs btn-error btn-outline"
+              className="btn btn-sm btn-error"
               onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "delete" })}
             >
               Delete
@@ -404,6 +401,12 @@ export default function UsersPanel() {
         rowLabel={(u) => u.username}
         openKey={p?.kind === "details" ? p.id : null}
       />
+
+      <p className="text-xs text-base-content-dim">
+        An address that fails to sign in 3 times in 10 minutes is locked out
+        for 10 minutes. Locked addresses are listed here while they last, and
+        can be let back in early.
+      </p>
 
       <LockoutsCard />
 

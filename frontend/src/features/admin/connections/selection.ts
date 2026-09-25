@@ -1,3 +1,4 @@
+import { formatDateTime, formatDuration } from "@/features/admin/_shell";
 import type {
   AddressPlace,
   AdminConnection,
@@ -8,8 +9,6 @@ import type {
 import {
   KIND_LABELS,
   clientLabel,
-  formatDateTime,
-  formatDuration,
   reasonLabel,
 } from "./format";
 import type {
@@ -67,7 +66,7 @@ export function liveSelection(
   showCountry: boolean,
 ): Selection {
   const anonymous = c.userId === null;
-  const title = anonymous ? "Anonymous" : c.username;
+  const title = anonymous ? "Public listener" : c.username;
   return {
     key: `live:${c.id}`,
     title,
@@ -143,7 +142,7 @@ export function historySelection(
       : reasonLabel(e.disconnectReason).toLowerCase() || "ended";
   return {
     key: `history:${e.id}`,
-    title: anonymous ? "Anonymous" : username,
+    title: anonymous ? "Public listener" : username,
     anonymous,
     kind: e.kind,
     role: "",

@@ -1,5 +1,5 @@
-import { ShieldAlert } from "lucide-react";
 import {
+  Card,
   formatAgo,
   formatUntil,
   useClearLockoutMutation,
@@ -31,29 +31,26 @@ export default function LockoutsCard() {
   };
 
   return (
-    <section
-      aria-labelledby="lockouts-title"
-      className="rounded-box border border-warning/40 bg-base-200 p-4"
+    <Card
+      title="Sign-in lockouts"
+      count={lockouts.length}
+      meta={`${MAX_FAILURES} failures lock an address out for 10 minutes`}
+      bodyClassName=""
     >
-      <h3 id="lockouts-title" className="flex items-center gap-2 font-semibold">
-        <ShieldAlert className="h-4 w-4 text-warning" aria-hidden="true" />
-        Sign-in lockouts
-      </h3>
-      <p className="mt-1 text-sm text-base-content-dim">
-        An address is locked out for ten minutes after {MAX_FAILURES} failed
-        sign-ins. Clear one to let it try again now.
-      </p>
-      <ul className="mt-3 divide-y divide-admin-line">
+      <ul>
         {lockouts.map((l) => (
           <li
             key={l.ip}
-            className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-admin-line2 px-4 py-2.5 text-sm last:border-b-0"
           >
-            <span className="min-w-0">
+            <span className={`badge ${l.lockedUntil ? "badge-error" : "badge-warning"}`}>
+              {l.lockedUntil ? "locked" : "counting"}
+            </span>
+            <span className="min-w-0 flex-1">
               <span className="font-mono">{l.ip}</span>
-              <span className="ml-2 text-base-content-dim">
+              <span className="block text-xs text-base-content-dim sm:ml-2 sm:inline">
                 {l.lockedUntil
-                  ? `locked, lifts ${formatUntil(l.lockedUntil)}`
+                  ? `lifts ${formatUntil(l.lockedUntil)}`
                   : `${l.failures} of ${MAX_FAILURES} attempts used`}
                 {" · "}last failure {formatAgo(l.lastFailure)}
               </span>
@@ -68,6 +65,6 @@ export default function LockoutsCard() {
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }

@@ -1,14 +1,19 @@
-import { useListConnectionsQuery, OpenButton } from "@/features/admin/_shell";
-import type { AdminConnection } from "@/types";
 import {
-  KIND_LABELS,
-  clientLabel,
+  DataTable,
   formatDateTime,
   formatDuration,
+  useListConnectionsQuery,
+  useNow,
+  type Column,
+} from "@/features/admin/_shell";
+import type { AdminConnection } from "@/types";
+import {
+  KIND_BADGE,
+  KIND_LABELS,
+  deviceLabel,
 } from "./format";
-import { useNow } from "./useNow";
 import type { HistoryLink } from "./types";
-import { CountryCell, GeoIPCredit } from "./Country";
+import { AddressCell, CountryCell, GeoIPCredit } from "./Country";
 import { placeText } from "./place";
 import { liveSelection, type OpenDetails } from "./selection";
 
@@ -36,146 +41,91 @@ export default function LiveTab({
   const { data, isLoading, isError } = useListConnectionsQuery();
   const now = useNow(15_000);
 
-  if (isLoading && !data) {
-    return (
-      <div className="flex justify-center py-12">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
   if (isError) {
     return <div className="alert alert-error">Failed to load connections.</div>;
   }
 
   const rows = (data?.connections ?? []).filter((c) => matches(c, search));
   const showCountry = data?.geoip.enabled ?? false;
-  if (rows.length === 0) {
-    return (
-      <div className="text-base-content-dim py-8 text-center">
-        {search ? "No connections match." : "Nobody is connected right now."}
-      </div>
-    );
-  }
+
+  const columns: Column<AdminConnection>[] = [
+    {
+      id: "who",
+      header: "Who",
+      phone: "title",
+      sortValue: (c) => c.username || "~",
+      cell: (c) => (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {c.userId !== null ? (
+              <button
+                type="button"
+                className="link link-hover font-medium"
+                onClick={() =>
+                  onShowHistory({ userId: c.userId ?? undefined, label: c.username })
+                }
+                title={`Show ${c.username}'s connection history`}
+              >
+                {c.username}
+              </button>
+            ) : (
+              <span className="text-base-content-dim">Public listener</span>
+            )}
+            {c.role === "admin" && <span className="badge admin-badge-role">admin</span>}
+            {c.self && <span className="badge badge-secondary">you</span>}
+          </div>
+          <div className="text-xs text-base-content-dim" title={c.userAgent || undefined}>
+            {deviceLabel(c.userAgent, c.native)}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "type",
+      header: "Type",
+      sortValue: (c) => KIND_LABELS[c.kind],
+      cell: (c) => <span className={`badge ${KIND_BADGE[c.kind]}`}>{KIND_LABELS[c.kind]}</span>,
+    },
+    {
+      id: "from",
+      header: "From",
+      sortValue: (c) => c.ip,
+      cell: (c) => (
+        <AddressCell
+          ip={c.ip}
+          trusted={c.trusted}
+          place={showCountry ? <CountryCell place={c} /> : null}
+          onShowHistory={onShowHistory}
+        />
+      ),
+    },
+    {
+      id: "connected",
+      header: "Connected",
+      sortValue: (c) => -c.connectedAt,
+      className: "whitespace-nowrap",
+      cell: (c) => (
+        <span title={formatDateTime(c.connectedAt)}>
+          {formatDuration(now - c.connectedAt)}
+        </span>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
-        <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
-          <thead>
-            <tr>
-              <th>Who</th>
-              <th className="hidden sm:table-cell">Type</th>
-              <th>From</th>
-              <th className="hidden sm:table-cell">Connected</th>
-              <th className="w-px">
-                <span className="sr-only">Details</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((c) => {
-              const key = `live:${c.id}`;
-              return (
-                <tr
-                  key={c.id}
-                  className={
-                    key === openKey ? "bg-base-300" : "hover:bg-base-200"
-                  }
-                >
-                  <td>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {c.userId !== null ? (
-                        <button
-                          type="button"
-                          className="link link-hover font-medium"
-                          onClick={() =>
-                            onShowHistory({
-                              userId: c.userId ?? undefined,
-                              label: c.username,
-                            })
-                          }
-                          title={`Show ${c.username}'s connection history`}
-                        >
-                          {c.username}
-                        </button>
-                      ) : (
-                        <span className="text-base-content-dim">Anonymous</span>
-                      )}
-                      {c.role === "admin" && (
-                        <span className="badge badge-ghost badge-xs">
-                          admin
-                        </span>
-                      )}
-                      {c.self && (
-                        <span className="badge badge-info badge-xs">you</span>
-                      )}
-                    </div>
-                    <span className="badge badge-outline badge-xs sm:hidden">
-                      {KIND_LABELS[c.kind]}
-                    </span>
-                    <div
-                      className="text-xs text-base-content-dim"
-                      title={c.userAgent || undefined}
-                    >
-                      {clientLabel(c.native)}
-                    </div>
-                  </td>
-                  <td className="hidden sm:table-cell">
-                    <span className="badge badge-outline badge-sm">
-                      {KIND_LABELS[c.kind]}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="break-all font-mono text-xs">
-                      {c.ip ? (
-                        <button
-                          type="button"
-                          className="link link-hover text-left"
-                          onClick={() =>
-                            onShowHistory({ ip: c.ip ?? undefined })
-                          }
-                          title={`Show connection history for ${c.ip}`}
-                        >
-                          {c.ip}
-                        </button>
-                      ) : (
-                        "-"
-                      )}
-                      {c.trusted && (
-                        <span
-                          className="badge badge-ghost badge-xs ml-1 font-sans"
-                          title="On the server's trusted list: can never be blocked"
-                        >
-                          trusted
-                        </span>
-                      )}
-                    </div>
-                    {showCountry && (
-                      <div className="text-xs">
-                        <CountryCell place={c} />
-                      </div>
-                    )}
-                  </td>
-                  <td className="hidden whitespace-nowrap text-sm sm:table-cell">
-                    <span title={formatDateTime(c.connectedAt)}>
-                      {formatDuration(now - c.connectedAt)}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    <OpenButton
-                      label={`Details for ${c.username || "anonymous"} (${KIND_LABELS[c.kind]})`}
-                      open={key === openKey}
-                      onOpen={(el) =>
-                        onOpen(liveSelection(c, now, showCountry), el)
-                      }
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex flex-col gap-2">
+      <DataTable
+        caption="Live connections"
+        columns={columns}
+        rows={rows}
+        rowKey={(c) => `live:${c.id}`}
+        rowLabel={(c) => `${c.username || "anonymous"} (${KIND_LABELS[c.kind]})`}
+        loading={isLoading && !data}
+        empty={search ? "No connections match." : "Nobody is connected right now."}
+        pageSize={0}
+        openKey={openKey ?? null}
+        onOpen={(c, el) => onOpen(liveSelection(c, now, showCountry), el)}
+      />
       <GeoIPCredit geoip={data?.geoip} />
     </div>
   );

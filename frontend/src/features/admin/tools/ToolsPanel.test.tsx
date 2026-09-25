@@ -92,7 +92,7 @@ describe("ToolsPanel", () => {
     ops.exportConfig.mockResolvedValue({ systems: [], settings: [] });
     renderPanel();
     expect(screen.getByRole("heading", { name: "Backup & import" })).toBeInTheDocument();
-    expect(screen.getByText("Last download 2d ago.")).toBeInTheDocument();
+    expect(screen.getByText("Last download 2 d ago.")).toBeInTheDocument();
     const table = within(screen.getByRole("table", { name: "Radio data" }));
     expect(table.getByText("531")).toBeInTheDocument();
     expect(table.getAllByText("across 2 systems")).toHaveLength(2);

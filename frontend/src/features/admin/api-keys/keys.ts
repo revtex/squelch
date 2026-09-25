@@ -35,11 +35,11 @@ export interface StatusInfo {
 }
 
 export function keyStatus(k: AdminApiKey, now = Date.now() / 1000): StatusInfo {
-  if (k.disabled === 1) return { id: "disabled", label: "Disabled", badge: "badge-ghost" };
+  if (k.disabled === 1) return { id: "disabled", label: "disabled", badge: "badge-neutral" };
   if (k.previousKeyExpiresAt && k.previousKeyExpiresAt > now) {
-    return { id: "rotating", label: "Rotating", badge: "badge-warning" };
+    return { id: "rotating", label: "rotating", badge: "badge-warning" };
   }
-  return { id: "active", label: "Active", badge: "badge-success" };
+  return { id: "active", label: "enabled", badge: "badge-success" };
 }
 
 export type StatusFilter = "all" | "active" | "disabled" | "legacy" | "unused";

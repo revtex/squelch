@@ -1,8 +1,17 @@
+import { useState } from "react";
 import {
+  Card,
+  DataTable,
+  InlineConfirm,
+  formatDateTime,
+  formatWhen,
   useDeleteIPBlockMutation,
+  useHour12,
   useListIPBlocksQuery,
+  type Column,
 } from "@/features/admin/_shell";
-import { formatDateTime } from "./format";
+import type { AdminIPBlock } from "@/types";
+
 import type { ConnectionActions } from "./useConnectionActions";
 
 function messageOf(e: unknown, fallback: string): string {
@@ -11,7 +20,9 @@ function messageOf(e: unknown, fallback: string): string {
 
 export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
   const { data, isLoading, isError } = useListIPBlocksQuery();
-  const [remove] = useDeleteIPBlockMutation();
+  const [remove, { isLoading: removing }] = useDeleteIPBlockMutation();
+  const hour12 = useHour12();
+  const [pending, setPending] = useState<AdminIPBlock | null>(null);
   const { setNotice, openBlock } = actions;
 
   if (isLoading && !data) {
@@ -34,23 +45,78 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
     );
   }
 
-  const handleRemove = async (id: number, cidr: string) => {
-    if (!window.confirm(`Remove the block on ${cidr}?`)) return;
+  const handleRemove = async (b: AdminIPBlock) => {
     try {
-      await remove(id).unwrap();
-      setNotice({ kind: "success", text: `Removed the block on ${cidr}.` });
+      await remove(b.id).unwrap();
+      setNotice({ kind: "success", text: `Removed the block on ${b.cidr}.` });
     } catch (e) {
       setNotice({
         kind: "error",
         text: messageOf(e, "Failed to remove the block."),
       });
     }
+    setPending(null);
   };
 
+  const when = (unix: number) => (
+    <span className="whitespace-nowrap" title={formatDateTime(unix)}>
+      {formatWhen(unix, { hour12 })}
+    </span>
+  );
+
+  const columns: Column<AdminIPBlock>[] = [
+    {
+      id: "cidr",
+      header: "Address",
+      phone: "title",
+      sortValue: (b) => b.cidr,
+      cell: (b) => <span className="break-all font-mono">{b.cidr}</span>,
+    },
+    {
+      id: "reason",
+      header: "Reason",
+      cell: (b) => b.reason || <span className="text-admin-dim2">-</span>,
+    },
+    {
+      id: "by",
+      header: "Added by",
+      sortValue: (b) => b.createdBy,
+      cell: (b) => b.createdBy ?? <span className="text-admin-dim2">-</span>,
+    },
+    {
+      id: "added",
+      header: "Added",
+      sortValue: (b) => -b.createdAt,
+      cell: (b) => when(b.createdAt),
+    },
+    {
+      id: "expires",
+      header: "Expires",
+      sortValue: (b) => b.expiresAt ?? Number.MAX_SAFE_INTEGER,
+      cell: (b) => (b.expiresAt ? when(b.expiresAt) : "Never"),
+    },
+    {
+      id: "remove",
+      header: "",
+      align: "right",
+      phone: "wide",
+      cell: (b) => (
+        <button
+          type="button"
+          className="btn btn-sm"
+          aria-label={`Remove the block on ${b.cidr}`}
+          onClick={() => setPending(b)}
+        >
+          Remove
+        </button>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-base-content-dim">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-[62ch] text-sm text-base-content-dim">
           Blocked addresses cannot reach this server at all, including uploads
           from recorders.
           {data.yourAddress && (
@@ -63,65 +129,34 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
         </p>
         <button
           type="button"
-          className="btn btn-sm btn-error"
+          className="btn btn-error"
           onClick={() => openBlock("")}
         >
           Block an address
         </button>
       </div>
 
-      {data.blocks.length === 0 ? (
-        <div className="text-base-content-dim py-6 text-center">
-          No addresses are blocked.
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
-          <table className="table table-zebra table-sm w-full">
-            <thead>
-              <tr>
-                <th>Address</th>
-                <th>Reason</th>
-                <th>Added by</th>
-                <th>Added</th>
-                <th>Expires</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.blocks.map((b) => (
-                <tr key={b.id}>
-                  <td className="font-mono text-xs">{b.cidr}</td>
-                  <td className="text-sm">{b.reason || "-"}</td>
-                  <td className="text-sm">{b.createdBy ?? "-"}</td>
-                  <td className="whitespace-nowrap text-sm">
-                    {formatDateTime(b.createdAt)}
-                  </td>
-                  <td className="whitespace-nowrap text-sm">
-                    {b.expiresAt ? formatDateTime(b.expiresAt) : "Never"}
-                  </td>
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      aria-label={`Remove the block on ${b.cidr}`}
-                      onClick={() => void handleRemove(b.id, b.cidr)}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {pending && (
+        <InlineConfirm
+          title={`Remove the block on ${pending.cidr}?`}
+          text="It can reach this server again straight away."
+          button="Remove block"
+          busy={removing}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void handleRemove(pending)}
+        />
       )}
 
-      <section aria-labelledby="never-blocked" className="space-y-1">
-        <h3 id="never-blocked" className="font-semibold">
-          Never blocked
-        </h3>
+      <DataTable
+        caption="Blocked addresses"
+        columns={columns}
+        rows={data.blocks}
+        rowKey={(b) => b.id}
+        empty="No addresses are blocked."
+        pageSize={0}
+      />
+
+      <Card title="Never blocked" count={data.trusted.length}>
         <p className="text-sm text-base-content-dim">
           These addresses can never be blocked from here. The list is set on the
           server with <code>--trusted-addresses</code>, so an admin account
@@ -134,7 +169,7 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
             </li>
           ))}
         </ul>
-      </section>
+      </Card>
     </div>
   );
 }

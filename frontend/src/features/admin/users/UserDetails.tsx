@@ -1,20 +1,30 @@
 import { useId, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Cable, KeyRound, LogOut, Pencil, Trash2, UserX, UserCheck } from "lucide-react";
+import { KeyRound, LogOut, Pencil, ShieldCheck, Trash2, UserX, UserCheck } from "lucide-react";
 import {
   ActionButton,
   DetailsPanel,
   FactList,
   InlineConfirm,
+  Notice,
   PanelSection,
-  formatAgo,
-  formatDate,
-  formatDateTime,
+  formatDay,
+  formatDuration,
+  formatWhen,
   plural,
+  useHour12,
+  useListConnectionsQuery,
+  useNow,
   type Fact,
 } from "@/features/admin/_shell";
-import type { AdminSystem, AdminUser } from "@/types";
+import type { AdminSystem, AdminUser, ConnectionKind } from "@/types";
 import { systemsLabel, userStatus } from "./status";
+
+const KIND: Record<ConnectionKind, string> = {
+  listener: "LIVE",
+  stream: "BKGND",
+  admin: "Admin",
+};
 
 export type UserAction = "signout" | "disable" | "enable" | "delete";
 
@@ -58,8 +68,8 @@ function question(action: UserAction, u: AdminUser, self: boolean): Question {
     case "delete":
       return {
         title: `Delete ${u.username}?`,
-        text: "The account, its devices and its bookmarks are removed for good. This cannot be undone.",
-        button: "Delete",
+        text: "The account, its devices and its bookmarks are removed for good. Calls and recordings are not affected. This can't be undone.",
+        button: "Delete user",
         danger: true,
       };
   }
@@ -93,10 +103,14 @@ export default function UserDetails({
 }: UserDetailsProps) {
   const id = useId();
   const navigate = useNavigate();
+  const hour12 = useHour12();
   const [pending, setPending] = useState<UserAction | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { data: connData } = useListConnectionsQuery();
   const status = userStatus(u);
   const primary = u.id === 1;
+  const now = useNow(15_000);
+  const live = (connData?.connections ?? []).filter((c) => c.userId === u.id);
 
   const run = async (action: UserAction) => {
     setError(null);
@@ -106,65 +120,124 @@ export default function UserDetails({
     else if (action === "delete") onClose();
   };
 
+  const openConnections = (tab: "live" | "devices") => {
+    onClose();
+    const params = new URLSearchParams({ tab, q: u.username });
+    navigate(`/admin/connections?${params.toString()}`);
+  };
+
   const facts: Fact[] = [
     { label: "Role", value: u.role === "admin" ? "Admin" : "Listener" },
-    { label: "Status", value: status.label },
     { label: "Systems", value: systemsLabel(u, systems) },
     {
       label: "Expires",
-      value: u.expiration ? formatDate(u.expiration) : "Never",
+      value: u.expiration
+        ? `${u.expiration < now ? "Expired" : ""} ${formatDay(u.expiration)}`.trim()
+        : "Never",
     },
     {
-      label: "Connections",
-      value:
-        u.limit != null
-          ? `${plural(u.liveConnections, "open connection")} · limit ${u.limit}`
-          : plural(u.liveConnections, "open connection"),
+      label: "Connection limit",
+      value: u.limit ? String(u.limit) : "Unlimited",
     },
-    { label: "Devices", value: plural(u.devices, "signed-in device") },
+    { label: "Devices", value: `${u.devices} signed in` },
     {
-      label: "Last seen",
-      value: u.lastSeenAt
-        ? `${formatAgo(u.lastSeenAt)}${u.lastSeenIp ? ` from ${u.lastSeenIp}` : ""}`
-        : "Not in the last 30 days",
+      label: "Last sign-in",
+      value: u.lastSeenAt ? (
+        <>
+          {formatWhen(u.lastSeenAt, { hour12 })}
+          {u.lastSeenIp && (
+            <>
+              {" from "}
+              <span className="font-mono">{u.lastSeenIp}</span>
+            </>
+          )}
+        </>
+      ) : (
+        "Not in the last 30 days"
+      ),
     },
-    { label: "Created", value: formatDateTime(u.createdAt) },
   ];
+  if (u.passwordNeedChange === 1) {
+    facts.push({ label: "Password", value: "Temporary. Must change it at next sign in." });
+  }
 
   const ask = pending ? question(pending, u, self) : null;
+  const created = `created ${formatDay(u.createdAt)}`;
+  const subtitle = primary
+    ? `Primary admin · ${created}`
+    : `${u.role === "admin" ? "Admin" : "Listener"} · ${created}`;
 
   return (
     <DetailsPanel
       title={u.username}
-      subtitle={u.role === "admin" ? "Admin account" : "Listener account"}
+      subtitle={subtitle}
       badges={
         <>
-          <span className={`badge badge-sm ${status.badge}`}>{status.label}</span>
+          {u.role === "admin" && <span className="badge admin-badge-role">admin</span>}
+          <span className={`badge ${status.badge}`}>{status.label}</span>
           {u.passwordNeedChange === 1 && (
-            <span className="badge badge-info badge-sm">temporary password</span>
+            <span className="badge badge-warning">temporary password</span>
           )}
-          {self && <span className="badge badge-ghost badge-sm">you</span>}
+          {self && <span className="badge badge-secondary">you</span>}
         </>
       }
       onClose={onClose}
     >
+      {primary && (
+        <Notice>
+          The primary admin can't be disabled, deleted or demoted.
+        </Notice>
+      )}
+
       <FactList facts={facts} />
 
-      {u.passwordNeedChange === 1 && (
-        <div className="alert alert-info text-sm">
-          This user must pick a new password the next time they sign in.
-        </div>
-      )}
-      {primary && (
-        <div className="alert text-sm">
-          This is the primary admin. It cannot be disabled or deleted.
-        </div>
-      )}
       {error && (
-        <div role="alert" className="alert alert-error text-sm">
+        <Notice tone="bad" role="alert">
           {error}
-        </div>
+        </Notice>
       )}
+
+      <PanelSection title={`Live now · ${live.length}`}>
+        {live.length > 0 ? (
+          <ul className="rounded-lg border border-admin-line bg-base-200">
+            {live.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-center gap-3 border-b border-admin-line2 px-3 py-2.5 last:border-b-0"
+              >
+                <span className="badge badge-info">{KIND[c.kind]}</span>
+                <span className="min-w-0 flex-1 text-sm">
+                  <span className="block truncate" title={c.userAgent || undefined}>
+                    {c.native ? "Squelch app" : "Browser"}
+                    {c.self && " · this browser"}
+                  </span>
+                  <span className="block text-xs text-base-content-dim">
+                    {c.ip && <span className="font-mono">{c.ip}</span>}
+                    {c.ip && " · "}connected {formatDuration(now - c.connectedAt)}
+                  </span>
+                </span>
+                <button type="button" className="btn btn-sm" onClick={() => openConnections("live")}>
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-base-content-dim">Not connected right now.</p>
+        )}
+        {u.devices > 0 && (
+          <p className="text-sm text-base-content-dim">
+            {plural(u.devices, "signed-in device")} can reconnect without a password.{" "}
+            <button
+              type="button"
+              className="link link-hover text-secondary"
+              onClick={() => openConnections("devices")}
+            >
+              See devices
+            </button>
+          </p>
+        )}
+      </PanelSection>
 
       {ask && pending ? (
         <InlineConfirm
@@ -177,103 +250,89 @@ export default function UserDetails({
           onConfirm={() => void run(pending)}
         />
       ) : (
-        <>
-          <PanelSection title="Account">
-            <ActionButton
-              icon={<Pencil className="h-4 w-4" />}
-              label="Edit"
-              hint="Name, role, systems, expiry and connection limit."
-              onClick={onEdit}
-            />
-            <ActionButton
-              icon={<KeyRound className="h-4 w-4" />}
-              label="Reset password"
-              hint="Set a temporary password and, if you like, sign them out."
-              onClick={onResetPassword}
-            />
-            <label
-              htmlFor={`${id}-needchange`}
-              className="flex cursor-pointer items-start justify-between gap-4 rounded-box border border-admin-line px-4 py-3"
-            >
-              <span className="min-w-0">
-                <span className="block font-medium">Require password change</span>
-                <span className="block text-xs text-base-content-dim">
-                  Asks for a new password at the next sign-in.
-                </span>
+        <PanelSection title="Actions">
+          <ActionButton
+            icon={<Pencil className="h-4 w-4" />}
+            label="Edit details"
+            hint={
+              primary
+                ? "Name and system access."
+                : "Role, expiry, connection limit, system access."
+            }
+            onClick={onEdit}
+          />
+          <ActionButton
+            icon={<KeyRound className="h-4 w-4" />}
+            label="Reset password"
+            hint="Sets a temporary password you hand over."
+            onClick={onResetPassword}
+          />
+          <label
+            htmlFor={`${id}-needchange`}
+            className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-admin-line bg-base-200 px-3.5 py-2.5"
+          >
+            <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">Require password change</span>
+              <span className="block text-xs text-base-content-dim">
+                {u.passwordNeedChange === 1 ? "On." : "Off."} Cleared automatically
+                once they set a new one.
               </span>
-              <input
-                id={`${id}-needchange`}
-                type="checkbox"
-                role="switch"
-                className="toggle toggle-primary shrink-0"
-                checked={u.passwordNeedChange === 1}
-                disabled={busy}
-                onChange={(e) => {
-                  setError(null);
-                  void onNeedChange(e.target.checked).then((failed) => {
-                    if (failed !== null) setError(failed);
-                  });
-                }}
-              />
-            </label>
-          </PanelSection>
-
-          <PanelSection title="Sessions">
-            {u.liveConnections > 0 && (
-              <ActionButton
-                icon={<Cable className="h-4 w-4" />}
-                label={`See ${plural(u.liveConnections, "live connection")}`}
-                hint="Opens Connections filtered to this user."
-                onClick={() => {
-                  onClose();
-                  navigate(
-                    `/admin/connections?user=${u.id}&name=${encodeURIComponent(u.username)}`,
-                  );
-                }}
-              />
-            )}
-            <ActionButton
-              icon={<LogOut className="h-4 w-4" />}
-              label="Sign out everywhere"
-              hint={
-                u.devices > 0
-                  ? `${plural(u.devices, "device")} will need the password again.`
-                  : "No device is signed in right now."
-              }
-              disabled={u.devices === 0 && u.liveConnections === 0}
-              onClick={() => setPending("signout")}
+            </span>
+            <input
+              id={`${id}-needchange`}
+              type="checkbox"
+              role="switch"
+              className="toggle shrink-0"
+              checked={u.passwordNeedChange === 1}
+              disabled={busy}
+              onChange={(e) => {
+                setError(null);
+                void onNeedChange(e.target.checked).then((failed) => {
+                  if (failed !== null) setError(failed);
+                });
+              }}
             />
-          </PanelSection>
-
-          {!primary && (
-            <PanelSection title="Danger zone">
-              {u.disabled === 1 ? (
-                <ActionButton
-                  icon={<UserCheck className="h-4 w-4" />}
-                  label="Enable"
-                  hint="Lets them sign in again."
-                  onClick={() => setPending("enable")}
-                />
-              ) : (
-                <ActionButton
-                  icon={<UserX className="h-4 w-4" />}
-                  label="Disable"
-                  hint="Signs them out everywhere and refuses sign-in. Nothing is deleted."
-                  disabled={self}
-                  onClick={() => setPending("disable")}
-                />
-              )}
+          </label>
+          <ActionButton
+            icon={<LogOut className="h-4 w-4" />}
+            label="Sign out everywhere"
+            hint={
+              u.devices > 0 || u.liveConnections > 0
+                ? `Drops ${plural(u.liveConnections, "live connection")} and ${plural(u.devices, "device")}. They sign in again with their password.`
+                : "No device is signed in right now."
+            }
+            disabled={u.devices === 0 && u.liveConnections === 0}
+            onClick={() => setPending("signout")}
+          />
+          {!primary &&
+            (u.disabled === 1 ? (
               <ActionButton
-                icon={<Trash2 className="h-4 w-4" />}
-                label="Delete"
-                hint="Removes the account for good."
-                danger
-                disabled={self}
-                onClick={() => setPending("delete")}
+                icon={<UserCheck className="h-4 w-4" />}
+                label="Enable account"
+                hint="Lets them sign in again."
+                onClick={() => setPending("enable")}
               />
-            </PanelSection>
+            ) : (
+              <ActionButton
+                icon={<UserX className="h-4 w-4" />}
+                label="Disable account"
+                hint="Blocks sign-in and drops live connections. Reversible."
+                disabled={self}
+                onClick={() => setPending("disable")}
+              />
+            ))}
+          {!primary && (
+            <ActionButton
+              icon={<Trash2 className="h-4 w-4" />}
+              label="Delete user"
+              hint="Permanent."
+              danger
+              disabled={self}
+              onClick={() => setPending("delete")}
+            />
           )}
-        </>
+        </PanelSection>
       )}
     </DetailsPanel>
   );

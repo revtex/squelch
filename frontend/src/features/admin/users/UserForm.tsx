@@ -3,6 +3,7 @@ import { Dices } from "lucide-react";
 import {
   DetailsPanel,
   Field,
+  SystemPicker,
   Segmented,
   SwitchRow,
   fromDateInput,
@@ -84,15 +85,6 @@ export default function UserForm({
     setDirty(true);
   };
 
-  const toggleSystem = (sid: number) => {
-    set(
-      "systems",
-      form.systems.includes(sid)
-        ? form.systems.filter((x) => x !== sid)
-        : [...form.systems, sid],
-    );
-  };
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const common = {
@@ -119,7 +111,6 @@ export default function UserForm({
   };
 
   const formId = `${id}-form`;
-  const sorted = systems.slice().sort((a, b) => a.order - b.order);
 
   return (
     <DetailsPanel
@@ -272,36 +263,19 @@ export default function UserForm({
           </Field>
         </div>
 
-        {sorted.length > 0 && (
-          <div className="fieldset">
-            <span className="fieldset-legend">Systems</span>
-            <p className="label whitespace-normal">
-              {primary
+        {systems.length > 0 && (
+          <SystemPicker
+            label="Systems this user can hear"
+            systems={systems}
+            value={primary ? [] : form.systems}
+            onChange={(next) => set("systems", next)}
+            disabled={primary}
+            hint={
+              primary
                 ? "The primary admin always hears every system."
-                : "Pick the systems this user can hear. With none picked, they hear every system."}
-            </p>
-            <div
-              role="group"
-              aria-label="Systems"
-              className="flex flex-wrap gap-2"
-            >
-              {sorted.map((s) => {
-                const on = primary || form.systems.includes(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    aria-pressed={on}
-                    disabled={primary}
-                    className={`btn btn-sm ${on ? "btn-primary" : "btn-outline"}`}
-                    onClick={() => toggleSystem(s.id)}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                : "Pick “All systems” to include systems added later."
+            }
+          />
         )}
       </form>
     </DetailsPanel>

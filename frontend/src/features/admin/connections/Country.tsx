@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { House } from "lucide-react";
 import type { AddressPlace, GeoIPInfo } from "@/types";
 import { countryFlag, countryName } from "./place";
+import type { HistoryLink } from "./types";
 
 export function CountryCell({ place }: { place: AddressPlace }) {
   if (place.local) {
@@ -40,5 +42,46 @@ export function GeoIPCredit({ geoip }: { geoip: GeoIPInfo | undefined }) {
         {geoip.credit.text}
       </a>
     </p>
+  );
+}
+
+/** The address, a "trusted" tag, and where it is when GeoIP is on. */
+export function AddressCell({
+  ip,
+  trusted,
+  place,
+  onShowHistory,
+}: {
+  ip: string | null;
+  trusted: boolean;
+  place: ReactNode;
+  onShowHistory: HistoryLink;
+}) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {ip ? (
+          <button
+            type="button"
+            className="link link-hover break-all text-left font-mono"
+            onClick={() => onShowHistory({ ip })}
+            title={`Show connection history for ${ip}`}
+          >
+            {ip}
+          </button>
+        ) : (
+          <span className="text-admin-dim2">-</span>
+        )}
+        {trusted && (
+          <span
+            className="badge"
+            title="On the server's trusted list: can never be blocked"
+          >
+            trusted
+          </span>
+        )}
+      </div>
+      {place && <div className="text-xs text-base-content-dim">{place}</div>}
+    </>
   );
 }

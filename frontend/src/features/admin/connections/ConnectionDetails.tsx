@@ -8,7 +8,7 @@ import {
   PanelSection,
   type Fact,
 } from "@/features/admin/_shell";
-import { KIND_LABELS } from "./format";
+import { KIND_BADGE, KIND_LABELS } from "./format";
 import { CountryCell } from "./Country";
 import type { Selection } from "./selection";
 import type { HistoryLink } from "./types";
@@ -28,7 +28,7 @@ function question(
   s: Selection,
   myUsername: string | null,
 ): Question {
-  const who = s.anonymous ? "the anonymous listener" : s.title;
+  const who = s.anonymous ? "the public listener" : s.title;
   switch (kind) {
     case "disconnect":
       return s.self
@@ -121,9 +121,7 @@ export default function ConnectionDetails({
         <span className="break-all font-mono">
           {s.ip ?? "-"}
           {s.trusted && (
-            <span className="badge badge-ghost badge-xs ml-2 font-sans">
-              trusted
-            </span>
+            <span className="badge ml-2 font-sans">trusted</span>
           )}
         </span>
       ),
@@ -142,14 +140,14 @@ export default function ConnectionDetails({
       badges={
         <>
           {s.kind && (
-            <span className="badge badge-outline badge-sm">
+            <span className={`badge ${KIND_BADGE[s.kind]}`}>
               {KIND_LABELS[s.kind]}
             </span>
           )}
           {s.role === "admin" && s.kind !== "admin" && (
-            <span className="badge badge-ghost badge-sm">admin</span>
+            <span className="badge admin-badge-role">admin</span>
           )}
-          {s.self && <span className="badge badge-info badge-sm">you</span>}
+          {s.self && <span className="badge badge-secondary">you</span>}
         </>
       }
       onClose={onClose}

@@ -1,26 +1,46 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { useConnectionHistoryQuery, OpenButton } from "@/features/admin/_shell";
-import type { ConnectionHistoryFilter, ConnectionKind } from "@/types";
 import {
-  KIND_LABELS,
-  clientLabel,
+  CHIP,
+  CHIP_ON,
+  DataTable,
+  FilterChips,
   formatDateTime,
   formatDuration,
+  formatWhen,
+  useConnectionHistoryQuery,
+  useHour12,
+  type Column,
+} from "@/features/admin/_shell";
+import type {
+  AdminConnectionHistoryEntry,
+  ConnectionHistoryFilter,
+  ConnectionKind,
+} from "@/types";
+import {
+  KIND_BADGE,
+  KIND_LABELS,
+  deviceLabel,
   reasonLabel,
 } from "./format";
-import { CountryCell, GeoIPCredit } from "./Country";
+import { AddressCell, CountryCell, GeoIPCredit } from "./Country";
 import { historySelection, type OpenDetails } from "./selection";
 
 const PAGE_SIZE = 100;
 
 const RANGES = [
-  { value: "1", label: "Last 24 hours" },
-  { value: "7", label: "Last 7 days" },
-  { value: "30", label: "Last 30 days" },
-  { value: "all", label: "Everything kept" },
+  { id: "1", label: "24 h" },
+  { id: "7", label: "7 days" },
+  { id: "30", label: "30 days" },
+  { id: "all", label: "Everything kept" },
 ] as const;
-type Range = (typeof RANGES)[number]["value"];
+type Range = (typeof RANGES)[number]["id"];
+
+type KindFilter = ConnectionKind | "any";
+const KINDS: readonly { id: KindFilter; label: string }[] = [
+  { id: "any", label: "All types" },
+  ...(["listener", "stream", "admin"] as const).map((k) => ({ id: k, label: KIND_LABELS[k] })),
+];
 
 function sinceFor(range: Range): number | undefined {
   if (range === "all") return undefined;
@@ -47,11 +67,12 @@ export default function HistoryTab({
   onOpen: OpenDetails;
   openKey: string | undefined;
 }) {
+  const hour12 = useHour12();
   const [range, setRange] = useState<Range>("7");
   // Anchored when the range is picked (or refreshed), not on every render,
   // so the query stays put between renders.
   const [since, setSince] = useState<number | undefined>(() => sinceFor("7"));
-  const [kind, setKind] = useState<ConnectionKind | "">("");
+  const [kind, setKind] = useState<KindFilter>("any");
   const [page, setPage] = useState(1);
 
   const filter: ConnectionHistoryFilter = {
@@ -59,78 +80,149 @@ export default function HistoryTab({
     pageSize: PAGE_SIZE,
     ...(scope.ip ? { ip: scope.ip } : {}),
     ...(scope.userId !== undefined ? { userId: scope.userId } : {}),
-    ...(kind ? { kind } : {}),
+    ...(kind !== "any" ? { kind } : {}),
     ...(since !== undefined ? { since } : {}),
   };
   const { data, isLoading, isError, refetch } =
     useConnectionHistoryQuery(filter);
 
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  const showCountry = data?.geoip.enabled ?? false;
+
+  const columns: Column<AdminConnectionHistoryEntry>[] = [
+    {
+      id: "who",
+      header: "Who",
+      phone: "title",
+      cell: (e) => (
+        <>
+          {e.userId !== null ? (
+            <button
+              type="button"
+              className="link link-hover font-medium"
+              onClick={() => {
+                onScope({ userId: e.userId ?? undefined, label: e.username ?? undefined });
+                setPage(1);
+              }}
+              title={`Show only ${e.username ?? "this user"}`}
+            >
+              {e.username ?? `#${e.userId}`}
+            </button>
+          ) : (
+            <span className="text-base-content-dim">Public listener</span>
+          )}
+          <div className="text-xs text-base-content-dim" title={e.userAgent ?? undefined}>
+            {deviceLabel(e.userAgent, e.native)}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "type",
+      header: "Type",
+      cell: (e) => (
+        <span className={`badge ${KIND_BADGE[e.kind] ?? ""}`}>
+          {KIND_LABELS[e.kind] ?? e.kind}
+        </span>
+      ),
+    },
+    {
+      id: "from",
+      header: "From",
+      cell: (e) => (
+        <AddressCell
+          ip={e.ip}
+          trusted={e.trusted}
+          place={showCountry ? <CountryCell place={e} /> : null}
+          onShowHistory={(f) => {
+            onScope(f);
+            setPage(1);
+          }}
+        />
+      ),
+    },
+    {
+      id: "when",
+      header: "When",
+      cell: (e) => (
+        <>
+          <div className="whitespace-nowrap" title={formatDateTime(e.connectedAt)}>
+            {formatWhen(e.connectedAt, { hour12 })}
+          </div>
+          <div className="whitespace-nowrap text-xs text-base-content-dim">
+            {e.disconnectedAt !== null ? (
+              `for ${formatDuration(e.disconnectedAt - e.connectedAt)}`
+            ) : (
+              <span className="badge badge-success">connected</span>
+            )}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "ended",
+      header: "Ended",
+      cell: (e) => reasonLabel(e.disconnectReason) || <span className="text-admin-dim2">-</span>,
+    },
+  ];
+
+  const first = data ? (page - 1) * data.pageSize + 1 : 0;
+  const last = data ? Math.min(data.total, page * data.pageSize) : 0;
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {data?.retentionDays === 0 && (
-        <div className="alert alert-info">
+        <div className="alert">
           Connection history is turned off. Turn it on under Settings →
           Storage.
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="select select-sm w-auto"
-          aria-label="Time range"
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <FilterChips
+          label="Time range"
+          options={RANGES}
           value={range}
-          onChange={(e) => {
-            const next = e.target.value as Range;
+          onChange={(next) => {
             setRange(next);
             setSince(sinceFor(next));
             setPage(1);
           }}
-        >
-          {RANGES.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="select select-sm w-auto"
-          aria-label="Connection type"
+        />
+        <FilterChips
+          label="Connection type"
+          options={KINDS}
           value={kind}
-          onChange={(e) => {
-            setKind(e.target.value as ConnectionKind | "");
+          onChange={(next) => {
+            setKind(next);
             setPage(1);
           }}
-        >
-          <option value="">All types</option>
-          {(Object.keys(KIND_LABELS) as ConnectionKind[]).map((k) => (
-            <option key={k} value={k}>
-              {KIND_LABELS[k]}
-            </option>
-          ))}
-        </select>
+        />
         {(scope.ip || scope.userId !== undefined) && (
-          <span className="badge badge-primary gap-1 py-3">
-            {scope.ip
-              ? `Address ${scope.ip}`
-              : `User ${scope.label ?? scope.userId}`}
+          <span className={`${CHIP} ${CHIP_ON} pr-1.5`}>
+            {scope.ip ? (
+              <>
+                Address <span className="font-mono">{scope.ip}</span>
+              </>
+            ) : (
+              `User ${scope.label ?? scope.userId}`
+            )}
             <button
               type="button"
-              className="btn btn-ghost btn-xs btn-circle"
+              className="grid h-6 w-6 cursor-pointer place-items-center rounded-full hover:bg-base-100/20"
               aria-label="Clear filter"
               onClick={() => {
                 onClearScope();
                 setPage(1);
               }}
             >
-              <X className="w-3 h-3" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </span>
         )}
         <button
           type="button"
-          className="btn btn-ghost btn-sm ml-auto"
+          className="btn btn-sm ml-auto"
           onClick={() => {
             // A new anchor moves the window to now, which refetches; with
             // "everything kept" there is no anchor to move.
@@ -143,167 +235,50 @@ export default function HistoryTab({
       </div>
 
       {isError ? (
-        <div className="alert alert-error">
-          Failed to load connection history.
-        </div>
-      ) : isLoading && !data ? (
-        <div className="flex justify-center py-12">
-          <span className="loading loading-spinner loading-lg" />
-        </div>
-      ) : !data?.items.length ? (
-        <div className="text-base-content-dim py-8 text-center">
-          No connections in this range.
-        </div>
+        <div className="alert alert-error">Failed to load connection history.</div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
-            <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
-              <thead>
-                <tr>
-                  <th>Who</th>
-                  <th className="hidden sm:table-cell">Type</th>
-                  <th>From</th>
-                  <th>When</th>
-                  <th className="hidden sm:table-cell">Ended</th>
-                  <th className="w-px">
-                    <span className="sr-only">Details</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((e) => {
-                  const key = `history:${e.id}`;
-                  return (
-                    <tr
-                      key={e.id}
-                      className={
-                        key === openKey ? "bg-base-300" : "hover:bg-base-200"
-                      }
-                    >
-                      <td>
-                        {e.userId !== null ? (
-                          <button
-                            type="button"
-                            className="link link-hover font-medium"
-                            onClick={() => {
-                              onScope({
-                                userId: e.userId ?? undefined,
-                                label: e.username ?? undefined,
-                              });
-                              setPage(1);
-                            }}
-                            title={`Show only ${e.username ?? "this user"}`}
-                          >
-                            {e.username ?? `#${e.userId}`}
-                          </button>
-                        ) : (
-                          <span className="text-base-content-dim">
-                            Anonymous
-                          </span>
-                        )}
-                        <span className="badge badge-outline badge-xs sm:hidden">
-                          {KIND_LABELS[e.kind] ?? e.kind}
-                        </span>
-                        <div
-                          className="text-xs text-base-content-dim"
-                          title={e.userAgent ?? undefined}
-                        >
-                          {clientLabel(e.native)}
-                        </div>
-                      </td>
-                      <td className="hidden sm:table-cell">
-                        <span className="badge badge-outline badge-sm">
-                          {KIND_LABELS[e.kind] ?? e.kind}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="break-all font-mono text-xs">
-                          <button
-                            type="button"
-                            className="link link-hover text-left"
-                            onClick={() => {
-                              onScope({ ip: e.ip });
-                              setPage(1);
-                            }}
-                            title={`Show only ${e.ip}`}
-                          >
-                            {e.ip}
-                          </button>
-                          {e.trusted && (
-                            <span
-                              className="badge badge-ghost badge-xs ml-1 font-sans"
-                              title="On the server's trusted list: can never be blocked"
-                            >
-                              trusted
-                            </span>
-                          )}
-                        </div>
-                        {data.geoip.enabled && (
-                          <div className="text-xs">
-                            <CountryCell place={e} />
-                          </div>
-                        )}
-                      </td>
-                      <td className="text-sm">
-                        <div className="sm:whitespace-nowrap">
-                          {formatDateTime(e.connectedAt)}
-                        </div>
-                        <div className="sm:whitespace-nowrap text-xs text-base-content-dim">
-                          {e.disconnectedAt !== null ? (
-                            `for ${formatDuration(e.disconnectedAt - e.connectedAt)}`
-                          ) : (
-                            <span className="badge badge-success badge-xs">
-                              Connected
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="hidden text-sm sm:table-cell">
-                        {reasonLabel(e.disconnectReason)}
-                      </td>
-                      <td className="text-right">
-                        <OpenButton
-                          label={`Details for ${e.username ?? "anonymous"} at ${e.ip}`}
-                          open={key === openKey}
-                          onOpen={(el) =>
-                            onOpen(historySelection(e, data.geoip.enabled), el)
-                          }
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <GeoIPCredit geoip={data.geoip} />
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-base-content-dim">
-              {data.total} connection{data.total === 1 ? "" : "s"}
-            </span>
-            <div className="join">
-              <button
-                type="button"
-                className="join-item btn btn-sm"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </button>
-              <span className="join-item btn btn-sm btn-disabled">
+          <DataTable
+            caption="Connection history"
+            columns={columns}
+            rows={data?.items ?? []}
+            rowKey={(e) => `history:${e.id}`}
+            rowLabel={(e) => `${e.username ?? "anonymous"} at ${e.ip}`}
+            loading={isLoading && !data}
+            empty="No connections in this range."
+            pageSize={0}
+            openKey={openKey ?? null}
+            onOpen={(e, el) => onOpen(historySelection(e, showCountry), el)}
+          />
+          <GeoIPCredit geoip={data?.geoip} />
+          {data && data.total > 0 && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+              <span className="mr-auto text-base-content-dim tabular-nums">
+                Showing {first}–{last} of {data.total}
+              </span>
+              {page > 1 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  <span aria-hidden="true">←</span> Previous
+                </button>
+              )}
+              <span className="text-base-content-dim tabular-nums">
                 Page {page} of {pages}
               </span>
-              <button
-                type="button"
-                className="join-item btn btn-sm"
-                disabled={page >= pages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </button>
+              {page < pages && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next <span aria-hidden="true">→</span>
+                </button>
+              )}
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

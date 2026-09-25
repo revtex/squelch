@@ -1,3 +1,4 @@
+import { formatDay } from "@/features/admin/_shell";
 import type { AdminSystem, AdminUser } from "@/types";
 
 export type UserStatusId = "active" | "disabled" | "expired";
@@ -11,15 +12,15 @@ export interface UserStatus {
 /** Disabled beats expired beats active; a temporary password is separate. */
 export function userStatus(u: AdminUser, now = Date.now() / 1000): UserStatus {
   if (u.disabled === 1) {
-    return { id: "disabled", label: "Disabled", badge: "badge-ghost" };
+    return { id: "disabled", label: "disabled", badge: "badge-neutral" };
   }
   if (u.expiration !== null && u.expiration < now) {
-    return { id: "expired", label: "Expired", badge: "badge-warning" };
+    return { id: "expired", label: "expired", badge: "badge-neutral" };
   }
-  return { id: "active", label: "Active", badge: "badge-success" };
+  return { id: "active", label: "active", badge: "badge-success" };
 }
 
-export type StatusFilter = "all" | UserStatusId | "temporary";
+export type StatusFilter = "all" | "admins" | UserStatusId | "temporary";
 
 export function matchesStatus(
   u: AdminUser,
@@ -27,6 +28,7 @@ export function matchesStatus(
   now = Date.now() / 1000,
 ): boolean {
   if (filter === "all") return true;
+  if (filter === "admins") return u.role === "admin";
   if (filter === "temporary") return u.passwordNeedChange === 1;
   return userStatus(u, now).id === filter;
 }
@@ -86,4 +88,20 @@ export function generatePassword(length = 14): string {
   const bytes = new Uint8Array(length);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join("");
+}
+
+/**
+ * The grey line under a user's name: why the account is special or
+ * limited. Empty for an ordinary account.
+ */
+export function userSubline(u: AdminUser, now = Date.now() / 1000): string {
+  const parts: string[] = [];
+  if (u.id === 1) parts.push("Primary admin · can't be disabled or deleted");
+  if (u.expiration !== null) {
+    parts.push(`${u.expiration < now ? "Expired" : "Expires"} ${formatDay(u.expiration)}`);
+  }
+  if (u.limit !== null && u.limit > 0) {
+    parts.push(`limit ${u.limit} ${u.limit === 1 ? "connection" : "connections"}`);
+  }
+  return parts.join(" · ");
 }

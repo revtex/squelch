@@ -176,10 +176,18 @@ frontend/
         index.ts           barrel
         _shell/            admin chrome shared by every sub-feature (adminSlice,
                            useAdminWebSocket, useNavigationGuard, useWsQuery, …)
+                           and the page primitives: PageHeader, DataTable,
+                           DetailsPanel, Card, Notice, FilterChips, SearchBox,
+                           SystemPicker, InlineConfirm, ActionButton, useToast,
+                           useDetails, useOpenParam, useHour12, useNow, and
+                           format.ts (dates, durations, counts)
                            — underscore prefix marks "not a feature"
         users/             one folder per admin tab; each has <Panel>.tsx,
         api-keys/          index.ts barrel, optional sub-feature hooks, slice,
         groups-tags/       components, and colocated tests
+        connections/       ConnectionsPanel + Live/Devices/History/Blocks tabs,
+                           ConnectionDetails, format.ts (kind labels, user
+                           agent → "Chrome 129 · Windows")
         systems/           SystemsPanel (master–detail) + SystemList/SystemForm,
                            TalkgroupsTab/TalkgroupDetails/TalkgroupForm/
                            TalkgroupFields, UnitsTab, BlockedTab (Import uses

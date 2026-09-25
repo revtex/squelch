@@ -21,9 +21,10 @@ export interface Column<T> {
   align?: "left" | "right";
   /**
    * On a phone each row becomes a card. `title` puts this cell first without a
-   * label, `hide` drops it, and the default shows it with its header as a label.
+   * label, `hide` drops it, `wide` gives it the card's full width (for a row
+   * of buttons), and the default shows it with its header as a label.
    */
-  phone?: "title" | "hide" | "show";
+  phone?: "title" | "hide" | "show" | "wide";
 }
 
 export interface SortState {
@@ -75,9 +76,9 @@ function compare(a: SortValue, b: SortValue): number {
 // On a phone each row is a card: a two-column grid of label-over-value
 // pairs, the title top-left, the tick box top-right, the › bottom-right.
 const CELL_PHONE =
-  "max-sm:block max-sm:border-0 max-sm:p-0 max-sm:before:block max-sm:before:text-[11px] max-sm:before:uppercase max-sm:before:tracking-[0.04em] max-sm:before:text-base-content-dim max-sm:before:content-[attr(data-label)]";
+  "max-sm:block max-sm:min-w-0 max-sm:border-0 max-sm:p-0 max-sm:before:block max-sm:before:text-[11px] max-sm:before:uppercase max-sm:before:tracking-[0.04em] max-sm:before:text-base-content-dim max-sm:before:content-[attr(data-label)]";
 const TITLE_PHONE =
-  "max-sm:col-start-1 max-sm:row-start-1 max-sm:block max-sm:border-0 max-sm:p-0 max-sm:text-[15px]";
+  "max-sm:col-start-1 max-sm:row-start-1 max-sm:block max-sm:min-w-0 max-sm:border-0 max-sm:p-0 max-sm:text-[15px]";
 
 /**
  * The admin's one table: sortable headers, paging, ticking rows for a bulk
@@ -297,7 +298,9 @@ export function DataTable<T, K extends string | number>({
                           ? `${TITLE_PHONE} ${selectable ? "" : "max-sm:col-span-2"}`
                           : phone === "hide"
                             ? "max-sm:hidden"
-                            : CELL_PHONE;
+                            : phone === "wide"
+                              ? `${CELL_PHONE} max-sm:col-span-2 max-sm:pt-1.5`
+                              : CELL_PHONE;
                       return (
                         <td
                           key={c.id}

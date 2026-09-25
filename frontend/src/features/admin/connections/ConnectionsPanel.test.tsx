@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConnectionsPanel from "./ConnectionsPanel";
 import { MemoryRouter } from "react-router-dom";
-import { ToastProvider } from "@/features/admin/_shell";
+import { ToastProvider, formatDuration } from "@/features/admin/_shell";
 import type {
   AdminConnection,
   AdminConnectionHistoryPage,
@@ -13,7 +13,6 @@ import type {
   CreateIPBlockResult,
   GeoIPInfo,
 } from "@/types";
-import { formatDuration } from "./format";
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -208,8 +207,25 @@ describe("ConnectionsPanel", () => {
     expect(within(table).getByText("alice")).toBeInTheDocument();
     expect(within(table).getAllByText("LIVE").length).toBeGreaterThan(0);
     expect(within(table).getAllByText("BKGND").length).toBeGreaterThan(0);
-    expect(within(table).getByText("Anonymous")).toBeInTheDocument();
+    expect(within(table).getByText("Public listener")).toBeInTheDocument();
     expect(within(table).getByText(formatDuration(125))).toBeInTheDocument();
+  });
+
+  it("opens the tab and filter a link asks for", () => {
+    render(
+      <MemoryRouter initialEntries={["/admin/connections?tab=devices&q=alice"]}>
+        <ToastProvider>
+          <ConnectionsPanel />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("tab", { name: "Signed-in devices" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("searchbox", { name: "Filter by user, address or country" }),
+    ).toHaveValue("alice");
   });
 
   it("filters live connections by user or address", async () => {
@@ -238,10 +254,10 @@ describe("ConnectionsPanel", () => {
         </ToastProvider>
       </MemoryRouter>,
     );
-    await userEvent.click(screen.getByRole("tab", { name: "Devices" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Signed-in devices" }));
     const table = screen.getByRole("table");
-    expect(within(table).getByText("Squelch app")).toBeInTheDocument();
-    expect(within(table).getByText("Online")).toBeInTheDocument();
+    expect(within(table).getByText(/^Squelch app/)).toBeInTheDocument();
+    expect(within(table).getByText("online")).toBeInTheDocument();
   });
 
   it("jumps from an address to its history", async () => {
@@ -259,7 +275,9 @@ describe("ConnectionsPanel", () => {
       "true",
     );
     expect(historyCalls[historyCalls.length - 1]?.ip).toBe("203.0.113.9");
-    expect(screen.getByText("Address 203.0.113.9")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Clear filter" }).parentElement,
+    ).toHaveTextContent("Address 203.0.113.9");
     expect(screen.getByText("Signed out")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Clear filter" }));
@@ -381,7 +399,7 @@ describe("ConnectionsPanel", () => {
         </ToastProvider>
       </MemoryRouter>,
     );
-    await user.click(screen.getByRole("tab", { name: "Devices" }));
+    await user.click(screen.getByRole("tab", { name: "Signed-in devices" }));
     const panel = await openDetails(user, "Details for alice's device");
     await user.click(
       panel.getByRole("button", { name: "Sign out this device" }),
@@ -570,6 +588,9 @@ describe("ConnectionsPanel", () => {
         name: "Remove the block on 203.0.113.0/24",
       }),
     );
+    expect(deleteBlockOp).not.toHaveBeenCalled();
+    expect(screen.getByText("Remove the block on 203.0.113.0/24?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove block" }));
     expect(deleteBlockOp).toHaveBeenCalledWith(7);
   });
 
@@ -591,7 +612,7 @@ describe("ConnectionsPanel", () => {
 
   it.each([
     ["Live", "Germany", "203.0.113.9"],
-    ["Devices", "Germany", "203.0.113.9"],
+    ["Signed-in devices", "Germany", "203.0.113.9"],
     ["History", "United Kingdom", "192.0.2.10"],
   ])("shows the country under its address on %s", async (tab, country, ip) => {
     const user = userEvent.setup();
@@ -641,6 +662,6 @@ describe("ConnectionsPanel", () => {
     );
     const table = screen.getByRole("table");
     expect(within(table).getByText("alice")).toBeInTheDocument();
-    expect(within(table).queryByText("Anonymous")).toBeNull();
+    expect(within(table).queryByText("Public listener")).toBeNull();
   });
 });
