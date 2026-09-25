@@ -848,6 +848,7 @@ func (p *program) run() {
 	p.stop = stop
 
 	rateLimiter := auth.NewRateLimiter(ctx)
+	admin.ApplyLoginLimits(ctx, queries, rateLimiter)
 
 	// Set up bounded FFmpeg worker pool and audio processor.
 	pool := audio.NewWorkerPool(ctx)
@@ -948,6 +949,7 @@ func (p *program) run() {
 		FDKAACAvailable:   hasFDKAAC,
 		WhisperAvailable:  hasWhisper,
 		RecordingsDir:     cfg.RecordingsDir,
+		DBFile:            cfg.DBFile,
 		EncryptionKey:     cfg.EncryptionKey,
 		IPBlocks:          ipBlocks,
 		GeoIP:             geoDB,

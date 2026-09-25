@@ -767,7 +767,7 @@ The project's [docker-compose.yml](../docker-compose.yml) has commented-out exam
 
 FFmpeg handles audio conversion and normalization. It's **already installed in the Docker image**, so you don't need to do anything unless you're running from a binary.
 
-In **Admin → Options** you can pick a conversion mode:
+In **Admin → Settings → Ingest & audio** you can pick a conversion mode:
 
 - **Disabled** — store audio files as-is
 - **Enabled** — basic codec conversion

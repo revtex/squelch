@@ -200,9 +200,24 @@ export interface Capabilities {
   whisper: boolean;
 }
 
+/** Storage figures shown next to the prune setting. */
+export interface StorageInfo {
+  recordingsBytes: number;
+  recordingFiles: number;
+  /** Unix seconds of the last recordings walk; 0 while the first one runs. */
+  measuredAt: number;
+  volumeTotalBytes: number;
+  volumeFreeBytes: number;
+  databaseBytes: number;
+  oldestCall: number | null;
+}
+
 export interface ConfigResponse {
   settings: AdminSetting[];
   capabilities: Capabilities;
+  storage?: StorageInfo;
+  /** Addresses the server was started with that can never be blocked. */
+  trustedAddresses?: string[];
 }
 
 export interface AdminLog {

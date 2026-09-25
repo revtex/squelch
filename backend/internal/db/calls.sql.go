@@ -537,3 +537,14 @@ func (q *Queries) ListCallsAsc(ctx context.Context, arg ListCallsAscParams) ([]C
 	}
 	return items, nil
 }
+
+const oldestCallTime = `-- name: OldestCallTime :one
+SELECT CAST(COALESCE(MIN(date_time), 0) AS INTEGER) AS oldest FROM calls
+`
+
+func (q *Queries) OldestCallTime(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, oldestCallTime)
+	var oldest int64
+	err := row.Scan(&oldest)
+	return oldest, err
+}

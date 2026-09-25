@@ -66,7 +66,7 @@ Recommended fields:
 ## Wire it to Squelch
 
 1. Sign in to Squelch as an admin.
-2. Open **Admin → Options → Integrations** and turn on **Trunk Recorder MQTT**. It is off by default; flip it on once and save.
+2. Open **Admin → Settings → Integrations** and turn on **Trunk Recorder MQTT**. It is off by default; flip it on once and save.
 3. Open **Admin → Dashboards → Trunk Recorder → Instances** and click **Add instance**. Fill in:
 
 | Field           | Notes                                                                                                     |
@@ -227,4 +227,4 @@ Pick whichever matches your operational style. Always set `instance_id` — it c
 
 **The Trunk Recorder tab is missing from Dashboards**
 
-- Check **Admin → Options → Integrations → Trunk Recorder MQTT** is enabled. The kill-switch returns 404 from the REST endpoints when off, which hides the dashboard entirely.
+- Check **Admin → Settings → Integrations → Trunk Recorder MQTT** is enabled. The kill-switch returns 404 from the REST endpoints when off, which hides the dashboard entirely.

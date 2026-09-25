@@ -85,31 +85,3 @@ export function useAuditTrail(params: LogQueryParams, following: boolean, paused
   const q = useWsRows<AdminAuditRow>("logs.audit", params, following, paused);
   return { rows: q.rows, isLoading: q.isLoading, isFetching: q.isFetching, refetch: q.refetch };
 }
-
-export function useAdminLogLevel() {
-  const [level, setLevel] = useState<string>("info");
-
-  const fetchLevel = useCallback(async () => {
-    if (!adminWsClient.isConnected()) return;
-    try {
-      const result = await adminWsClient.request<{ level: string }>("logs.level");
-      setLevel(result.level);
-    } catch {
-      // Keep the last known level.
-    }
-  }, []);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      void fetchLevel();
-    });
-    const unsubConnect = adminWsClient.on("__connected__", () => void fetchLevel());
-    const unsubConfig = adminWsClient.on("config.updated", () => void fetchLevel());
-    return () => {
-      unsubConnect();
-      unsubConfig();
-    };
-  }, [fetchLevel]);
-
-  return { level, refetch: fetchLevel };
-}

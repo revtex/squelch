@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { Pencil, Trash2, Plus, ChevronDown, Radio, Users } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -16,8 +17,6 @@ import {
   useDeleteUnitMutation,
   useListGroupsQuery,
   useListTagsQuery,
-  useGetConfigQuery,
-  useUpdateConfigMutation,
 } from "@/features/admin/_shell";
 import type { AdminSystem, AdminTalkgroup, AdminUnit } from "@/types";
 
@@ -445,23 +444,6 @@ export default function SystemsPanel() {
   const { data: allUnits } = useListUnitsQuery();
   const { data: groups } = useListGroupsQuery();
   const { data: tags } = useListTagsQuery();
-  const { data: config } = useGetConfigQuery();
-  const [updateConfig] = useUpdateConfigMutation();
-
-  const autoPopulateSystems = useMemo(() => {
-    const s = config?.settings?.find((s) => s.key === "autoPopulateSystems");
-    return s?.value === "true";
-  }, [config]);
-
-  const handleToggleAutoPopulateSystems = useCallback(async () => {
-    await updateConfig([
-      {
-        key: "autoPopulateSystems",
-        value: autoPopulateSystems ? "false" : "true",
-      },
-    ]);
-  }, [updateConfig, autoPopulateSystems]);
-
   const [createSystem] = useCreateSystemMutation();
   const [updateSystem] = useUpdateSystemMutation();
   const [deleteSystem] = useDeleteSystemMutation();
@@ -810,22 +792,13 @@ export default function SystemsPanel() {
         units. Click a system to manage its talkgroups and units.
       </p>
 
-      <label className="flex items-center gap-3 mb-4 cursor-pointer">
-        <input
-          type="checkbox"
-          className="toggle toggle-primary"
-          checked={autoPopulateSystems}
-          onChange={handleToggleAutoPopulateSystems}
-        />
-        <div>
-          <span className="text-sm font-medium">Auto-Populate Systems</span>
-          <p className="text-xs text-base-content/60">
-            Automatically create new systems from incoming calls. Each
-            auto-created system will have talkgroup auto-populate enabled by
-            default.
-          </p>
-        </div>
-      </label>
+      <p className="text-xs text-base-content/60 mb-4">
+        Whether uploads may create systems that do not exist yet is set under{" "}
+        <Link to="/admin/settings#settings-radio" className="link">
+          Settings → Radio data
+        </Link>
+        .
+      </p>
 
       <div className="flex flex-col gap-3">
         {sortedSystems.map((sys) => (

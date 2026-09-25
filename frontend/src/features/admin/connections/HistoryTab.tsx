@@ -71,8 +71,8 @@ export default function HistoryTab({
     <div className="space-y-3">
       {data?.retentionDays === 0 && (
         <div className="alert alert-info">
-          Connection history is turned off. Turn it on under Options →
-          Connections.
+          Connection history is turned off. Turn it on under Settings →
+          Storage.
         </div>
       )}
 

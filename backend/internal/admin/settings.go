@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/auth"
@@ -37,6 +39,13 @@ func (o *Operations) ConfigGet(ctx context.Context, _ json.RawMessage, _ int64) 
 		settingsList = append(settingsList, map[string]string{"key": s.Key, "value": val})
 	}
 
+	trusted := []string{}
+	if o.Deps.IPBlocks != nil {
+		for _, p := range o.Deps.IPBlocks.TrustedList() {
+			trusted = append(trusted, p.String())
+		}
+	}
+
 	return map[string]any{
 		"settings": settingsList,
 		"capabilities": map[string]bool{
@@ -44,7 +53,100 @@ func (o *Operations) ConfigGet(ctx context.Context, _ json.RawMessage, _ int64) 
 			"fdkAac":  o.Deps.FDKAACAvailable,
 			"whisper": o.Deps.WhisperAvailable,
 		},
+		"storage":          o.Storage(ctx),
+		"trustedAddresses": trusted,
 	}, nil
+}
+
+// settingRanges bounds the numeric settings: key → lowest and highest
+// value the admin may save. Zero usually means "off" or "no limit".
+var settingRanges = map[string]struct{ min, max int }{
+	"apiKeyCallRate":              {1, 600},
+	"auditRetentionDays":          {1, 3650},
+	"connectionHistoryDays":       {0, 3650},
+	"duplicateDetectionTimeFrame": {0, 60_000},
+	"loginLockoutMinutes":         {1, 1440},
+	"loginMaxFailures":            {1, 20},
+	"maxClients":                  {0, 100_000},
+	"pruneDays":                   {0, 3650},
+	"sharedLinkExpiry":            {0, 3650},
+}
+
+// settingChoices lists the settings that take one of a few words.
+var settingChoices = map[string][]string{
+	"keypadBeeps":               {"uniden", "whistler", "disabled"},
+	"audioConversion":           {"0", "1", "2", "3"},
+	"disableDuplicateDetection": {"true", "false"},
+	"publicAccess":              {"true", "false"},
+	"shareableLinks":            {"true", "false"},
+	"showListenersCount":        {"true", "false"},
+	"time12hFormat":             {"true", "false"},
+	"trMqttEnabled":             {"true", "false"},
+	"autoPopulateSystems":       {"true", "false"},
+	"transcriptionEnabled":      {"true", "false"},
+	"transcriptionDiarize":      {"true", "false"},
+	"liveTranscriptDisplay":     {"true", "false"},
+}
+
+// checkSetting validates one setting's value the way the page that edits it
+// would, so a hand-written request cannot store something the server then
+// trips over.
+func checkSetting(key, value string) error {
+	value = strings.TrimSpace(value)
+	if r, ok := settingRanges[key]; ok {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < r.min || n > r.max {
+			return UserError(fmt.Sprintf("%s must be a whole number from %d to %d", key, r.min, r.max))
+		}
+		return nil
+	}
+	if choices, ok := settingChoices[key]; ok && len(choices) > 0 {
+		for _, c := range choices {
+			if value == c {
+				return nil
+			}
+		}
+		return UserError(fmt.Sprintf("%s must be one of %s", key, strings.Join(choices, ", ")))
+	}
+	switch key {
+	case "email":
+		if value == "" {
+			return nil
+		}
+		addr, err := mail.ParseAddress(value)
+		if err != nil || addr.Address != value {
+			return UserError("email must be a plain address such as ops@example.org, or empty")
+		}
+	case "branding":
+		if len(value) > 64 {
+			return UserError("branding must be 64 characters or fewer")
+		}
+	case "logLevel":
+		if _, ok := logging.ParseLevel(value); !ok {
+			return UserError("invalid logLevel; expected debug, info, warn, or error")
+		}
+	}
+	return nil
+}
+
+// ApplyLoginLimits reads the sign-in lockout settings and hands them to the
+// limiter. Missing or unreadable values keep the limiter's defaults.
+func ApplyLoginLimits(ctx context.Context, q *db.Queries, limiter *auth.RateLimiter) {
+	if limiter == nil {
+		return
+	}
+	failures, lockout := auth.DefaultMaxFailures, auth.DefaultLockout
+	if s, err := q.GetSetting(ctx, "loginMaxFailures"); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(s.Value)); err == nil && n > 0 {
+			failures = n
+		}
+	}
+	if s, err := q.GetSetting(ctx, "loginLockoutMinutes"); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(s.Value)); err == nil && n > 0 {
+			lockout = time.Duration(n) * time.Minute
+		}
+	}
+	limiter.SetLimits(failures, lockout)
 }
 
 // ConfigUpdate applies a batch of settings atomically, encrypting sensitive
@@ -66,15 +168,8 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 		if !allowedSettingKeys[s.Key] {
 			return nil, UserError("unknown setting key: " + s.Key)
 		}
-		if s.Key == "logLevel" {
-			if _, ok := logging.ParseLevel(s.Value); !ok {
-				return nil, UserError("invalid logLevel; expected debug, info, warn, or error")
-			}
-		}
-		if s.Key == "auditRetentionDays" {
-			if n, err := strconv.Atoi(strings.TrimSpace(s.Value)); err != nil || n < 1 || n > 3650 {
-				return nil, UserError("auditRetentionDays must be a number of days from 1 to 3650")
-			}
+		if err := checkSetting(s.Key, s.Value); err != nil {
+			return nil, err
 		}
 		if s.Key == "audioEncodingPreset" {
 			if !audio.IsValidEncodingPreset(s.Value) {
@@ -94,6 +189,14 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 	sqlDB := o.Deps.SQLDB
 	if sqlDB == nil {
 		return nil, fmt.Errorf("transaction support not available")
+	}
+
+	// Remember what each setting was, for the audit line.
+	before := map[string]string{}
+	if rows, err := o.Queries.ListSettings(ctx); err == nil {
+		for _, r := range rows {
+			before[r.Key] = r.Value
+		}
 	}
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
@@ -121,22 +224,37 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 		return nil, fmt.Errorf("failed to commit config: %w", err)
 	}
 
-	// Log each changed setting, redacting sensitive keys.
+	// Log each changed setting, redacting sensitive keys, and write one
+	// audit line naming the before and after values.
+	var changes []string
 	for _, s := range settings {
-		v := s.Value
-		if s.Key == "vapidPrivateKey" {
-			v = "[REDACTED]"
+		v := strings.TrimSpace(s.Value)
+		old, had := before[s.Key]
+		if SensitiveSettingKeys[s.Key] {
+			v, old = "[REDACTED]", "[REDACTED]"
 		}
 		slog.Info("admin: config updated", "key", s.Key, "value", v, "by", callerID)
+		if had && old == v {
+			continue
+		}
+		if !had {
+			old = "(unset)"
+		}
+		changes = append(changes, fmt.Sprintf("%s %s → %s", s.Key, quoteIfBlank(old), quoteIfBlank(v)))
+	}
+	if len(changes) > 0 {
+		o.audit(ctx, fmt.Sprintf("admin: settings changed by %s: %s", o.callerName(ctx, callerID), strings.Join(changes, ", ")))
 	}
 
-	// Apply log level change at runtime.
+	// Apply log level and sign-in lockout changes at runtime.
 	for _, s := range settings {
-		if s.Key == "logLevel" {
+		switch s.Key {
+		case "logLevel":
 			if err := logging.SetLevel(s.Value); err != nil {
 				slog.Warn("invalid logLevel setting, keeping previous runtime level", "value", s.Value, "error", err)
 			}
-			break
+		case "loginMaxFailures", "loginLockoutMinutes":
+			ApplyLoginLimits(ctx, o.Queries, o.Deps.LoginLimiter)
 		}
 	}
 
@@ -185,4 +303,12 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 
 	o.broadcastAdminEvent("config.updated", nil)
 	return map[string]bool{"ok": true}, nil
+}
+
+// quoteIfBlank makes an empty value visible in an audit line.
+func quoteIfBlank(v string) string {
+	if v == "" {
+		return `""`
+	}
+	return v
 }

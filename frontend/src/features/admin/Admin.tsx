@@ -43,7 +43,7 @@ import GroupsTagsPanel from "@/features/admin/groups-tags";
 import ApiKeysPanel from "@/features/admin/api-keys";
 import DirMonitorPanel from "@/features/admin/dir-monitor";
 import ForwardingPanel from "@/features/admin/forwarding";
-import OptionsPanel from "@/features/admin/options";
+import SettingsPanel from "@/features/admin/settings";
 import LogsPanel from "@/features/admin/logs";
 import ToolsPanel from "@/features/admin/tools";
 import DashboardsPanel, {
@@ -371,7 +371,8 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             />
             <Route path="shared-links" element={<SharedLinksPanel />} />
             <Route path="transcription" element={<TranscriptionPanel />} />
-            <Route path="options" element={<OptionsPanel />} />
+            <Route path="settings" element={<SettingsPanel />} />
+            <Route path="options" element={<Navigate to="/admin/settings" replace />} />
             <Route path="logs" element={<LogsPanel />} />
             <Route path="trunk-recorder" element={<TrMqttPanel />} />
             <Route path="tools" element={<ToolsPanel />} />

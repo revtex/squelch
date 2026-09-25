@@ -18,7 +18,6 @@ const auditRows: AdminAuditRow[] = [
   { id: 8, dateTime: now - 400, level: "warn", message: "login failed for bob from 10.0.0.9" },
 ];
 
-const updateConfig = vi.fn<(arg: unknown) => Promise<unknown>>();
 const refetchLogs = vi.fn();
 let followingSeen: { server?: boolean; audit?: boolean; paused?: boolean } = {};
 
@@ -32,15 +31,6 @@ vi.mock("./useAdminLogs", () => ({
     followingSeen.audit = following;
     return { rows: auditRows, isLoading: false, isFetching: false, refetch: vi.fn() };
   },
-  useAdminLogLevel: () => ({ level: "info", refetch: vi.fn() }),
-}));
-
-vi.mock("@/features/admin/_shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/admin/_shell")>()),
-  useUpdateConfigMutation: () => [
-    (arg: unknown) => ({ unwrap: () => updateConfig(arg) }),
-    { isLoading: false, isError: false },
-  ],
 }));
 
 function renderPanel(path = "/admin/logs") {
@@ -55,7 +45,6 @@ function renderPanel(path = "/admin/logs") {
 
 describe("LogsPanel", () => {
   beforeEach(() => {
-    updateConfig.mockReset().mockResolvedValue({});
     refetchLogs.mockReset();
     followingSeen = {};
   });
@@ -72,6 +61,11 @@ describe("LogsPanel", () => {
     expect(screen.getByRole("radio", { name: /^error/ })).toHaveTextContent("1");
     expect(followingSeen.server).toBe(true);
     expect(followingSeen.audit).toBe(false);
+  });
+
+  it("points at Settings for the log level", () => {
+    renderPanel();
+    expect(screen.getByRole("link", { name: "Settings → Logging" })).toHaveAttribute("href", "/admin/settings#settings-logging");
   });
 
   it("prefills the search from the address and opens the audit tab from it", () => {
@@ -97,14 +91,6 @@ describe("LogsPanel", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Show similar lines" }));
     expect(screen.getByRole("searchbox")).toHaveValue("request");
     expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("changes the server log level and says it applies at once", async () => {
-    const user = userEvent.setup();
-    renderPanel();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Server log level" }), "debug");
-    expect(updateConfig).toHaveBeenCalledWith([{ key: "logLevel", value: "debug" }]);
-    expect(await screen.findByRole("status")).toHaveTextContent("The server now logs at debug. This applies at once.");
   });
 
   it("opens an audit event with a link to the page it is about", async () => {

@@ -62,7 +62,7 @@ The **Scanner** link in the sidebar and in the account menu returns you to the l
 
 If you run [trunk-recorder](https://github.com/robotastic/trunk-recorder) with the [MQTT status plugin](https://github.com/taclane/trunk-recorder-mqtt-status), Squelch can subscribe to its broker and surface live operational data — control-channel decode rate, recorder states, active calls, system tables, unit affiliation, and trunking-message debugging — under **Trunk Recorder**.
 
-The Trunk Recorder integration is opt-in. Enable it under **Settings → Trunk Recorder MQTT**, then add one instance row per trunk-recorder under **Trunk Recorder → Instances**.
+The Trunk Recorder integration is opt-in. Enable it under **Settings → Integrations → Trunk Recorder MQTT**, then add one instance row per trunk-recorder under **Trunk Recorder → Instances**.
 
 > Audio is **not** consumed over MQTT — calls keep flowing through your existing dirmonitor or `/api/v1/calls` upload pipeline. The MQTT feed only powers the live dashboard.
 
@@ -103,7 +103,7 @@ The primary admin (the first account) cannot be disabled or deleted, and its rol
 
 ### Sign-in lockouts
 
-After three failed sign-ins an address is locked out for ten minutes. While any address is locked out or counting failures, a **Sign-in lockouts** card appears under the table; **Clear** lets that address try again at once.
+After three failed sign-ins an address is locked out for ten minutes (both numbers are set under **Settings → Access & security**). While any address is locked out or counting failures, a **Sign-in lockouts** card appears under the table; **Clear** lets that address try again at once.
 
 ---
 
@@ -154,7 +154,7 @@ A record of every connection: who, from where, when, how long it lasted, and how
 | Disconnected by an admin | An admin used **Disconnect** |
 | Blocked | An admin blocked the address it came from |
 
-Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Settings → Connections](#connections-1). Setting it to 0 stops recording and leaves the tab empty.
+Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Settings → Storage](#storage). Setting it to 0 stops recording and leaves the tab empty.
 
 ### Blocked addresses
 
@@ -358,35 +358,44 @@ The panel also shows transcription statistics when available.
 
 ## Settings
 
-General settings that control how Squelch behaves. Settings are organized into groups.
+Server-wide options, in named groups on one page. A **Find a setting** box narrows the page to the rows that mention what you type, and the group names under the title jump to each group. Nothing applies until you press **Save changes** in the bar at the bottom, which lists what you changed; **Discard** puts everything back. The one exception is the **Log level**, which applies the moment you pick it and says so. A changed row carries a **Changed** badge until it is saved, and leaving the page with unsaved changes asks first.
+
+Rows that depend on another are indented under it and greyed out while the parent is off: the duplicate window under **Reject duplicate calls**, the encoding under **Convert audio on upload**, the expiry under **Let listeners share calls**.
 
 ### General
 
-| Setting        | Description                                                           | Default |
-| -------------- | --------------------------------------------------------------------- | ------- |
-| Branding Label | Short text shown above the scanner (e.g. your county or project name) | (empty) |
-| Support Email  | Contact email displayed to users                                      | (empty) |
-| Public Access  | Allow unauthenticated users to listen to the scanner                  | Off     |
+| Setting | Description | Default |
+| --- | --- | --- |
+| Instance name | Short text shown above the scanner and in the browser tab (up to 64 characters) | (empty) |
+| Support email | Contact address shown on the sign-in page and in error messages; a plain address, or empty | (empty) |
 
-### Scanner Behavior
+### Scanner
+
+Defaults for every listener. Each listener can override the ones marked **per user** from the scanner's ⋮ menu.
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| 12-Hour Time Format | Display times as AM/PM instead of 24-hour | Off |
-| Show Listeners Count | Display the number of active listeners in the scanner | Off |
-| Max Simultaneous Clients | Maximum number of live listeners allowed at once | 200 |
+| 12-hour clock | Show AM/PM times everywhere, including the admin | Off |
+| Show listener count | The live listener number on the scanner display | Off |
+| Keypad beeps (per user) | The default sound set for the keypad: **Uniden**, **Whistler** or **Off**. A signed-in listener's own choice follows their account; an anonymous listener's stays in that browser | Uniden |
 
-### Call Processing
+### Radio data
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Audio Conversion (FFmpeg) | **Disabled** / Enabled / Normalize / Loudnorm — controls audio processing on ingest | Disabled |
-| Audio Encoding Preset | Codec and bitrate for converted audio (MP3 or AAC at various bitrates) | MP3 32 kbps |
-| Disable Duplicate Call Detection | Skip checking for duplicate calls on upload | Off |
-| Duplicate Detection Time Frame (ms) | Window for matching duplicate calls (±milliseconds) | 500 |
-| Prune Database After (days) | Auto-delete calls older than this many days (0 = never prune) | 7 |
+| Create systems from uploads | An upload naming a system number that does not exist creates it, with talkgroup auto-create on. Off rejects such uploads. Each system's own talkgroup auto-create is under [Systems](#systems) | On |
 
-#### Audio Encoding Presets
+### Ingest & audio
+
+| Setting | Description | Default |
+| --- | --- | --- |
+| Default upload rate limit | Calls a minute an API key may upload unless the key sets its own (1 to 600) | 60 |
+| Reject duplicate calls | Another call on the same system and talkgroup within the window below is turned away | On |
+| Duplicate window | How close, in milliseconds, two calls must be to count as duplicates | 500 |
+| Convert audio on upload | **Keep the original**, **Convert only**, **Convert and normalise peaks**, or **Convert and normalise loudness**. Needs FFmpeg on the server; without it the row is greyed out | Keep the original |
+| Encoding | Codec and bitrate for converted audio (see below) | MP3 · 32 kbps |
+
+#### Encoding presets
 
 | Preset         | Description                           |
 | -------------- | ------------------------------------- |
@@ -396,38 +405,49 @@ General settings that control how Squelch behaves. Settings are organized into g
 | AAC-LC 32 kbps | Better quality than MP3 at the same bitrate |
 | AAC-LC 24 kbps | Lower bitrate AAC                     |
 | AAC-LC 16 kbps | Smallest AAC-LC                       |
-| HE-AAC 12 kbps | High-efficiency AAC, very small files |
-| HE-AAC 8 kbps  | Smallest possible, lowest quality     |
+| HE-AAC 12 kbps | High-efficiency AAC, very small files; needs libfdk_aac in FFmpeg |
+| HE-AAC 8 kbps  | Smallest possible, lowest quality; needs libfdk_aac in FFmpeg |
 
-> **Keypad beeps are not an admin setting.** The button-press sound is chosen
-> by each listener from the listening screen's ⋮ menu → **Keypad beeps**: the person
-> listening is the one in the quiet room, and they are not always the admin.
-> A signed-in listener's choice is stored against their account and follows
-> them to any browser they sign in on; an anonymous listener's is kept in that
-> browser. The instance-wide starting point is the `keypadBeeps` setting,
-> which a listener's own choice overrides from then on; set it with
-> `squelch config-set keypadBeeps uniden|whistler|disabled`.
+### Storage
+
+The group heading shows how much the recordings take and how many files there are, the size of the volume they sit on and its free space, the size of the database, and the oldest call. The recordings figure is measured in the background and refreshed every ten minutes.
+
+| Setting | Description | Default |
+| --- | --- | --- |
+| Delete calls older than | Calls and their audio past this many days are removed. 0 keeps everything. Calls with a live shared link are kept until the link expires | 7 |
+| Keep connection history | How long **Connections → History** remembers who connected. 0 stops recording; older rows are removed once an hour | 30 |
 
 ### Sharing
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Shareable Links | Allow users to create shareable links to specific calls | Off |
-| Shared Link Expiry (days) | How long shared links stay active (0 = never expire) | 0 |
+| Let listeners share calls | Adds a **Share** button to the scanner; the links work without signing in | Off |
+| Links expire after | Days until a shared link stops working. 0 means never | 0 |
 
-### Connections
+### Access & security
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Keep Connection History (days) | How long **Connections → History** keeps each connection. 0 stops recording; older rows are removed once an hour | 30 |
+| Public listening | Anyone with the address can listen without an account. Admin pages always need a sign-in | Off |
+| Listener limit | Most live connections at once across everyone. 0 means no limit | 200 |
+| Lock out sign-in after | Failed sign-ins from one address before it must wait (1 to 20). Applies at once | 3 |
+| Lockout lasts | Minutes a locked-out address waits (1 to 1440). **Users → Sign-in lockouts** can clear one early | 10 |
+| Trusted addresses | Read-only: the addresses the server was started with (`--trusted-addresses` or `SQUELCH_TRUSTED_ADDRESSES`) that can never be blocked from Connections | none |
 
 ### Integrations
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Trunk Recorder MQTT | Subscribe to trunk-recorder's MQTT status plugin and enable the **Trunk Recorder** page | Off |
+| Trunk Recorder MQTT | Subscribe to trunk-recorder's MQTT status plugin and enable the **Trunk Recorder** page, where the brokers are configured | Off |
 
-Turning this on only enables the feature. You still need to add one instance row per trunk-recorder under **Trunk Recorder → Instances**, pointing at your broker. The [Trunk Recorder MQTT guide](tr-mqtt-guide.md) has the plugin-side configuration.
+**Transcription** has its own page; the group links to it.
+
+### Logging
+
+| Setting | Description | Default |
+| --- | --- | --- |
+| Log level | How much the server logs: **Info**, **Debug**, **Warn** or **Error**. Applies at once, without Save or a restart; Debug is noisy | Info |
+| Keep the audit trail for | Days the sign-ins and admin changes on **Logs & audit** are kept before they are pruned (1 to 3650) | 90 |
 
 ---
 
@@ -443,13 +463,13 @@ The server keeps its recent log lines in memory. Each row shows the time (the fu
 
 The **›** button opens a line in the side panel: every attribute, the raw JSON with a **Copy** button, **Newer** and **Older** to step through the list, **Show similar lines** to search for the same message, and a link to the page the line is about (a folder monitor, a forwarding target, a user, an API key, and so on).
 
-**Server log level** changes how much the server logs, from `error` up to `debug`. It applies at once, without a restart; `debug` is noisy.
+How much the server logs is set under **Settings → Logging**; the log level applies at once, without a restart.
 
 ### Audit trail
 
 Sign-ins and failed sign-ins, lockouts, every admin change (users, systems, groups and tags, API keys, forwarding, folder monitors, shared links, settings), address blocks, and delivery failures are written to the database and listed here newest first, with the acting admin named in each line. Opening an event offers **Show similar events** and a link to the page it is about.
 
-Events are kept for **90 days** by default; change `auditRetentionDays` in **Settings** to keep them longer or shorter. Older rows are pruned once a day.
+Events are kept for **90 days** by default; change **Keep the audit trail for** under **Settings → Logging** to keep them longer or shorter. Older rows are pruned once a day.
 
 ---
 

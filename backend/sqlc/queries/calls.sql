@@ -145,3 +145,6 @@ SELECT api_key_id, COUNT(*) AS calls
 FROM calls
 WHERE api_key_id IS NOT NULL AND date_time >= ?
 GROUP BY api_key_id;
+
+-- name: OldestCallTime :one
+SELECT CAST(COALESCE(MIN(date_time), 0) AS INTEGER) AS oldest FROM calls;

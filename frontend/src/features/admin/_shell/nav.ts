@@ -113,10 +113,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     title: "Server",
     items: [
       {
-        to: "/admin/options",
+        to: "/admin/settings",
         label: "Settings",
         icon: Settings,
-        keywords: "options config preferences",
+        keywords: "options config preferences branding email prune storage lockout log level audio conversion",
       },
       {
         to: "/admin/logs",

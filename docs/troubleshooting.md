@@ -124,10 +124,10 @@ It was very likely rejected as a duplicate — that returns `200` with
 `{"message":"duplicate call rejected"}`, so a recorder that only checks the
 status code sees success. The log records `duplicate call rejected` with the
 system and talkgroup. A call is a duplicate when another call on the same system
-and talkgroup falls within **Duplicate Detection Time Frame (ms)** of it, under
-**Admin → Options → Call Processing** (500 ms by default). Two recorders
+and talkgroup falls within the **Duplicate window** of it, under
+**Admin → Settings → Ingest & audio** (500 ms by default). Two recorders
 covering the same site will do this legitimately. Widen or narrow the window
-there, or switch on **Disable Duplicate Call Detection**.
+there, or switch off **Reject duplicate calls**.
 
 **A directory monitor is not picking up files.**
 Check the log for lines beginning `dirmonitor:`. They name the specific reason:
@@ -157,14 +157,14 @@ Manager, Traefik, Apache and Cloudflare are in
 [Running Behind a Reverse Proxy](deployment-guide.md#running-behind-a-reverse-proxy).
 
 **Listeners are turned away once the server is busy.**
-**Max Simultaneous Clients** in **Admin → Options → Scanner Behavior** caps
+**Listener limit** in **Admin → Settings → Access & security** caps
 concurrent listeners at 200 by default. Past that, a new connection is closed
 as soon as it opens, and the page reconnects on a backoff without ever
 receiving a call — so it looks like a dead feed, not a refusal. Raise the cap
 if your server can carry the load.
 
 **Anonymous visitors get the sign-in page instead of the feed.**
-That is the default. **Public Access** in **Admin → Options → General** is what
+That is the default. **Public listening** in **Admin → Settings → Access & security** is what
 allows listening without an account.
 
 **One listener hears nothing while others are fine.**
@@ -195,19 +195,19 @@ banner reports whether FFmpeg was found.
 
 **Audio conversion is not happening.**
 Same cause — the log warns `ffmpeg not found on PATH` at startup. Conversion is
-also off unless you select a mode in **Admin → Options → Call Processing**. See
+also off unless you select a mode in **Admin → Settings → Ingest & audio**. See
 [FFmpeg](deployment-guide.md#ffmpeg-optional).
 
 **Volume is wildly uneven between systems.**
-That is a recording-level difference, not a bug. Set audio conversion to
-**Loudnorm** in **Admin → Options → Call Processing**.
+That is a recording-level difference, not a bug. Set **Convert audio on upload**
+to **Convert and normalise loudness** in **Admin → Settings → Ingest & audio**.
 
 ---
 
 ## Calls Disappear
 
 **Everything older than a week is gone.**
-**Prune Database After (days)** in **Admin → Options → Call Processing**
+**Delete calls older than** in **Admin → Settings → Storage**
 defaults to **7**. It deletes calls and their audio past that age. Raise it, or
 set it to `0` to stop pruning entirely — and then watch your disk, because
 nothing else will.

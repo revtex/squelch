@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import {
@@ -12,8 +12,6 @@ import {
   SwitchRow,
   formatDateTime,
   useDetails,
-  useToast,
-  useUpdateConfigMutation,
   type Column,
   type Fact,
 } from "@/features/admin/_shell";
@@ -34,7 +32,7 @@ import {
   type RangeId,
   type Tab,
 } from "./logLines";
-import { useAdminLogLevel, useAdminLogs, useAuditTrail } from "./useAdminLogs";
+import { useAdminLogs, useAuditTrail } from "./useAdminLogs";
 
 type Panel = { key: string; kind: "line"; index: number } | { key: string; kind: "audit"; id: number };
 
@@ -73,9 +71,6 @@ export default function LogsPanel() {
   const [scrolled, setScrolled] = useState(false);
   const panel = useDetails<Panel>();
   const p = panel.selected;
-  const toast = useToast();
-  const [updateConfig] = useUpdateConfigMutation();
-  const { level: runtimeLevel, refetch: refetchLevel } = useAdminLogLevel();
 
   // Following pauses while the reader has scrolled down into older lines.
   useEffect(() => {
@@ -115,19 +110,6 @@ export default function LogsPanel() {
     else sp.set("tab", next);
     setSearch(sp, { replace: true });
   };
-
-  const setLevelSetting = useCallback(
-    async (next: string) => {
-      try {
-        await updateConfig([{ key: "logLevel", value: next }]).unwrap();
-        toast.success(`The server now logs at ${next}. This applies at once.`);
-        void refetchLevel();
-      } catch (e) {
-        toast.error(e instanceof Error && e.message ? e.message : "Could not change the log level.");
-      }
-    },
-    [updateConfig, toast, refetchLevel],
-  );
 
   const lineColumns: Column<AdminLog>[] = [
     { id: "time", header: "Time", sortValue: (l) => l.dateTime, cell: (l) => timeCell(l.dateTime), className: "whitespace-nowrap" },
@@ -285,26 +267,13 @@ export default function LogsPanel() {
           onChange={setFollowing}
         />
         {tab === "server" && (
-          <label className="flex items-start justify-between gap-4">
-            <span className="min-w-0">
-              <span className="block font-medium">Server log level</span>
-              <span className="block text-xs text-base-content/60">
-                Applies at once, without a restart. Debug is noisy.
-              </span>
-            </span>
-            <select
-              className="select select-sm"
-              aria-label="Server log level"
-              value={runtimeLevel}
-              onChange={(e) => void setLevelSetting(e.target.value)}
-            >
-              {LOG_LEVELS.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className="text-xs text-base-content/60 sm:self-center">
+            The server log level is set under{" "}
+            <Link to="/admin/settings#settings-logging" className="link">
+              Settings → Logging
+            </Link>
+            .
+          </p>
         )}
       </div>
 

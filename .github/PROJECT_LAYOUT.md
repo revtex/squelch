@@ -184,7 +184,7 @@ frontend/
           activity/        ActivityPanel + activitySlice + useAdminActivity
           trmqtt/          trunk-recorder MQTT dashboard
         logs/              LogsPanel + useAdminLogs
-        legacy-usage/  radio-reference/  tools/  options/
+        legacy-usage/  radio-reference/  tools/  settings/
         dir-monitor/   forwarding/   shared-links/
         groups-tags/   transcription/
     shared/                lowest layer — cross-feature primitives. No imports

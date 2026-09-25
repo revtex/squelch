@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Settings, rebuilt.** One page of named groups (General, Scanner, Radio
+  data, Ingest & audio, Storage, Sharing, Access & security, Integrations,
+  Logging) with a **Find a setting** box, group links under the title, and a
+  save bar that lists what changed with a **Discard** button. Dependent rows
+  sit indented under their parent and grey out while it is off; negative
+  options read positively (**Reject duplicate calls**). Settings that lived
+  on other pages come home: **Create systems from uploads** (from Systems),
+  the **Default upload rate limit** (from API keys), the **Log level** (from
+  Logs & audit) and the **Keypad beeps** default, which had no control at all.
+  The Storage group shows how much the recordings take, the volume's size
+  and free space, the database size and the oldest call. **Access & security**
+  shows the trusted addresses and makes the sign-in lockout configurable:
+  **Lock out sign-in after** N failures and **Lockout lasts** M minutes, both
+  applied at once. Values are checked on the server too (a plain support
+  address, whole numbers within range). `/admin/options` redirects to
+  `/admin/settings`.
+
 - **Logs & audit, rebuilt.** The server log is a real table with the level
   as text, range and level chips that apply at once, a **Following** switch
   that pauses while you read, and **Download**. A line opens in the side
@@ -155,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   token, so a client without cookies can revoke its refresh family — before
   this, logging out of such a client left the family valid for its full
   30 days.
+
+### Removed
+
+- The unused `activityDashboard` setting. Nothing ever read it; the Overview
+  is always on. It is deleted from the database by migration 030.
 
 ### Changed
 

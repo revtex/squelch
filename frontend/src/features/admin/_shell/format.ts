@@ -57,3 +57,17 @@ export function fromDateInput(value: string): number | null {
   if (!y || !m || !d) return null;
   return Math.floor(new Date(y, m - 1, d, 23, 59, 59).getTime() / 1000);
 }
+
+/** Bytes as a short size: "41.2 GB", "820 MB", "12 KB". */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let n = bytes;
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) {
+    n /= 1000;
+    i++;
+  }
+  const digits = i === 0 ? 0 : n < 10 ? 1 : 0;
+  return `${n.toFixed(digits)} ${units[i]}`;
+}

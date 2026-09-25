@@ -243,22 +243,22 @@ Squelch accepts the following audio file types:
 
 `.mp3` · `.wav` · `.m4a` · `.aac` · `.ogg` · `.flac` · `.opus`
 
-If **Audio Conversion** is enabled in **Admin → Options**, incoming files are converted to a standard format (configurable encoding preset) using FFmpeg.
+If **Convert audio on upload** is set in **Admin → Settings → Ingest & audio**, incoming files are converted to a standard format (configurable encoding preset) using FFmpeg.
 
 ---
 
 ## Helpful Settings
 
-These settings in **Admin → Options** affect how calls are ingested:
+These settings in **Admin → Settings → Ingest & audio** affect how calls are ingested:
 
 | Setting                            | What It Does                                                                                                                      |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Audio Conversion**               | Converts incoming audio to a standard format using FFmpeg. Choose from disabled, basic conversion, normalized, or loudnorm modes. |
-| **Disable Duplicate Detection**    | Turns off the check that rejects calls with the same system/talkgroup within a short time window.                                 |
-| **Duplicate Detection Time Frame** | How close (in milliseconds) two calls must be to be considered duplicates.                                                        |
-| **API Key Call Rate**              | Default maximum calls per minute an API key can upload. This one lives in **Admin → API Keys**, not Options, and can be overridden per key. |
+| **Convert audio on upload**        | Converts incoming audio to a standard format using FFmpeg: keep the original, convert only, or convert and normalise peaks or loudness. |
+| **Reject duplicate calls**         | The check that turns away calls with the same system/talkgroup within a short time window. Switch it off to keep them all.       |
+| **Duplicate window**               | How close (in milliseconds) two calls must be to be considered duplicates.                                                        |
+| **Default upload rate limit**      | Calls a minute an API key can upload unless the key sets its own rate under **Admin → API Keys**.                                   |
 
-> **Note:** Auto-populate settings are in **Admin → Systems**, not in Options. **Auto-Populate Systems** is a global toggle at the top of the panel, and each system has its own **TG Auto-Populate** toggle for automatic talkgroup creation.
+> **Note:** **Create systems from uploads** is under **Admin → Settings → Radio data**; each system has its own **TG Auto-Populate** toggle under **Admin → Systems** for automatic talkgroup creation.
 
 ---
 

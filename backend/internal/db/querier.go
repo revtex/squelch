@@ -153,6 +153,7 @@ type Querier interface {
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error
 	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
+	OldestCallTime(ctx context.Context) (int64, error)
 	RecordDownstreamDelivery(ctx context.Context, arg RecordDownstreamDeliveryParams) error
 	RecordWebhookDelivery(ctx context.Context, arg RecordWebhookDeliveryParams) error
 	RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error

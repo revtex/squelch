@@ -60,10 +60,10 @@ export default function TrMqttPanel() {
         <span>
           Trunk Recorder MQTT integration is not enabled. Open{" "}
           <span className="font-semibold">
-            Admin → Options → Trunk Recorder MQTT
+            Settings → Integrations → Trunk Recorder MQTT
           </span>{" "}
           and toggle{" "}
-          <span className="font-mono">Enable Trunk Recorder MQTT</span> on to
+          <span className="font-mono">Trunk Recorder MQTT</span> on to
           use this dashboard.
         </span>
       </div>

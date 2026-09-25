@@ -69,7 +69,9 @@ type Deps struct {
 	FDKAACAvailable   bool
 	WhisperAvailable  bool
 	RecordingsDir     string
-	EncryptionKey     string
+	// DBFile is the SQLite database path, for the storage figures.
+	DBFile        string
+	EncryptionKey string
 	// Connections is the live connection registry; nil leaves the
 	// connection list empty.
 	Connections *connections.Registry
@@ -105,6 +107,9 @@ type Operations struct {
 	// StartTime is used by activity-stats and uptime calculations. It
 	// defaults to time.Now() on New() but can be overridden for tests.
 	StartTime time.Time
+
+	// storage caches the recordings measurement between Settings loads.
+	storage storageCache
 }
 
 // New constructs a new Operations bound to the given queries, deps, and
@@ -279,7 +284,6 @@ var serverOnlySettingKeys = map[string]bool{
 
 // allowedSettingKeys mirrors the allowed setting keys from config.go.
 var allowedSettingKeys = map[string]bool{
-	"activityDashboard":           true,
 	"apiKeyCallRate":              true,
 	"auditRetentionDays":          true,
 	"audioConversion":             true,
@@ -291,6 +295,8 @@ var allowedSettingKeys = map[string]bool{
 	"email":                       true,
 	"keypadBeeps":                 true,
 	"logLevel":                    true,
+	"loginMaxFailures":            true,
+	"loginLockoutMinutes":         true,
 	"connectionHistoryDays":       true,
 	"maxClients":                  true,
 	"pruneDays":                   true,
