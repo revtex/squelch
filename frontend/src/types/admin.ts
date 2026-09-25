@@ -592,7 +592,19 @@ export interface TranscriptionStatus {
   language: string;
   diarize: boolean;
   liveDisplay: boolean;
+  /** Calls shorter than this are not sent; 0 sends everything. */
+  minDurationMs: number;
+  /** Whether go-whisper answered just now. */
   connected: boolean;
+  /** From the sidecar's Server header, when it sends one. */
+  version: string;
+  latencyMs: number;
+  /** Why it is not connected, in a sentence; empty when it is. */
+  error: string;
+  /** Live pool: worker count, buffered jobs, and whether a pool is running. */
+  workers: number;
+  queueDepth: number;
+  poolEnabled: boolean;
 }
 
 export interface WhisperModel {
@@ -603,14 +615,52 @@ export interface WhisperModel {
   owned_by: string;
 }
 
+/** A model download in flight on the server. */
+export interface ModelDownload {
+  model: string;
+  current: number;
+  total: number;
+  percent: number;
+}
+
 export interface TranscriptionModelsResponse {
-  object: string;
   models: WhisperModel[];
+  downloads: ModelDownload[];
+}
+
+export interface TranscriptionTestResult {
+  ok: boolean;
+  latencyMs: number;
+  version: string;
+  models: number;
+  error: string;
+}
+
+export type TranscriptionJobStatus = "queued" | "done" | "failed" | "skipped";
+
+/** One call's trip through the transcriber. */
+export interface TranscriptionJob {
+  callId: number;
+  status: TranscriptionJobStatus;
+  error: string;
+  model: string;
+  durationMs: number;
+  createdAt: number;
+  finishedAt: number | null;
+  callTime: number;
+  callDurationMs: number;
+  systemLabel: string;
+  talkgroupNumber: number | null;
+  talkgroupLabel: string;
 }
 
 export interface TranscriptionStats {
   total: number;
   recent24h: number;
+  calls24h: number;
+  failed24h: number;
+  skipped24h: number;
+  queued: number;
   avgDurationMs: number;
   minDurationMs: number;
   maxDurationMs: number;

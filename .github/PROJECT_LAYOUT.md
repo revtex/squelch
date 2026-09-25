@@ -190,7 +190,9 @@ frontend/
         logs/              LogsPanel + useAdminLogs
         legacy-usage/  radio-reference/  tools/  settings/
         dir-monitor/   forwarding/   shared-links/
-        transcription/
+        transcription/     TranscriptionPanel (banner, tiles, tabs) +
+                           SettingsTab/ModelsTab/JobsTab, useModelDownloads
+                           (download progress events), transcription.ts catalogue
     shared/                lowest layer — cross-feature primitives. No imports
                            from features/ (a few documented exceptions live in
                            eslint.config.js for the WS / Call-type debt).

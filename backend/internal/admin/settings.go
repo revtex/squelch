@@ -70,6 +70,7 @@ var settingRanges = map[string]struct{ min, max int }{
 	"maxClients":                  {0, 100_000},
 	"pruneDays":                   {0, 3650},
 	"sharedLinkExpiry":            {0, 3650},
+	"transcriptionMinDurationMs":  {0, 60_000},
 }
 
 // settingChoices lists the settings that take one of a few words.
@@ -255,6 +256,10 @@ func (o *Operations) ConfigUpdate(ctx context.Context, params json.RawMessage, c
 			}
 		case "loginMaxFailures", "loginLockoutMinutes":
 			ApplyLoginLimits(ctx, o.Queries, o.Deps.LoginLimiter)
+		case "transcriptionMinDurationMs":
+			if o.Deps.TranscriberReload != nil {
+				ApplyTranscriptionMinDuration(ctx, o.Queries, o.Deps.TranscriberReload)
+			}
 		}
 	}
 

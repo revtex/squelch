@@ -101,6 +101,17 @@ func (q *Queries) CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) 
 	return items, nil
 }
 
+const countCallsSince = `-- name: CountCallsSince :one
+SELECT COUNT(*) FROM calls WHERE date_time >= ?
+`
+
+func (q *Queries) CountCallsSince(ctx context.Context, dateTime int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCallsSince, dateTime)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createCall = `-- name: CreateCall :one
 INSERT INTO calls (
     audio_path,

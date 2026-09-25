@@ -641,8 +641,9 @@ func (h *Handler) PostCallUpload(c *gin.Context) {
 	if h.transcriber != nil {
 		absPath := filepath.Join(h.processor.RecordingsDir(), relPath)
 		if err := h.transcriber.Submit(ctx, audio.TranscriptionJob{
-			CallID:    callID,
-			AudioPath: absPath,
+			CallID:     callID,
+			AudioPath:  absPath,
+			DurationMs: duration.Int64,
 		}); err != nil {
 			slog.Warn("call-upload: failed to enqueue transcription", "call_id", callID, "error", err)
 		}

@@ -156,3 +156,56 @@ func waitForGoroutinesToSettle(timeout time.Duration) {
 		}
 	}
 }
+
+type recordingJobs struct {
+	queued  []int64
+	skipped map[int64]string
+}
+
+func (r *recordingJobs) Queued(_ context.Context, id int64, _ string) {
+	r.queued = append(r.queued, id)
+}
+func (r *recordingJobs) Skipped(_ context.Context, id int64, _, reason string) {
+	if r.skipped == nil {
+		r.skipped = map[int64]string{}
+	}
+	r.skipped[id] = reason
+}
+
+// Calls under the minimum length are recorded as skipped and never reach
+// the pool; a forced retry goes through regardless.
+func TestTranscriberManager_SkipsShortCallsUnlessForced(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// The pool's worker is stopped at once, so what is queued stays counted.
+	poolCtx, stopPool := context.WithCancel(ctx)
+	pool, err := audio.NewTranscriberPool(poolCtx, 1, "http://127.0.0.1:1", "ggml-base", "en", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stopPool()
+	time.Sleep(20 * time.Millisecond)
+	m := audio.NewTranscriberManager(ctx, pool, stopPool)
+	rec := &recordingJobs{}
+	m.SetRecorder(rec)
+	m.SetMinDurationMs(1500)
+
+	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 1, DurationMs: 900}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 2, DurationMs: 3000}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 3}); err != nil { // unknown length: kept
+		t.Fatal(err)
+	}
+	if err := m.Retry(ctx, 4, "/rec/short.m4a"); err != nil {
+		t.Fatal(err)
+	}
+	if rec.skipped[1] != "shorter than 1.5 s" || len(rec.skipped) != 1 {
+		t.Errorf("skipped = %v", rec.skipped)
+	}
+	if len(rec.queued) != 3 || m.QueueDepth() != 3 || m.Workers() != 1 {
+		t.Errorf("queued = %v depth = %d workers = %d", rec.queued, m.QueueDepth(), m.Workers())
+	}
+}

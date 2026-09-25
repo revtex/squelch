@@ -276,3 +276,16 @@ CREATE TABLE IF NOT EXISTS ip_blocks (
     created_at INTEGER NOT NULL,
     expires_at INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS transcription_jobs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id     INTEGER NOT NULL UNIQUE REFERENCES calls(id) ON DELETE CASCADE,
+    status      TEXT    NOT NULL,
+    error       TEXT,
+    model       TEXT,
+    duration_ms INTEGER,
+    created_at  INTEGER NOT NULL,
+    finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_transcription_jobs_status_created ON transcription_jobs(status, created_at);

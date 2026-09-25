@@ -349,27 +349,30 @@ Revoking a link makes the call eligible for normal pruning again. Whether links 
 
 ## Transcription
 
-Configure automatic speech-to-text for calls. Transcription uses a separate [go-whisper](https://github.com/mutablelogic/go-whisper) sidecar service — see the [Deployment Guide](deployment-guide.md#transcription-optional) for setup instructions.
+Turns recordings into text with a separate [go-whisper](https://github.com/mutablelogic/go-whisper) sidecar; see the [Deployment Guide](deployment-guide.md#transcription-optional) for running one. Transcripts show under the scanner display and in the call search.
 
-This panel shows a connection status indicator and provides these controls:
+The banner at the top says whether the sidecar answers, its version when it reports one, the model in use and how many workers are running; when it does not answer, it says why in a sentence (nothing listening, name does not resolve, no answer in five seconds). **Test connection** tries it again and writes the result to the audit trail. Four tiles follow: the **queue** (with whether it is growing and roughly how far behind), calls **transcribed in 24 hours** as a share of all calls, the **average time per call** with its range, and **failures in 24 hours** with a link to them.
 
-| Setting                 | Description                                                         |
-| ----------------------- | ------------------------------------------------------------------- |
-| Transcription Enabled   | Master on/off toggle                                                |
-| Live Transcript Display | Show transcription text in the live scanner player                  |
-| Transcription URL       | Address of the go-whisper server (default: `http://localhost:8081`) |
-| Language                | Target language or auto-detect (15 languages supported)             |
-| Diarize                 | Speaker identification — only available with `-tdrz` models         |
+### Settings
 
-### Model Management
+Everything here is saved together with **Save**; toggles included. The bar at the bottom lists what changed, **Discard** puts it back, and leaving with unsaved changes asks first.
 
-Before transcription works, you need to download at least one model. The panel provides:
+| Setting                         | What it does                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Transcribe new calls            | Off pauses the queue; nothing is lost.                                                                    |
+| Show transcripts in the scanner | Listeners see the text under the display while a call plays.                                              |
+| go-whisper URL                  | The sidecar's base URL, reachable from the server (default `http://localhost:8081`). **Test** tries it.   |
+| Language                        | The language to expect, or auto-detect, which costs a little time per call.                               |
+| Speaker turns                   | Splits the text by speaker. Needs a tinydiarize (`tdrz`) model; the switch is off until one is in use.    |
+| Skip calls shorter than         | Calls under this length are not sent, saving queue time on key-ups. 0 sends every call.                   |
 
-- **Download** — select from the list of available Whisper models and download
-- **Set Active** — choose which downloaded model to use
-- **Delete** — remove a downloaded model
+### Models
 
-The panel also shows transcription statistics when available.
+Every whisper.cpp model, with its size, relative speed and whether it marks speaker turns, so you can choose before downloading. **Download** starts a download on the sidecar and shows a progress bar; it continues if you leave the page, and **Cancel** stops it. **Use** makes a downloaded model the active one. **Delete** removes a model from the sidecar after asking; the model in use cannot be deleted while transcription is on.
+
+### Recent jobs
+
+What happened to each call handed to the transcriber: **done** with how long it took, **failed** with the reason in words (sidecar timed out, sidecar not reachable, audio file is missing), **skipped** when it was shorter than the minimum, or **queued**. Filter by status; **Retry** sends a failed or skipped call again, and **Retry N calls** does the same for every one in the list. Transcription must be on for a retry. Failed and queued counts cover the last 24 hours; the list keeps 30 days.
 
 ---
 

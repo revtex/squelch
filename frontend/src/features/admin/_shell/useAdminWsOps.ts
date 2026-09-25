@@ -40,7 +40,6 @@ import type {
   RRApplyRequest,
   RRApplyResponse,
   TranscriptionStatus,
-  WhisperModel,
   AdminConnectionsList,
   AdminSessionsList,
   AdminConnectionHistoryPage,
@@ -49,6 +48,11 @@ import type {
   AdminLockoutsList,
   CreateIPBlockPayload,
   CreateIPBlockResult,
+  TranscriptionModelsResponse,
+  TranscriptionTestResult,
+  TranscriptionJob,
+  TranscriptionJobStatus,
+  TranscriptionStats,
 } from "@/types";
 
 // ─── Payload types ──────────────────────────────────────────────────────────
@@ -554,31 +558,49 @@ export function useRrApplyMutation() {
 // ─── Transcription ──────────────────────────────────────────────────────────
 
 export function useTranscriptionStatusQuery() {
-  return useWsQuery<TranscriptionStatus>("transcription.status");
+  return useWsQuery<TranscriptionStatus>("transcription.status", undefined, "transcription.updated", 30_000);
 }
 
 export function useTranscriptionModelsQuery() {
-  return useWsQuery<WhisperModel[]>("transcription.models");
+  return useWsQuery<TranscriptionModelsResponse>("transcription.models", undefined, "transcription.models.updated");
 }
 
+/** Starts a download; progress arrives as transcription.download.* events. */
 export function useTranscriptionDownloadMutation() {
-  return useWsMutation<WhisperModel, { model: string }>(
-    "transcription.download",
-    { timeoutMs: 5 * 60_000 },
-  );
+  return useWsMutation<{ started: boolean; model: string }, { model: string }>("transcription.download");
+}
+
+export function useCancelModelDownloadMutation() {
+  return useWsMutation<{ cancelled: boolean }, { model: string }>("transcription.download.cancel");
 }
 
 export function useTranscriptionDeleteMutation() {
-  return useWsMutation<{ deleted: boolean }, { id: string }>(
-    "transcription.delete",
+  return useWsMutation<{ deleted: boolean }, { id: string }>("transcription.delete");
+}
+
+export function useTranscriptionTestMutation() {
+  return useWsMutation<TranscriptionTestResult, { url?: string }>("transcription.test");
+}
+
+export function useTranscriptionJobsQuery(status?: TranscriptionJobStatus, limit = 100) {
+  return useWsQuery<TranscriptionJob[]>(
+    "transcription.jobs",
+    { status: status ?? "", limit },
+    "transcription.jobs.updated",
+    15_000,
   );
 }
 
+export function useRetryTranscriptionMutation() {
+  return useWsMutation<{ ok: boolean; retried: number }, { callId?: number; callIds?: number[] }>("transcription.retry");
+}
+
 export function useTranscriptionStatsQuery() {
-  return useWsQuery<import("@/types").TranscriptionStats>(
+  return useWsQuery<TranscriptionStats>(
     "transcription.stats",
     undefined,
-    undefined,
+    "transcription.jobs.updated",
     30_000, // Auto-refresh every 30 seconds
   );
 }
+

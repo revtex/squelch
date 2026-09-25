@@ -899,6 +899,7 @@ func (p *program) run() {
 		}
 	}
 	transcriberMgr := audio.NewTranscriberManager(ctx, initialPool, poolCancel)
+	admin.ApplyTranscriptionMinDuration(ctx, queries, transcriberMgr)
 
 	// Start background call pruner.
 	go audio.PruneLoop(ctx, queries, cfg.RecordingsDir)
@@ -990,6 +991,7 @@ func (p *program) run() {
 	// then once a day.
 	go func() {
 		admin.PruneAuditTrail(ctx, queries)
+		admin.PruneTranscriptionJobs(ctx, queries)
 		t := time.NewTicker(24 * time.Hour)
 		defer t.Stop()
 		for {
@@ -998,10 +1000,14 @@ func (p *program) run() {
 				return
 			case <-t.C:
 				admin.PruneAuditTrail(ctx, queries)
+				admin.PruneTranscriptionJobs(ctx, queries)
 			}
 		}
 	}()
 
+	// The job history needs the hub so admin pages hear about each job; it
+	// is set before anything can hand the transcriber a call.
+	transcriberMgr.SetRecorder(admin.TranscriptionJobRecorder{Queries: queries, Events: hub})
 	dwService := dirmonitor.NewService(queries, processor, hub, forwarders, transcriberMgr)
 	dwService.Start(ctx)
 	hub.SetDirMonitorReloader(dwService)
@@ -1313,6 +1319,7 @@ func formatTRMqttErr(err error) string {
 // consumeTranscriptionResults reads completed transcription jobs, stores them
 // in the database, and broadcasts TRN events to WebSocket clients.
 func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *ws.Hub, mgr *audio.TranscriberManager) {
+	recorder := admin.TranscriptionJobRecorder{Queries: queries, Events: hub}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1321,6 +1328,7 @@ func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *
 			if !ok {
 				return
 			}
+			recorder.Finished(ctx, res.CallID, res.DurationMs, res.Err)
 			if res.Err != nil {
 				slog.Error("transcription failed", "call_id", res.CallID, "error", res.Err)
 				continue

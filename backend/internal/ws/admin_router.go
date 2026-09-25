@@ -154,6 +154,11 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"transcription.download": o.TranscriptionDownload,
 		"transcription.delete":   o.TranscriptionDelete,
 		"transcription.stats":    o.TranscriptionStats,
+		"transcription.test":     o.TranscriptionTest,
+		"transcription.jobs":     o.TranscriptionJobs,
+		"transcription.retry":    o.TranscriptionRetry,
+
+		"transcription.download.cancel": o.TranscriptionDownloadCancel,
 	}
 }
 

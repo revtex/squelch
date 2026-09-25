@@ -86,6 +86,7 @@ func seedSettings(ctx context.Context, tx *sql.Tx) (bool, error) {
 		{"transcriptionModel", "ggml-base"},
 		{"transcriptionLanguage", "en"},
 		{"transcriptionDiarize", "false"},
+		{"transcriptionMinDurationMs", "0"},
 		{"branding", ""},
 		{"email", ""},
 		{"vapidPublicKey", ""},

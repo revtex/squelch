@@ -38,12 +38,18 @@ type Reloader interface {
 	Reload()
 }
 
-// TranscriberReloader can hot-reload the transcription subsystem.
+// TranscriberReloader can hot-reload the transcription subsystem, report
+// on it, and take a call again on request.
 type TranscriberReloader interface {
 	Reload(enabled bool, baseURL, model, language string, diarize bool) bool
 	Enabled() bool
 	BaseURL() string
+	Model() string
 	QueueDepth() int
+	Workers() int
+	MinDurationMs() int64
+	SetMinDurationMs(ms int64)
+	Retry(ctx context.Context, callID int64, audioPath string) error
 }
 
 // EventSink is the interface Operations uses to push admin events and
@@ -307,6 +313,7 @@ var allowedSettingKeys = map[string]bool{
 	"time12hFormat":               true,
 	"transcriptionDiarize":        true,
 	"transcriptionEnabled":        true,
+	"transcriptionMinDurationMs":  true,
 	"transcriptionLanguage":       true,
 	"liveTranscriptDisplay":       true,
 	"transcriptionModel":          true,

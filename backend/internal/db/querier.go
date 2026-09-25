@@ -21,11 +21,13 @@ type Querier interface {
 	CountCalls(ctx context.Context) (int64, error)
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
 	CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) ([]CountCallsPerAPIKeySinceRow, error)
+	CountCallsSince(ctx context.Context, dateTime int64) (int64, error)
 	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
 	CountLogsSince(ctx context.Context, since int64) (int64, error)
 	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
 	CountTalkgroupsPerSystem(ctx context.Context) ([]CountTalkgroupsPerSystemRow, error)
 	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
+	CountTranscriptionJobs(ctx context.Context, since sql.NullInt64) (CountTranscriptionJobsRow, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
 	CountUnitsPerSystem(ctx context.Context) ([]CountUnitsPerSystemRow, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error)
@@ -65,9 +67,11 @@ type Querier interface {
 	DeleteTRInstance(ctx context.Context, id int64) error
 	DeleteTag(ctx context.Context, id int64) error
 	DeleteTalkgroup(ctx context.Context, id int64) error
+	DeleteTranscriptionJobsBefore(ctx context.Context, createdAt int64) (int64, error)
 	DeleteUnit(ctx context.Context, id int64) error
 	DeleteUser(ctx context.Context, id int64) error
 	DeleteWebhook(ctx context.Context, id int64) error
+	FinishTranscriptionJob(ctx context.Context, arg FinishTranscriptionJobParams) error
 	GetAPIKey(ctx context.Context, id int64) (ApiKey, error)
 	GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error)
 	GetAPIKeyByPreviousKey(ctx context.Context, arg GetAPIKeyByPreviousKeyParams) (ApiKey, error)
@@ -104,6 +108,7 @@ type Querier interface {
 	// Returns top N busiest talkgroups (by call count) in a time range.
 	GetTopTalkgroups(ctx context.Context, arg GetTopTalkgroupsParams) ([]GetTopTalkgroupsRow, error)
 	GetTranscriptionByCallID(ctx context.Context, callID int64) (Transcription, error)
+	GetTranscriptionJob(ctx context.Context, callID int64) (TranscriptionJob, error)
 	GetUnit(ctx context.Context, id int64) (Unit, error)
 	GetUnitBySystemAndUnitID(ctx context.Context, arg GetUnitBySystemAndUnitIDParams) (Unit, error)
 	GetUser(ctx context.Context, id int64) (User, error)
@@ -146,6 +151,8 @@ type Querier interface {
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListTagsWithUsage(ctx context.Context) ([]ListTagsWithUsageRow, error)
 	ListTalkgroupsBySystem(ctx context.Context, systemID int64) ([]Talkgroup, error)
+	// Recent jobs with the call they belong to; an empty status lists them all.
+	ListTranscriptionJobs(ctx context.Context, arg ListTranscriptionJobsParams) ([]ListTranscriptionJobsRow, error)
 	ListUnitsBySystem(ctx context.Context, systemID int64) ([]Unit, error)
 	// One row per account that has ever signed in (within the token retention
 	// window): where it was last seen, when, and how many devices can still
@@ -196,6 +203,8 @@ type Querier interface {
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 	UpsertTalkgroup(ctx context.Context, arg UpsertTalkgroupParams) error
+	// A call handed to the transcriber (again): back to queued with a clean slate.
+	UpsertTranscriptionJob(ctx context.Context, arg UpsertTranscriptionJobParams) error
 	UpsertUnit(ctx context.Context, arg UpsertUnitParams) error
 }
 

@@ -725,11 +725,12 @@ whisper:
 
 Then in Squelch's admin dashboard, open **Admin → Transcription** and:
 
-1. Set **Transcription URL** to `http://whisper:8081`.
-2. **Download a model** — pick one from the list and click download.
-3. **Select the model** you just downloaded as the active model.
-4. Set **Language** (default `en`, or leave blank to auto-detect).
-5. Turn **Transcription Enabled** on.
+1. Under **Settings**, set **go-whisper URL** to `http://whisper:8081`, click **Test** to make sure Squelch can reach it, and **Save**.
+2. Under **Models**, pick a model from the list (each shows its size, speed and whether it marks speaker turns) and click **Download**. A progress bar shows the download; it keeps going if you leave the page.
+3. Click **Use** on the downloaded model.
+4. Back under **Settings**, set **Language** (default English, or auto-detect), turn **Transcribe new calls** on, and **Save**.
+
+The banner at the top of the page says whether the sidecar answers; the **Recent jobs** tab shows what happened to each call. See the [Admin Guide](admin-guide.md#transcription) for the rest of the page.
 
 Available models:
 

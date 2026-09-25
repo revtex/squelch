@@ -243,9 +243,11 @@ backup you took before upgrading —
 ## Transcription
 
 **No transcripts appear.**
-Transcription is off by default and runs as a separate service. Check that
-**Transcription** is enabled in the admin dashboard, that the URL points at a
-reachable go-whisper instance, and that a model is downloaded. Setup is in
+Transcription is off by default and runs as a separate service. Open
+**Admin → Transcription**: the banner at the top says whether the go-whisper
+sidecar answers and why not, **Transcribe new calls** must be on and saved, and a
+model must be downloaded and in use. The **Recent jobs** tab shows what happened
+to each call, with the failure reason in words and a **Retry**. Setup is in
 [Transcription](deployment-guide.md#transcription-optional).
 
 **Transcripts arrive minutes late.**

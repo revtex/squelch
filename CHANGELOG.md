@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Transcription, rebuilt.** A connection banner says whether the go-whisper
+  sidecar answers, its version when it reports one, the model in use and the
+  worker count, or why it does not answer; **Test connection** tries it and
+  audits the result. Tiles show the queue and how far behind it is, calls
+  transcribed in 24 hours as a share of all calls, the average time per call
+  and the failures. Settings save together with one **Save** (toggles
+  included), with a Discard button and an unsaved-changes guard; **Speaker
+  turns** explains the tdrz requirement and stays off without one; a new
+  **Skip calls shorter than** setting drops key-ups before they reach the
+  queue. The Models tab lists size, speed and speaker-turn support before
+  you download, with a progress bar and Cancel, and downloads carry on if
+  you leave the page instead of holding a five-minute request open. A new
+  Recent jobs tab shows what happened to each call (done, failed with the
+  reason, skipped, queued) with filters and **Retry**.
 - **Systems, rebuilt.** The systems sit on the left with their LED colour,
   auto/manual marker, talkgroup count and calls in the last 24 hours; the
   chosen one shows its **Talkgroups**, **Units** and **Blocked** tabs on the

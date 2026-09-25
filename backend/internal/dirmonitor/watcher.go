@@ -839,8 +839,9 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 	if s.transcriber != nil {
 		absPath := filepath.Join(s.processor.RecordingsDir(), relPath)
 		if err := s.transcriber.Submit(ctx, audio.TranscriptionJob{
-			CallID:    callID,
-			AudioPath: absPath,
+			CallID:     callID,
+			AudioPath:  absPath,
+			DurationMs: dur.Int64,
 		}); err != nil {
 			slog.Warn("dirmonitor: failed to enqueue transcription", "call_id", callID, "error", err)
 		}

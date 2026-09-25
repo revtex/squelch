@@ -170,3 +170,6 @@ SELECT source, CAST(MAX(date_time) AS INTEGER) AS last_call
 FROM calls
 WHERE system_id = @system_id AND source IS NOT NULL
 GROUP BY source;
+
+-- name: CountCallsSince :one
+SELECT COUNT(*) FROM calls WHERE date_time >= ?;
