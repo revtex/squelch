@@ -295,7 +295,7 @@ export default function UsersPanel() {
       header: "Sessions",
       sortValue: (u) => u.liveConnections * 10_000 + u.devices,
       cell: (u) => (
-        <span className="tabular-nums">
+        <span className="whitespace-nowrap tabular-nums">
           {u.liveConnections} live · {plural(u.devices, "device")}
         </span>
       ),
@@ -307,8 +307,13 @@ export default function UsersPanel() {
       cell: (u) =>
         u.lastSeenAt ? (
           <span title={formatAgo(u.lastSeenAt, now)}>
-            {formatWhen(u.lastSeenAt, { hour12, now })}
-            {u.lastSeenIp && ` · ${u.lastSeenIp}`}
+            <span className="whitespace-nowrap">{formatWhen(u.lastSeenAt, { hour12, now })}</span>
+            {u.lastSeenIp && (
+              <>
+                {" · "}
+                <span className="whitespace-nowrap">{u.lastSeenIp}</span>
+              </>
+            )}
           </span>
         ) : (
           <span className="text-base-content-dim">never</span>

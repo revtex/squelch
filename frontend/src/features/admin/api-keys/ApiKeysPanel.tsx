@@ -108,8 +108,8 @@ export default function ApiKeysPanel() {
         <>
           <span className="font-medium">{keyName(k)}</span>
           <span className="block text-xs text-base-content-dim">
-            <span className="font-mono">{k.fingerprint}</span> · created{" "}
-            {formatDay(k.createdAt)}
+            <span className="font-mono">{k.fingerprint}</span> ·{" "}
+            <span className="whitespace-nowrap">created {formatDay(k.createdAt)}</span>
           </span>
         </>
       ),
@@ -139,7 +139,7 @@ export default function ApiKeysPanel() {
       cell: (k) =>
         k.lastUsedAt ? (
           <>
-            {formatAgo(k.lastUsedAt)}
+            <span className="whitespace-nowrap">{formatAgo(k.lastUsedAt)}</span>
             {k.lastUsedIp && (
               <>
                 {" · "}

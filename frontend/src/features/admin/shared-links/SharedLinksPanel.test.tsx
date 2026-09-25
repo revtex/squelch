@@ -85,7 +85,9 @@ describe("SharedLinksPanel", () => {
     renderPanel();
     const table = screen.getByRole("table", { name: "Shared links" });
     const active = within(table).getByText("PD Disp").closest("tr")!;
-    expect(within(active).getByText(/^alice · /)).toBeInTheDocument();
+    expect(
+      within(active).getByText((_, el) => !!el?.hasAttribute("title") && /^alice · /.test(el.textContent ?? "")),
+    ).toBeInTheDocument();
     expect(within(active).getByText("3 times")).toBeInTheDocument();
     expect(within(active).getByText("0:41")).toBeInTheDocument();
     expect(within(active).getByText(/in 1 d|in 23 h/)).toBeInTheDocument();

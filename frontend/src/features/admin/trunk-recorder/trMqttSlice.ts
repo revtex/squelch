@@ -21,6 +21,9 @@ import type {
 // Caps mirror the plan: rolling windows are bounded so memory stays flat
 // even on a busy P25 system.
 const RATE_CAP = 300; // ~5 min at 1 Hz
+// The chart and tile say "last 5 min", but Trunk Recorder's publish interval
+// varies (every 3 s gives 15 min in RATE_CAP samples), so trim by time too.
+const RATE_WINDOW_MS = 5 * 60_000;
 const UNIT_EVENT_CAP = 200;
 const MESSAGE_CAP = 500;
 const RECENT_CALL_CAP = 100;
@@ -65,6 +68,14 @@ function pushCapped<T>(arr: T[] | undefined, item: T, cap: number): T[] {
     return next.slice(next.length - cap);
   }
   return next;
+}
+
+/** Rate samples from the last RATE_WINDOW_MS before the newest one, capped. */
+function trimRates(arr: RateSample[]): RateSample[] {
+  if (arr.length === 0) return arr;
+  const from = arr[arr.length - 1].at - RATE_WINDOW_MS;
+  const start = arr.findIndex((s) => s.at >= from);
+  return arr.slice(Math.max(start, arr.length - RATE_CAP));
 }
 
 function asArray(v: unknown): unknown[] {
@@ -253,7 +264,7 @@ function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotV
     }
     if (bySecond.size > 0) {
       const older = [...bySecond.entries()].sort((a, b) => a[0] - b[0]).map(([at, rate]) => ({ at, rate }));
-      state.rates[id] = [...older, ...live].slice(-RATE_CAP);
+      state.rates[id] = trimRates([...older, ...live]);
     }
     if (Object.keys(state.systemRates[id] ?? {}).length === 0 && asArray(asRecord(snapshot.Rates)?.rates).length > 0) {
       state.systemRates[id] = extractSystemRates(snapshot.Rates, now);
@@ -411,11 +422,7 @@ export const trMqttSlice = createSlice({
           return;
         }
         case "tr.rates": {
-          state.rates[id] = pushCapped(
-            state.rates[id],
-            { at: now, rate: aggregateRate(envelope.payload) },
-            RATE_CAP,
-          );
+          state.rates[id] = trimRates([...(state.rates[id] ?? []), { at: now, rate: aggregateRate(envelope.payload) }]);
           state.systemRates[id] = extractSystemRates(envelope.payload, now);
           state.instances[id] = { ...conn, connected: true, lastSeenAt: now };
           return;

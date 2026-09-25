@@ -7,8 +7,8 @@ import {
   Segmented,
   SwitchRow,
   formatBytes,
-  formatDate,
   formatAgo,
+  formatDay,
   plural,
   useGetConfigQuery,
   useNavigationGuard,
@@ -355,7 +355,12 @@ function StorageLine({ storage }: { storage: StorageInfo | undefined }) {
     parts.push(`Volume ${formatBytes(storage.volumeTotalBytes)}, ${formatBytes(storage.volumeFreeBytes)} free.`);
   }
   if (storage.databaseBytes > 0) parts.push(`Database ${formatBytes(storage.databaseBytes)}.`);
-  if (storage.oldestCall) parts.push(`Oldest call ${formatDate(storage.oldestCall)}, ${formatAgo(storage.oldestCall)}.`);
+  if (storage.oldestCall) {
+    // formatAgo falls back to the date itself past 90 days; don't say it twice.
+    const day = formatDay(storage.oldestCall);
+    const ago = formatAgo(storage.oldestCall);
+    parts.push(ago === day ? `Oldest call ${day}.` : `Oldest call ${day}, ${ago}.`);
+  }
   return (
     <p className="text-xs text-base-content-dim" data-testid="storage-line">
       {parts.join(" ")}

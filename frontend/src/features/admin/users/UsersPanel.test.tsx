@@ -165,7 +165,12 @@ describe("UsersPanel", () => {
     const alice = within(table).getByText("alice").closest("tr")!;
     expect(within(alice).getByText("temporary password")).toBeInTheDocument();
     expect(within(alice).getByText("County PD")).toBeInTheDocument();
-    expect(within(alice).getByText(/^(Today|Yesterday) .* · 198\.51\.100\.4$/)).toBeInTheDocument();
+    // The time and address are separate unbreakable pieces inside one titled span.
+    expect(
+      within(alice).getByText(
+        (_, el) => !!el?.hasAttribute("title") && /^(Today|Yesterday) .* · 198\.51\.100\.4$/.test(el.textContent ?? ""),
+      ),
+    ).toBeInTheDocument();
     expect(within(alice).getByText("limit 2 connections")).toBeInTheDocument();
     const bob = within(table).getByText("bob").closest("tr")!;
     expect(within(bob).getByText("disabled")).toBeInTheDocument();

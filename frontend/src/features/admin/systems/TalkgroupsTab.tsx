@@ -110,7 +110,9 @@ export default function TalkgroupsTab({
             <span className="badge badge-warning mt-0.5">unlabeled</span>
           </span>
         ) : (
-          <span className="block min-w-0">
+          // Capped so a long name truncates instead of widening the table past
+          // Calls and Last heard; wider panes give it more room.
+          <span className="block min-w-0 max-w-[13rem] @[1000px]:max-w-[22rem]" title={tg.name || undefined}>
             <span className="block truncate font-medium">{tg.label ?? "—"}</span>
             {(tg.name || tg.led) && (
               <span className="flex min-w-0 items-center gap-1.5 text-xs text-base-content-dim">
@@ -305,27 +307,30 @@ export default function TalkgroupsTab({
           Add talkgroup
         </button>
       </div>
-      <DataTable
-        key={systemRowId}
-        columns={columns}
-        rows={rows}
-        rowKey={(tg) => tg.id}
-        caption="Talkgroups"
-        loading={loading}
-        defaultSort={{ id: "tg", dir: "asc" }}
-        pageSize={50}
-        selected={selected}
-        onSelectedChange={setSelected}
-        bulkActions={bulk}
-        onOpen={onOpen}
-        openKey={openId}
-        rowLabel={(tg) => `${tg.talkgroupId}${tg.label ? ` ${tg.label}` : ""}`}
-        empty={
-          talkgroups.length === 0
-            ? "No talkgroups yet. Import a CSV, add one, or let uploads create them."
-            : "No talkgroups match."
-        }
-      />
+      {/* Tighter cell padding so eight columns fit beside the system list. */}
+      <div className="@container sm:[&_:is(th,td)]:px-2.5">
+        <DataTable
+          key={systemRowId}
+          columns={columns}
+          rows={rows}
+          rowKey={(tg) => tg.id}
+          caption="Talkgroups"
+          loading={loading}
+          defaultSort={{ id: "tg", dir: "asc" }}
+          pageSize={50}
+          selected={selected}
+          onSelectedChange={setSelected}
+          bulkActions={bulk}
+          onOpen={onOpen}
+          openKey={openId}
+          rowLabel={(tg) => `${tg.talkgroupId}${tg.label ? ` ${tg.label}` : ""}`}
+          empty={
+            talkgroups.length === 0
+              ? "No talkgroups yet. Import a CSV, add one, or let uploads create them."
+              : "No talkgroups match."
+          }
+        />
+      </div>
     </div>
   );
 }

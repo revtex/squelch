@@ -395,6 +395,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restart date no longer breaks across lines, and a long address in the
   Transcription and Trunk Recorder banners wraps instead of running under
   the button.
+- **Admin pages hold their shape with real data.** On Systems & talkgroups
+  a long talkgroup name no longer pushes Calls 24 h and Last heard out of
+  view: the label is cut short (full name on hover) and the columns sit
+  closer. Users, API keys and Shared links keep "3 live · 20 devices", a
+  sign-in time, "created 2026-09-25" and the row's buttons on one line.
+  On a phone a user with a long system name no longer squeezes the card's
+  other column to one letter, and the RadioReference system picker on
+  Backup & import stays inside the screen. The Overview chart's last hour
+  label is no longer clipped, and Settings no longer shows the oldest
+  call's date twice.
+- **Trunk Recorder's decode-rate chart covers the last 5 minutes.** It
+  kept the last 300 samples, which is 15 minutes when Trunk Recorder
+  publishes every 3 seconds, so the chart said "last 5 min" over a
+  "−15 min" axis and the tile's min and max came from the longer span.
+  Samples are now kept by time.
 - **API keys counts legacy uploads for every key.** The legacy report
   keeps only the first six characters of a key's label, and the API keys
   page matched that against the whole label. A key named longer than six

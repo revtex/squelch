@@ -188,7 +188,7 @@ export default function SharedLinksPanel() {
       sortValue: (l) => -l.createdAt,
       cell: (l) => (
         <span title={formatDateTime(l.createdAt)}>
-          {l.sharedBy || "unknown"} · {formatAgo(l.createdAt)}
+          {l.sharedBy || "unknown"} · <span className="whitespace-nowrap">{formatAgo(l.createdAt)}</span>
         </span>
       ),
     },
@@ -228,7 +228,7 @@ export default function SharedLinksPanel() {
       align: "right",
       phone: "wide",
       cell: (l) => (
-        <span className="inline-flex flex-wrap justify-end gap-1.5 max-sm:flex max-sm:justify-start">
+        <span className="inline-flex justify-end gap-1.5 max-sm:flex max-sm:flex-wrap max-sm:justify-start">
           {!l.expired && (
             <button
               type="button"

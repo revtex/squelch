@@ -68,7 +68,16 @@ export function CallsChart({ series, hour12, label }: { series: Series; hour12: 
           );
         })}
         {ticks.map(({ p, i }) => (
-          <text key={p.at} x={x(i)} y={H - 6} textAnchor="middle" fontSize={11} fill="currentColor" fillOpacity={0.6}>
+          // A tick near either edge anchors inward so its label stays inside the drawing.
+          <text
+            key={p.at}
+            x={x(i)}
+            y={H - 6}
+            textAnchor={x(i) > W - R - 28 ? "end" : x(i) < L + 28 ? "start" : "middle"}
+            fontSize={11}
+            fill="currentColor"
+            fillOpacity={0.6}
+          >
             {tickLabel(p.at, series.unit, spanDays, hour12)}
           </text>
         ))}

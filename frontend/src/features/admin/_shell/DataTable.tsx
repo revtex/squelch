@@ -80,6 +80,8 @@ function compare(a: SortValue, b: SortValue): number {
 
 // On a phone each row is a card: a two-column grid of label-over-value
 // pairs, the title top-left, the tick box top-right, the › bottom-right.
+// The right column hugs its values but stops at half the card, so one long
+// value (a system's full name) can't squeeze the left column to nothing.
 const CELL_PHONE =
   "max-sm:block max-sm:min-w-0 max-sm:border-0 max-sm:p-0 max-sm:before:block max-sm:before:text-[11px] max-sm:before:uppercase max-sm:before:tracking-[0.04em] max-sm:before:text-base-content-dim max-sm:before:content-[attr(data-label)]";
 const TITLE_PHONE =
@@ -284,7 +286,7 @@ export function DataTable<T, K extends string | number>({
                 return (
                   <tr
                     key={k}
-                    className={`max-sm:grid max-sm:grid-cols-[1fr_auto] max-sm:gap-x-2.5 max-sm:gap-y-1 max-sm:border-b max-sm:border-admin-line max-sm:px-3.5 max-sm:py-2.5 max-sm:last:border-b-0 ${
+                    className={`max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_fit-content(50%)] max-sm:gap-x-2.5 max-sm:gap-y-1 max-sm:border-b max-sm:border-admin-line max-sm:px-3.5 max-sm:py-2.5 max-sm:last:border-b-0 ${
                       isOpen ? "bg-admin-navy2" : isSelected ? "bg-primary/10" : ""
                     } ${rowClassName?.(row) ?? ""}`}
                   >

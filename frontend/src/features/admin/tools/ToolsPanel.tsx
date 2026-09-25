@@ -243,7 +243,8 @@ export default function ToolsPanel() {
         <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="System to enrich"
-            className="select w-auto"
+            // Paint containment: Chrome counts a capped select's full text as page overflow.
+            className="select w-auto max-w-full [contain:paint]"
             value={rrSystem?.id ?? 0}
             onChange={(e) => setRrSystemId(Number(e.target.value))}
             disabled={systems.length === 0}

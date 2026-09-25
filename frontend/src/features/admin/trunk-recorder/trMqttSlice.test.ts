@@ -94,6 +94,24 @@ describe("trMqttSlice", () => {
     expect(s.rates[ID][299].rate).toBe(304);
   });
 
+  it("tr.rates keeps only the last 5 minutes when frames come every 3 s", () => {
+    let s = emptyState();
+    const t0 = Date.parse("2026-09-25T12:00:00Z");
+    for (let i = 0; i < 300; i++) {
+      s = reducer(
+        s,
+        applyTrEvent({
+          topic: "tr.rates",
+          envelope: envelope({ rates: [{ decoderate: i }] }),
+          at: t0 + i * 3000,
+        }),
+      );
+    }
+    const kept = s.rates[ID];
+    expect(kept[kept.length - 1].at - kept[0].at).toBeLessThanOrEqual(5 * 60_000);
+    expect(kept).toHaveLength(101);
+  });
+
   it("tr.message captures opcode/desc and caps to 500", () => {
     let s = emptyState();
     s = reducer(
