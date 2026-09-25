@@ -6,6 +6,8 @@ import type {
   AdminUnit,
   AdminGroup,
   AdminTag,
+  DeleteLabelPayload,
+  DeleteLabelResult,
   AdminApiKey,
   AdminApiKeyCreateResponse,
   AdminDirMonitor,
@@ -240,17 +242,15 @@ export function useListGroupsQuery() {
 }
 
 export function useCreateGroupMutation() {
-  return useWsMutation<AdminGroup, CreatePayload<AdminGroup>>("groups.create");
+  return useWsMutation<AdminGroup, { label: string }>("groups.create");
 }
 
 export function useUpdateGroupMutation() {
-  return useWsMutation<AdminGroup, UpdatePayload<AdminGroup>>("groups.update");
+  return useWsMutation<AdminGroup, { id: number; label: string }>("groups.update");
 }
 
 export function useDeleteGroupMutation() {
-  return useWsMutation<void, number>("groups.delete", {
-    transformArg: (id) => ({ id }),
-  });
+  return useWsMutation<DeleteLabelResult, DeleteLabelPayload>("groups.delete");
 }
 
 // ─── Tags ───────────────────────────────────────────────────────────────────
@@ -260,17 +260,15 @@ export function useListTagsQuery() {
 }
 
 export function useCreateTagMutation() {
-  return useWsMutation<AdminTag, CreatePayload<AdminTag>>("tags.create");
+  return useWsMutation<AdminTag, { label: string }>("tags.create");
 }
 
 export function useUpdateTagMutation() {
-  return useWsMutation<AdminTag, UpdatePayload<AdminTag>>("tags.update");
+  return useWsMutation<AdminTag, { id: number; label: string }>("tags.update");
 }
 
 export function useDeleteTagMutation() {
-  return useWsMutation<void, number>("tags.delete", {
-    transformArg: (id) => ({ id }),
-  });
+  return useWsMutation<DeleteLabelResult, DeleteLabelPayload>("tags.delete");
 }
 
 // ─── API Keys ───────────────────────────────────────────────────────────────

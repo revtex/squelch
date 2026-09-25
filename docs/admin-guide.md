@@ -210,12 +210,17 @@ Each unit has a **Unit ID** and **Label**. Units represent individual radios on 
 
 Groups and tags organize your talkgroups into categories.
 
-- **Groups** categorize talkgroups by function (e.g. Fire, Law, EMS, Public Works)
-- **Tags** provide finer classification (e.g. Law Dispatch, Law Tac, Fire Tac, Emergency Ops)
+- **Groups** sort talkgroups in the scanner's picker by function (e.g. Fire, Law, EMS, Public Works)
+- **Tags** say what kind of traffic a talkgroup carries (e.g. Law Dispatch, Law Tac, Fire Tac, Emergency Ops)
 
-Both are simple label lists. Assign them to talkgroups in the Systems panel.
+Both lists are edited in place on **Admin → Groups & tags**:
 
-Squelch ships with sensible defaults (Air, Common, EMS, Fire, Interop, Law, Public Works for groups; ~20 tags covering law, fire, EMS, corrections, and more).
+- **Add** — type a name in the row at the top of the list and press **Add group** or **Add tag**. Names are trimmed and must be unique.
+- **Rename** — the pencil turns the row into a text field; **Enter** saves, **Esc** cancels.
+- **Usage** — each row shows how many talkgroups use it, or **unused**. Click the count to open **Systems** filtered to those talkgroups.
+- **Delete** — the trash asks in place. An unused label is removed at once, with a ten-second **Undo** in the toast. A label that talkgroups still use asks where they should go first (another group or tag, or none) and moves them before deleting.
+
+Assign groups and tags to talkgroups in the **Systems** panel. Squelch ships with sensible defaults (Air, Common, EMS, Fire, Interop, Law, Public Works for groups; ~20 tags covering law, fire, EMS, corrections, and more).
 
 ---
 

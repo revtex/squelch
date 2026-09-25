@@ -7,7 +7,19 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
+
+const countTalkgroupsInGroup = `-- name: CountTalkgroupsInGroup :one
+SELECT COUNT(*) FROM talkgroups WHERE group_id = ?
+`
+
+func (q *Queries) CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTalkgroupsInGroup, groupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createGroup = `-- name: CreateGroup :one
 INSERT INTO groups (label) VALUES (?1) RETURNING id
@@ -76,6 +88,57 @@ func (q *Queries) ListGroups(ctx context.Context) ([]Group, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listGroupsWithUsage = `-- name: ListGroupsWithUsage :many
+SELECT g.id, g.label, COUNT(t.id) AS talkgroups
+FROM groups g
+LEFT JOIN talkgroups t ON t.group_id = g.id
+GROUP BY g.id
+ORDER BY g.label ASC
+`
+
+type ListGroupsWithUsageRow struct {
+	ID         int64  `db:"id" json:"id"`
+	Label      string `db:"label" json:"label"`
+	Talkgroups int64  `db:"talkgroups" json:"talkgroups"`
+}
+
+func (q *Queries) ListGroupsWithUsage(ctx context.Context) ([]ListGroupsWithUsageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listGroupsWithUsage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupsWithUsageRow{}
+	for rows.Next() {
+		var i ListGroupsWithUsageRow
+		if err := rows.Scan(&i.ID, &i.Label, &i.Talkgroups); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const moveTalkgroupsToGroup = `-- name: MoveTalkgroupsToGroup :exec
+UPDATE talkgroups SET group_id = ?1 WHERE group_id = ?2
+`
+
+type MoveTalkgroupsToGroupParams struct {
+	ToGroup   sql.NullInt64 `db:"to_group" json:"to_group"`
+	FromGroup sql.NullInt64 `db:"from_group" json:"from_group"`
+}
+
+func (q *Queries) MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error {
+	_, err := q.db.ExecContext(ctx, moveTalkgroupsToGroup, arg.ToGroup, arg.FromGroup)
+	return err
 }
 
 const updateGroup = `-- name: UpdateGroup :exec

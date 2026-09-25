@@ -21,6 +21,8 @@ type Querier interface {
 	CountCalls(ctx context.Context) (int64, error)
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
 	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
+	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
+	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error)
 	CreateBookmark(ctx context.Context, arg CreateBookmarkParams) (int64, error)
@@ -128,11 +130,13 @@ type Querier interface {
 	ListDownstreams(ctx context.Context) ([]Downstream, error)
 	ListEnabledTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListGroups(ctx context.Context) ([]Group, error)
+	ListGroupsWithUsage(ctx context.Context) ([]ListGroupsWithUsageRow, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListSharedLinks(ctx context.Context) ([]ListSharedLinksRow, error)
 	ListSystems(ctx context.Context) ([]System, error)
 	ListTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListTags(ctx context.Context) ([]Tag, error)
+	ListTagsWithUsage(ctx context.Context) ([]ListTagsWithUsageRow, error)
 	ListTalkgroupsBySystem(ctx context.Context, systemID int64) ([]Talkgroup, error)
 	ListUnitsBySystem(ctx context.Context, systemID int64) ([]Unit, error)
 	// One row per account that has ever signed in (within the token retention
@@ -141,6 +145,8 @@ type Querier interface {
 	ListUserSessionStats(ctx context.Context, now int64) ([]ListUserSessionStatsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
+	MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error
+	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error

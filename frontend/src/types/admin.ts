@@ -68,11 +68,31 @@ export interface AdminUnit {
 export interface AdminGroup {
   id: number;
   label: string;
+  /** How many talkgroups are in this group. */
+  talkgroups: number;
 }
 
 export interface AdminTag {
   id: number;
   label: string;
+  /** How many talkgroups carry this tag. */
+  talkgroups: number;
+}
+
+/**
+ * Deleting a group or tag that talkgroups still use needs a destination:
+ * another id, or null to leave them without one.
+ */
+export interface DeleteLabelPayload {
+  id: number;
+  reassign?: boolean;
+  moveTo?: number | null;
+}
+
+export interface DeleteLabelResult {
+  ok: boolean;
+  /** Talkgroups moved before the delete. */
+  moved: number;
 }
 
 export interface AdminApiKey {

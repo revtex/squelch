@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Groups & tags, edited in place.** Add a group or tag from a row at the
+  top of its list, rename with the pencil, and see how many talkgroups use
+  each one (click the count to open Systems filtered to them). Deleting an
+  unused label offers a ten-second **Undo**; deleting one that talkgroups
+  still use asks where they should go and moves them first, instead of
+  failing.
 - **Users, rebuilt.** The table shows each account's status (active,
   disabled, expired, temporary password), its systems by name, open
   connections, signed-in devices and when it was last seen, with search,
