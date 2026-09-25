@@ -167,14 +167,13 @@ function Sidebar({
   return (
     <aside className="sticky top-0 hidden h-screen w-19 shrink-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden border-r border-admin-line bg-base-200 px-1.5 py-2.5 [scrollbar-width:thin] md:flex lg:w-58 lg:gap-2 lg:px-2.5 lg:py-3">
       <div className="flex items-center gap-2.5 px-2 pb-0.5 pt-1 max-lg:justify-center max-lg:px-0 max-lg:pb-1.5 max-lg:pt-0.5">
-        <span
-          aria-hidden="true"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary font-mono font-semibold text-secondary"
-        >
+        <span className="font-sign text-2xl leading-none lg:hidden" aria-hidden="true">
           SQ
         </span>
         <div className="min-w-0 max-lg:sr-only">
-          <b className="block text-[15px] font-semibold">Squelch</b>
+          <b className="block font-sign text-2xl font-normal leading-none tracking-wide">
+            SQUELCH
+          </b>
           <span className="block truncate text-[11px] text-base-content-dim">
             Admin{host ? ` · ${host}` : ""}
           </span>

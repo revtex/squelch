@@ -272,7 +272,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gold bar. The top bar is a search field (Ctrl K) with the connection
   status beside it. Open scanner and Sign out, with your username, are at
   the foot of the sidebar, and a menu button opens every section on a
-  phone. The phone's bottom bar uses short labels.
+  phone. The phone's bottom bar uses short labels. The SQUELCH sign keeps
+  its own lettering at the top of the sidebar.
 - **The admin takes the redesign's look.** It now uses IBM Plex Sans and
   Mono, bundled with the app. Buttons are bordered and full height, and the
   main action on a page is gold. Status badges are small tinted labels.
