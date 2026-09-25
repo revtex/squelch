@@ -397,8 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the button.
 - **Admin pages hold their shape with real data.** On Systems & talkgroups
   a long talkgroup name no longer pushes Calls 24 h and Last heard out of
-  view: the label is cut short (full name on hover) and the columns sit
-  closer. Users, API keys and Shared links keep "3 live · 20 devices", a
+  view: the label is cut short (full name on hover), the columns sit
+  closer, and when the pane is narrow the tag moves under the group. Users, API keys and Shared links keep "3 live · 20 devices", a
   sign-in time, "created 2026-09-25" and the row's buttons on one line.
   On a phone a user with a long system name no longer squeezes the card's
   other column to one letter, and the RadioReference system picker on

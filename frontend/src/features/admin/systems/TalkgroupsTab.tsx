@@ -138,12 +138,21 @@ export default function TalkgroupsTab({
       header: "Group",
       phone: "hide",
       sortValue: (tg) => (tg.groupId != null ? (groupNames.get(tg.groupId) ?? "") : ""),
-      cell: (tg) => (tg.groupId != null ? (groupNames.get(tg.groupId) ?? "—") : <span className="text-admin-dim2">—</span>),
+      cell: (tg) => (
+        <>
+          {tg.groupId != null ? (groupNames.get(tg.groupId) ?? "—") : <span className="text-admin-dim2">—</span>}
+          {/* In a narrow pane the Tag column gives way and the tag sits here. */}
+          {tg.tagId != null && (
+            <span className="block text-xs text-base-content-dim @[860px]:hidden">{tagNames.get(tg.tagId) ?? "—"}</span>
+          )}
+        </>
+      ),
     },
     {
       id: "tag",
       header: "Tag",
       phone: "hide",
+      className: "hidden @[860px]:table-cell",
       sortValue: (tg) => (tg.tagId != null ? (tagNames.get(tg.tagId) ?? "") : ""),
       cell: (tg) => (tg.tagId != null ? (tagNames.get(tg.tagId) ?? "—") : <span className="text-admin-dim2">—</span>),
     },
