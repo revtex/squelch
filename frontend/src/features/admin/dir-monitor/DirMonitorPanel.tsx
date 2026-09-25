@@ -9,6 +9,7 @@ import {
   useCreateDirMonitorMutation,
   useDeleteDirMonitorMutation,
   useDetails,
+  useOpenParam,
   useListDirMonitorsQuery,
   useListSystemsQuery,
   useListTalkgroupsQuery,
@@ -55,6 +56,8 @@ export default function DirMonitorPanel() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
+  const monitorIds = useMemo(() => monitors?.map((m) => m.id), [monitors]);
+  useOpenParam(monitorIds, (id) => panel.open({ key: `details:${id}`, kind: "details", id }));
   const p = panel.selected;
 
   const systemList = useMemo(() => systems ?? [], [systems]);

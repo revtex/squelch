@@ -36,6 +36,13 @@ export default function SettingsPanel() {
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  // A search result on this same page changes ?q= without remounting.
+  const qParam = searchParams.get("q");
+  const [seenQ, setSeenQ] = useState(qParam);
+  if (qParam !== seenQ) {
+    setSeenQ(qParam);
+    if (qParam !== null) setQuery(qParam);
+  }
   // Only the keys the admin has touched; everything else reads from the server.
   const [draft, setDraft] = useState<Record<string, string>>({});
 

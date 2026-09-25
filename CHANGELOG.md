@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The admin's search finds things, not just pages.** Type two letters or
+  more in the top bar's search (Ctrl K) to find users, talkgroups, API
+  keys, settings, folder monitors and downstream servers by name. Choosing
+  one opens its details on its page. A setting opens Settings filtered to
+  it.
 - **Backup & import, one page instead of ten cards.** A Configuration
   backup card downloads the whole configuration as one JSON file (users
   without passwords) and remembers when it was last taken. Restore is

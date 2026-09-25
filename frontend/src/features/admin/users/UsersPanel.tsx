@@ -15,6 +15,7 @@ import {
   useCreateUserMutation,
   useDeleteUserMutation,
   useDetails,
+  useOpenParam,
   useListSystemsQuery,
   useListUsersQuery,
   useSignOutUserMutation,
@@ -97,6 +98,8 @@ export default function UsersPanel() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
+  const userIds = useMemo(() => users?.map((u) => u.id), [users]);
+  useOpenParam(userIds, (id) => panel.open({ key: `user:${id}`, kind: "details", id }));
 
   const now = Date.now() / 1000;
   const all = useMemo(() => users ?? [], [users]);

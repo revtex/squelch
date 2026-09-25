@@ -35,7 +35,7 @@ import GroupsTagsPanel from "@/features/admin/groups-tags";
 import ApiKeysPanel from "@/features/admin/api-keys";
 import DirMonitorPanel from "@/features/admin/dir-monitor";
 import ForwardingPanel from "@/features/admin/forwarding";
-import SettingsPanel from "@/features/admin/settings";
+import SettingsPanel, { SETTINGS_INDEX } from "@/features/admin/settings";
 import LogsPanel from "@/features/admin/logs";
 import ToolsPanel from "@/features/admin/tools";
 import DashboardsPanel, { ActivityPanel } from "@/features/admin/dashboards";
@@ -412,7 +412,9 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           onSignOut={onSignOut}
         />
       )}
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && (
+        <CommandPalette settings={SETTINGS_INDEX} onClose={() => setPaletteOpen(false)} />
+      )}
     </div>
   );
 }

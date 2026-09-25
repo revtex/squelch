@@ -9,6 +9,7 @@ import {
   useCreateApiKeyMutation,
   useDeleteApiKeyMutation,
   useDetails,
+  useOpenParam,
   useGetConfigQuery,
   useListApiKeysQuery,
   useListSystemsQuery,
@@ -65,6 +66,8 @@ export default function ApiKeysPanel() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
+  const keyIds = useMemo(() => apiKeys?.map((k) => k.id), [apiKeys]);
+  useOpenParam(keyIds, (id) => panel.open({ key: `details:${id}`, kind: "details", id }));
   const p = panel.selected;
 
   const defaultRate = useMemo(() => {

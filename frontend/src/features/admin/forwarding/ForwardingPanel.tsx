@@ -12,6 +12,7 @@ import {
   useDeleteDownstreamMutation,
   useDeleteWebhookMutation,
   useDetails,
+  useOpenParam,
   useGetWebhookSampleQuery,
   useListDownstreamsQuery,
   useListSystemsQuery,
@@ -71,6 +72,11 @@ export default function ForwardingPanel() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const panel = useDetails<Panel>();
+  const targetIds = useMemo(
+    () => (tab === "downstreams" ? downstreams : webhooks)?.map((t) => t.id),
+    [tab, downstreams, webhooks],
+  );
+  useOpenParam(targetIds, (id) => panel.open({ key: `${tab}:details:${id}`, kind: "details", id }));
   const p = panel.selected;
 
   const systemList = useMemo(() => systems ?? [], [systems]);

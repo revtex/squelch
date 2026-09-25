@@ -15,6 +15,7 @@ import {
   useDeleteTalkgroupsMutation,
   useDeleteUnitMutation,
   useDetails,
+  useOpenParam,
   useLazyExportTalkgroupsQuery,
   useListGroupsQuery,
   useListSystemsQuery,
@@ -145,6 +146,11 @@ export default function SystemsPanel() {
   const talkgroups = useMemo(() => (system ? (talkgroupsData ?? []).filter((t) => t.systemId === system.id) : []), [talkgroupsData, system]);
   const units = useMemo(() => (system ? (unitsData ?? []).filter((u) => u.systemId === system.id) : []), [unitsData, system]);
   const blockedSet = useMemo(() => new Set(system?.blocked ?? []), [system]);
+  const talkgroupIds = useMemo(
+    () => (talkgroupsData ? talkgroups.map((t) => t.id) : undefined),
+    [talkgroupsData, talkgroups],
+  );
+  useOpenParam(talkgroupIds, (id) => panel.open({ kind: "talkgroup", id }));
 
   const setParams = useCallback(
     (patch: Record<string, string | null>) => {

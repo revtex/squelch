@@ -105,9 +105,9 @@ vi.mock("@/features/admin/_shell", async (importOriginal) => ({
   useClearLockoutMutation: () => mutation(clearLockoutOp),
 }));
 
-function renderPanel() {
+function renderPanel(url = "/admin/users") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <ToastProvider>
         <UsersPanel />
       </ToastProvider>
@@ -126,6 +126,11 @@ describe("UsersPanel", () => {
       op.mockReset().mockResolvedValue(undefined);
     }
     lockouts = { lockouts: [] };
+  });
+
+  it("opens the user a search result links to", () => {
+    renderPanel("/admin/users?open=2");
+    expect(screen.getByRole("dialog", { name: "alice" })).toBeInTheDocument();
   });
 
   it("lists users with status, systems and counts", () => {

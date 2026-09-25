@@ -36,7 +36,7 @@ The sidebar groups the admin into five areas:
 - **Ingest & delivery** — **Folder monitors** and **Forwarding**
 - **Server** — **Settings** and **Backup & import**
 
-The search field in the top bar (or **Ctrl K**) opens a search box: type a few letters to jump to any page. The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
+The search field in the top bar (or **Ctrl K**) opens a search box. Type a few letters to jump to any page, or straight to a user, talkgroup, API key, setting, folder monitor or downstream server; choosing one opens its details (a setting opens **Settings** filtered to it). The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
 
 On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users**, **Systems** and **Logs**; **More**, or the menu button at the top left, lists every section. On a narrow desktop window the sidebar shrinks to icons with short labels.
 

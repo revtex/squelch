@@ -10,6 +10,7 @@ export * from "./useNavigationGuard";
 export * from "./useWsQuery";
 export * from "./useAdminWsStatus";
 export * from "./useDetails";
+export * from "./useOpenParam";
 export * from "./useToast";
 export * from "./DetailsPanel";
 export * from "./InlineConfirm";

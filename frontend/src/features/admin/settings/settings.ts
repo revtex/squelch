@@ -386,3 +386,7 @@ export function matchesSearch(row: SettingRow, group: SettingGroup, query: strin
 export function changedRows(server: Record<string, string>, draft: Record<string, string>): SettingRow[] {
   return ALL_ROWS.filter((r) => r.key in draft && draft[r.key] !== (server[r.key] ?? r.fallback));
 }
+
+/** Every setting by name and section, for the admin's search box. */
+export const SETTINGS_INDEX: readonly { label: string; section: string }[] =
+  GROUPS.flatMap((g) => g.rows.map((r) => ({ label: r.label, section: g.title })));
