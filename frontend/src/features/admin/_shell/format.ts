@@ -102,3 +102,13 @@ export function formatWhen(
   if (days === 1) return `Yesterday ${time}`;
   return `${formatDay(unix)} ${time}`;
 }
+
+/** A clock time to the second, "19:06:52", or "7:06:52 PM" on a 12-hour server. */
+export function formatClock(unix: number, { hour12 = false }: { hour12?: boolean } = {}): string {
+  return new Date(unix * 1000).toLocaleTimeString([], {
+    hour: hour12 ? "numeric" : "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12,
+  });
+}

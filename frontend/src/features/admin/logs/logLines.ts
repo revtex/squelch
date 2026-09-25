@@ -19,6 +19,20 @@ export function tabFrom(raw: string | null): Tab {
   return raw === "audit" ? "audit" : "server";
 }
 
+/** The background class for a level's dot: red, amber, blue, or dim for debug. */
+export function levelDot(level: string): string {
+  switch (level) {
+    case "error":
+      return "bg-error";
+    case "warn":
+      return "bg-warning";
+    case "info":
+      return "bg-info";
+    default:
+      return "bg-admin-dim2";
+  }
+}
+
 export function levelBadge(level: string): string {
   switch (level) {
     case "error":

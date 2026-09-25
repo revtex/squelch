@@ -252,6 +252,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Settings, Logs & audit, Trunk Recorder and Backup & import match the
+  redesign.** Settings lists its groups down the left side and marks the
+  one you are reading as you scroll. Log lines show the time as a clock
+  and the level as a coloured dot, and the level chips carry the same
+  dots. Refresh is gone from Logs because Following already reloads.
+  Trunk Recorder's dashboard puts the decode-rate chart and a Per system
+  table side by side, and the table has a Health column. Backup & import
+  puts the configuration backup beside the Radio data table. One picker
+  in that table's header now chooses the system for talkgroup and unit
+  exports.
 - **Folder monitors and Forwarding match the redesign.** A monitor's row
   shows its folder with the file type and options under it, then its
   recorder, where calls go ("From filename"), its state, last file and

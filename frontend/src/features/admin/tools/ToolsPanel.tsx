@@ -3,8 +3,9 @@
 // the API docs. Every import reviews before it writes, and a restore is
 // guarded by a review, a mode and a typed word.
 import { useState } from "react";
-import { ArchiveRestore, Copy, Database, Download, ExternalLink, FileText, KeyRound, Upload } from "lucide-react";
+import { Copy, Download, ExternalLink, KeyRound, Upload } from "lucide-react";
 import {
+  Card,
   DataTable,
   DetailsPanel,
   PageHeader,
@@ -43,18 +44,6 @@ interface RadioRow {
   detail: string;
 }
 
-function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section aria-label={title} className="space-y-3 rounded-box border border-admin-line bg-base-100 p-4">
-      <h3 className="flex items-center gap-2 text-base font-semibold">
-        {icon}
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
 function backupFilename(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -72,7 +61,7 @@ export default function ToolsPanel() {
   const [exportGroups] = useLazyExportGroupsQuery();
   const [exportTags] = useLazyExportTagsQuery();
   const panel = useDetails<Panel>();
-  const [exportSystem, setExportSystem] = useState<Record<ImportEntity, number>>({ talkgroups: 0, units: 0, groups: 0, tags: 0 });
+  const [exportSystem, setExportSystem] = useState(0);
   const [exporting, setExporting] = useState<ImportEntity | null>(null);
   const [rrSystemId, setRrSystemId] = useState(0);
   const [openingDocs, setOpeningDocs] = useState(false);
@@ -93,7 +82,7 @@ export default function ToolsPanel() {
 
   const runExport = async (entity: ImportEntity) => {
     setExporting(entity);
-    const system = NEEDS_SYSTEM[entity] ? (systems.find((s) => s.id === exportSystem[entity]) ?? null) : null;
+    const system = NEEDS_SYSTEM[entity] ? (systems.find((s) => s.id === exportSystem) ?? null) : null;
     const arg = system ? { systemId: system.id } : {};
     try {
       let csv: string;
@@ -147,47 +136,33 @@ export default function ToolsPanel() {
     {
       id: "count",
       header: "Count",
-      align: "right",
+      phone: "show",
       cell: (r) => (
-        <span className="tabular-nums">
+        <span className="whitespace-nowrap tabular-nums">
           {r.count ?? "…"}
-          {r.detail && <span className="ml-1 text-xs text-base-content-dim">{r.detail}</span>}
+          {r.detail && <span className="ml-1 text-base-content-dim">{r.detail}</span>}
         </span>
       ),
     },
     {
       id: "actions",
       header: "Actions",
-      className: "whitespace-nowrap",
+      headerHidden: true,
+      phone: "wide",
       cell: (r) => (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="btn btn-xs"
+            className="btn btn-sm"
             disabled={NEEDS_SYSTEM[r.entity] && systems.length === 0}
             onClick={(e) => panel.open({ kind: "import", entity: r.entity }, e.currentTarget)}
           >
-            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+            <Upload className="h-4 w-4" aria-hidden="true" />
             Import
           </button>
-          {NEEDS_SYSTEM[r.entity] && (
-            <select
-              aria-label={`Export ${r.label.toLowerCase()} from`}
-              className="select select-xs"
-              value={exportSystem[r.entity]}
-              onChange={(e) => setExportSystem((s) => ({ ...s, [r.entity]: Number(e.target.value) }))}
-            >
-              <option value={0}>All systems</option>
-              {systems.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          )}
-          <button type="button" className="btn btn-xs" disabled={exporting != null} onClick={() => void runExport(r.entity)}>
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            {exporting === r.entity ? "Exporting…" : NEEDS_SYSTEM[r.entity] && exportSystem[r.entity] === 0 ? "Export all" : "Export"}
+          <button type="button" className="btn btn-sm" disabled={exporting != null} onClick={() => void runExport(r.entity)}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            {exporting === r.entity ? "Exporting…" : NEEDS_SYSTEM[r.entity] && exportSystem === 0 ? "Export all" : "Export"}
           </button>
         </div>
       ),
@@ -198,43 +173,77 @@ export default function ToolsPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="Backup & import"
-        subtitle="The whole configuration as one file, radio data as CSV, RadioReference enrichment, and the API docs."
+        subtitle="Move radio data in and out, and back up the whole configuration. Talkgroup imports live on the system's own page too."
       />
 
-      <Card title="Configuration backup" icon={<ArchiveRestore className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content-dim">
-          Systems, talkgroups, units, groups, tags, users (no passwords) and settings, as one JSON file. API keys and forwarding secrets are
-          in it too, so keep it private.
-        </p>
-        <p className="text-sm" role="status">
-          {counts.isLoading ? "…" : c?.lastBackupAt ? `Last download ${formatAgo(c.lastBackupAt)}.` : "Never downloaded from this server."}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-primary btn-sm" disabled={preparingBackup} onClick={() => void downloadBackup()}>
-            <Download className="h-4 w-4" aria-hidden="true" />
-            {preparingBackup ? "Preparing…" : "Download backup"}
-          </button>
-          <button type="button" className="btn btn-sm" onClick={(e) => panel.open({ kind: "restore" }, e.currentTarget)}>
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            Restore from backup…
-          </button>
-        </div>
-      </Card>
+      <div className="grid items-start gap-[18px] xl:grid-cols-2">
+        <Card
+          title="Configuration backup"
+          meta={
+            <span role="status">
+              {counts.isLoading ? "…" : c?.lastBackupAt ? `Last download ${formatAgo(c.lastBackupAt)}` : "Never downloaded from this server"}
+            </span>
+          }
+        >
+          <p className="text-[13px] text-base-content-dim">
+            Systems, talkgroups, units, groups, tags, users (no passwords) and settings, as one JSON file. API keys and forwarding secrets
+            are in it too, so keep it private.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary" disabled={preparingBackup} onClick={() => void downloadBackup()}>
+              <Download className="h-4 w-4" aria-hidden="true" />
+              {preparingBackup ? "Preparing…" : "Download backup"}
+            </button>
+            <button type="button" className="btn" onClick={(e) => panel.open({ kind: "restore" }, e.currentTarget)}>
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              Restore from backup…
+            </button>
+          </div>
+        </Card>
 
-      <Card title="Radio data" icon={<Database className="h-4 w-4" aria-hidden="true" />}>
-        <DataTable columns={columns} rows={rows} rowKey={(r) => r.entity} caption="Radio data" pageSize={0} loading={counts.isLoading && !c} />
-        <p className="text-xs text-base-content-dim">Exports can be one system or all. Imports always preview before they write.</p>
-      </Card>
+        <Card
+          title="Radio data"
+          bodyClassName=""
+          meta={
+            <select
+              aria-label="Export from"
+              className="select select-sm w-auto max-w-44"
+              value={exportSystem}
+              onChange={(e) => setExportSystem(Number(e.target.value))}
+            >
+              <option value={0}>Export all systems</option>
+              {systems.map((s) => (
+                <option key={s.id} value={s.id}>
+                  Export {s.label} only
+                </option>
+              ))}
+            </select>
+          }
+        >
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.entity}
+            caption="Radio data"
+            pageSize={0}
+            loading={counts.isLoading && !c}
+            bare
+          />
+          <p className="border-t border-admin-line px-4 py-2.5 text-xs text-base-content-dim">
+            Talkgroup and unit exports can be one system or all; pick it above. Imports always preview before they write.
+          </p>
+        </Card>
+      </div>
 
-      <Card title="Enrich from RadioReference" icon={<FileText className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content-dim">
-          Bring labels, names, categories and tags in from a RadioReference talkgroup export. Same three-step wizard as Import, with a
-          changes-only view.
+      <Card title="Enrich from RadioReference" meta="CSV export from radioreference.com">
+        <p className="text-[13px] text-base-content-dim">
+          Fills in labels, names, groups and tags for talkgroups you already have, matched by decimal ID. Same three-step wizard as Import,
+          with a changes-only view showing current and new values side by side.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="System to enrich"
-            className="select select-sm"
+            className="select w-auto"
             value={rrSystem?.id ?? 0}
             onChange={(e) => setRrSystemId(Number(e.target.value))}
             disabled={systems.length === 0}
@@ -248,7 +257,7 @@ export default function ToolsPanel() {
           </select>
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn"
             disabled={!rrSystem}
             onClick={(e) => rrSystem && panel.open({ kind: "import", entity: "talkgroups", system: rrSystem, title: `Enrich ${rrSystem.label} from RadioReference` }, e.currentTarget)}
           >
@@ -258,17 +267,17 @@ export default function ToolsPanel() {
         </div>
       </Card>
 
-      <Card title="API documentation" icon={<KeyRound className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content-dim">
-          Swagger UI lists every endpoint and lets you try them as yourself. It opens in a new tab with a short-lived session of its own.
+      <Card title="API documentation">
+        <p className="text-[13px] text-base-content-dim">
+          Swagger UI for every endpoint, tried as yourself. It opens in a new tab with a short-lived session of its own.
         </p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-sm" disabled={openingDocs} onClick={() => void openDocs()}>
+          <button type="button" className="btn" disabled={openingDocs} onClick={() => void openDocs()}>
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
             {openingDocs ? "Opening…" : "Open Swagger UI"}
           </button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={!token} onClick={(e) => panel.open({ kind: "token" }, e.currentTarget)}>
-            <Copy className="h-4 w-4" aria-hidden="true" />
+          <button type="button" className="btn" disabled={!token} onClick={(e) => panel.open({ kind: "token" }, e.currentTarget)}>
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
             Copy an access token…
           </button>
         </div>

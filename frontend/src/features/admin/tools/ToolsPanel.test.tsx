@@ -92,7 +92,7 @@ describe("ToolsPanel", () => {
     ops.exportConfig.mockResolvedValue({ systems: [], settings: [] });
     renderPanel();
     expect(screen.getByRole("heading", { name: "Backup & import" })).toBeInTheDocument();
-    expect(screen.getByText("Last download 2 d ago.")).toBeInTheDocument();
+    expect(screen.getByText("Last download 2 d ago")).toBeInTheDocument();
     const table = within(screen.getByRole("table", { name: "Radio data" }));
     expect(table.getByText("531")).toBeInTheDocument();
     expect(table.getAllByText("across 2 systems")).toHaveLength(2);
@@ -115,12 +115,13 @@ describe("ToolsPanel", () => {
     await waitFor(() => expect(ops.exportTalkgroups).toHaveBeenCalledWith({}));
     expect(downloads[0].name).toBe("all-systems-talkgroups.csv");
 
-    await user.selectOptions(table.getByRole("combobox", { name: "Export talkgroups from" }), "11");
+    // One picker in the card header scopes both talkgroup and unit exports.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Export from" }), "11");
     await user.click(table.getAllByRole("button", { name: "Export" })[0]);
     await waitFor(() => expect(ops.exportTalkgroups).toHaveBeenLastCalledWith({ systemId: 11 }));
     expect(downloads[1].name).toBe("City-talkgroups.csv");
 
-    await user.click(table.getAllByRole("button", { name: "Export" })[1]);
+    await user.click(table.getAllByRole("button", { name: "Export" })[2]);
     await waitFor(() => expect(ops.exportGroups).toHaveBeenCalled());
     expect(downloads[2].name).toBe("all-systems-groups.csv");
   });

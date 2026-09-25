@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatAgo, formatDay, formatDuration, formatUntil, formatWhen } from "./format";
+import { formatAgo, formatClock, formatDay, formatDuration, formatUntil, formatWhen } from "./format";
 
 const at = (y: number, mo: number, d: number, h = 0, mi = 0) =>
   Math.floor(new Date(y, mo - 1, d, h, mi).getTime() / 1000);
@@ -50,5 +50,13 @@ describe("formatAgo and formatUntil", () => {
     expect(formatUntil(now + 28 * 86_400, now)).toBe("in 28 d");
     expect(formatUntil(now + 600, now)).toBe("in 10 min");
     expect(formatUntil(now - 1, now)).toBe("expired");
+  });
+});
+
+describe("formatClock", () => {
+  it("reads 24-hour to the second by default and 12-hour when the server says so", () => {
+    const t = new Date(2026, 8, 25, 19, 6, 52).getTime() / 1000;
+    expect(formatClock(t)).toBe("19:06:52");
+    expect(formatClock(t, { hour12: true })).toMatch(/^7:06:52\s?PM$/i);
   });
 });

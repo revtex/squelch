@@ -119,6 +119,16 @@ describe("SettingsPanel", () => {
     expect(screen.getByRole("region", { name: "Unsaved changes" })).toHaveTextContent("No unsaved changes");
   });
 
+  it("marks the section in view in the rail and moves the mark on a click", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const rail = within(screen.getByRole("navigation", { name: "Setting groups" }));
+    expect(rail.getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "location");
+    await user.click(rail.getByRole("link", { name: "Storage" }));
+    expect(rail.getByRole("link", { name: "Storage" })).toHaveAttribute("aria-current", "location");
+    expect(rail.getByRole("link", { name: "General" })).not.toHaveAttribute("aria-current");
+  });
+
   it("finds a setting by what it says", async () => {
     const user = userEvent.setup();
     renderPanel();

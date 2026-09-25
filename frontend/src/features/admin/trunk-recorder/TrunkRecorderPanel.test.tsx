@@ -118,17 +118,18 @@ describe("TrunkRecorderPanel", () => {
     renderPage(store, "/admin/trunk-recorder?instance=1");
     const banner = screen.getByRole("status", { name: "Recorder connection" });
     expect(banner).toHaveTextContent("tr-lake-north");
-    expect(banner).toHaveTextContent("broker tcp://mqtt:1883 · connected · plugin connected · last frame");
-    expect(screen.getByText("Systems", { selector: "p" }).nextSibling).toHaveTextContent("2");
-    expect(screen.getByText("Recorders", { selector: "p" }).nextSibling).toHaveTextContent("1 / 2");
-    expect(screen.getByText("Active calls").nextSibling).toHaveTextContent("2");
+    expect(banner).toHaveTextContent("tr-lake-north · broker tcp://mqtt:1883 connected · plugin connected · last frame");
+    expect(screen.getByText("Systems", { selector: "dt" }).nextSibling).toHaveTextContent("2");
+    expect(screen.getByText("Recorders", { selector: "dt" }).nextSibling).toHaveTextContent("1 / 2");
+    expect(screen.getByText("Active calls", { selector: "dt" }).nextSibling).toHaveTextContent("2");
     expect(screen.getByText("1 encrypted")).toBeInTheDocument();
-    expect(screen.getByText("Decode rate", { selector: "p" }).nextSibling).toHaveTextContent("40.0");
+    expect(screen.getByText("Decode rate", { selector: "dt" }).nextSibling).toHaveTextContent("40.0");
     expect(screen.getByText(/min 38 · max 40/)).toBeInTheDocument();
     // The dashboard tab lists systems with their rates.
     const table = screen.getByRole("table", { name: "Systems" });
     expect(within(table).getByText("MARCS Lake")).toBeInTheDocument();
     expect(within(table).getByText("25.0 /s")).toBeInTheDocument();
+    expect(within(table).getAllByText("ok").length).toBeGreaterThan(0);
     expect(api.snapshot).toHaveBeenCalledWith(1, { skip: false });
   });
 

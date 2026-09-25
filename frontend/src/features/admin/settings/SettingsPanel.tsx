@@ -16,6 +16,7 @@ import {
   useUpdateConfigMutation,
 } from "@/features/admin/_shell";
 import type { AdminSetting, Capabilities, StorageInfo } from "@/types";
+import { useActiveSection } from "./useActiveSection";
 import {
   GROUPS,
   HE_AAC_PRESETS,
@@ -116,6 +117,9 @@ export default function SettingsPanel() {
     [query],
   );
 
+  const sectionIds = useMemo(() => visibleGroups.map((g) => `settings-${g.id}`), [visibleGroups]);
+  const [activeSection, setActiveSection] = useActiveSection(sectionIds);
+
   if (isLoading && !config) {
     return (
       <div className="flex justify-center py-12" role="status" aria-label="Loading settings">
@@ -125,97 +129,112 @@ export default function SettingsPanel() {
   }
 
   return (
-    <div className="space-y-[18px] pb-24">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Settings"
-        subtitle="Server-wide options. Nothing applies until you save, except where a row says otherwise."
+        subtitle="Server-wide options. Nothing applies until you save; the bar at the bottom lists what changed."
         actions={<SearchBox value={query} onChange={setQuery} label="Find a setting" className="w-full sm:w-64" />}
       />
 
-      <nav
-        aria-label="Setting groups"
-        className="sticky top-12 z-10 -mx-1 flex gap-1 overflow-x-auto bg-base-100/95 px-1 py-2 backdrop-blur"
-      >
-        {visibleGroups.map((g) => (
-          <a key={g.id} href={`#settings-${g.id}`} className="btn btn-ghost btn-xs whitespace-nowrap">
-            {g.title}
-          </a>
-        ))}
-      </nav>
-
-      {visibleGroups.length === 0 && <p className="text-sm text-base-content-dim">No setting matches.</p>}
-
-      {visibleGroups.map((group) => (
-        <section
-          key={group.id}
-          id={`settings-${group.id}`}
-          aria-labelledby={`settings-${group.id}-title`}
-          className="scroll-mt-28 space-y-3"
+      <div className="grid items-start gap-[18px] lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-6">
+        <nav
+          aria-label="Setting groups"
+          className="sticky top-[61px] z-10 -mx-1 flex gap-1 overflow-x-auto bg-base-100/95 px-1 py-2 backdrop-blur lg:top-[76px] lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
         >
-          <div>
-            <h3 id={`settings-${group.id}-title`} className="text-base font-semibold">
-              {group.title}
-            </h3>
-            {group.hint && <p className="text-xs text-base-content-dim">{group.hint}</p>}
-            {group.id === "storage" && <StorageLine storage={config?.storage} />}
-          </div>
-          <div className="divide-y divide-admin-line rounded-box border border-admin-line bg-base-200">
-            {group.rows.map((row) => (
-              <SettingRowView
-                key={row.key}
-                row={row}
-                group={group}
-                value={currentValue(row, server, draft)}
-                serverValue={server[row.key] ?? row.fallback}
-                enabled={rowEnabled(row, server, draft, capabilities)}
-                changed={changed.includes(row)}
-                error={errors[row.key] ?? null}
-                capabilities={capabilities}
-                onChange={(v) => (row.applyAtOnce ? void applyAtOnce(row, v) : setValue(row.key, v))}
-              />
-            ))}
-            {group.id === "access" && <TrustedAddresses addresses={config?.trustedAddresses ?? []} />}
-            {group.id === "integrations" && (
-              <>
-                <LinkRow to="/admin/trunk-recorder" label="Trunk Recorder" hint="Brokers, instances and the live dashboard." />
-                <LinkRow to="/admin/transcription" label="Transcription" hint="Has its own page with connection status and models." />
-              </>
-            )}
-          </div>
-        </section>
-      ))}
+          {visibleGroups.map((g) => {
+            const on = activeSection === `settings-${g.id}`;
+            return (
+              <a
+                key={g.id}
+                href={`#settings-${g.id}`}
+                aria-current={on ? "location" : undefined}
+                onClick={() => setActiveSection(`settings-${g.id}`)}
+                className={`whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] lg:py-2 ${
+                  on ? "bg-admin-navy2 text-base-content" : "text-base-content-dim hover:bg-base-200 hover:text-base-content"
+                }`}
+              >
+                {g.title}
+              </a>
+            );
+          })}
+        </nav>
 
-      <div
-        role="region"
-        aria-label="Unsaved changes"
-        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-19 lg:left-58"
-      >
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
-          <p className="min-w-0 text-sm">
-            {dirty ? (
-              <>
-                <span className="font-medium">Changed:</span> {changed.map((r) => r.label).join(", ")}
-                {Object.keys(errors).length > 0 && (
-                  <span className="text-error"> · {plural(Object.keys(errors).length, "value needs", "values need")} fixing</span>
-                )}
-              </>
-            ) : (
-              <span className="text-base-content-dim">No unsaved changes</span>
-            )}
-          </p>
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={() => setDraft({})}>
-              Discard
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={!dirty || saving || Object.keys(errors).length > 0}
-              onClick={() => void save()}
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </button>
+        <div className="min-w-0 space-y-[22px]">
+        {visibleGroups.length === 0 && <p className="text-sm text-base-content-dim">No setting matches.</p>}
+
+        {visibleGroups.map((group) => (
+          <section
+            key={group.id}
+            id={`settings-${group.id}`}
+            aria-labelledby={`settings-${group.id}-title`}
+            className="scroll-mt-20 space-y-3"
+          >
+            <div>
+              <h3 id={`settings-${group.id}-title`} className="text-[15px] font-semibold">
+                {group.title}
+              </h3>
+              {group.hint && <p className="text-xs text-base-content-dim">{group.hint}</p>}
+              {group.id === "storage" && <StorageLine storage={config?.storage} />}
+            </div>
+            <div className="divide-y divide-admin-line rounded-lg border border-admin-line bg-base-200">
+              {group.rows.map((row) => (
+                <SettingRowView
+                  key={row.key}
+                  row={row}
+                  group={group}
+                  value={currentValue(row, server, draft)}
+                  serverValue={server[row.key] ?? row.fallback}
+                  enabled={rowEnabled(row, server, draft, capabilities)}
+                  changed={changed.includes(row)}
+                  error={errors[row.key] ?? null}
+                  capabilities={capabilities}
+                  onChange={(v) => (row.applyAtOnce ? void applyAtOnce(row, v) : setValue(row.key, v))}
+                />
+              ))}
+              {group.id === "access" && <TrustedAddresses addresses={config?.trustedAddresses ?? []} />}
+              {group.id === "integrations" && (
+                <>
+                  <LinkRow to="/admin/trunk-recorder" label="Trunk Recorder" hint="Brokers, instances and the live dashboard." />
+                  <LinkRow to="/admin/transcription" label="Transcription" hint="Has its own page with connection status and models." />
+                </>
+              )}
+            </div>
+          </section>
+        ))}
+
+        <div
+          role="region"
+          aria-label="Unsaved changes"
+          className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-20 rounded-lg border border-admin-line bg-base-200/95 px-4 py-2.5 backdrop-blur md:bottom-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="min-w-0 text-sm">
+              {dirty ? (
+                <>
+                  <span className="font-medium">Changed:</span> {changed.map((r) => r.label).join(", ")}
+                  {Object.keys(errors).length > 0 && (
+                    <span className="text-error"> · {plural(Object.keys(errors).length, "value needs", "values need")} fixing</span>
+                  )}
+                </>
+              ) : (
+                <span className="text-base-content-dim">No unsaved changes</span>
+              )}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className="btn btn-ghost" disabled={!dirty || saving} onClick={() => setDraft({})}>
+                Discard
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!dirty || saving || Object.keys(errors).length > 0}
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

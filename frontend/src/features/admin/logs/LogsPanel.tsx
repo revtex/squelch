@@ -9,8 +9,10 @@ import {
   FilterChips,
   PageHeader,
   SearchBox,
-  SwitchRow,
+  formatClock,
   formatDateTime,
+  plural,
+  useHour12,
   useDetails,
   type Column,
   type Fact,
@@ -19,11 +21,10 @@ import type { AdminAuditRow, AdminLog } from "@/types";
 import LogDetails from "./LogDetails";
 import {
   LIMITS,
-  LOG_LEVELS,
   RANGES,
   auditAsText,
   auditLink,
-  levelBadge,
+  levelDot,
   linesAsText,
   parseLog,
   statusClass,
@@ -36,13 +37,37 @@ import { useAdminLogs, useAuditTrail } from "./useAdminLogs";
 
 type Panel = { key: string; kind: "line"; index: number } | { key: string; kind: "audit"; id: number };
 
-function timeCell(unix: number) {
+function timeCell(unix: number, hour12: boolean) {
   const d = new Date(unix * 1000);
   return (
-    <time dateTime={d.toISOString()} title={formatDateTime(unix)} className="font-mono text-xs">
-      {d.toLocaleTimeString()}
+    <time dateTime={d.toISOString()} title={formatDateTime(unix)} className="font-mono text-[13px] text-base-content-dim">
+      {formatClock(unix, { hour12 })}
     </time>
   );
+}
+
+function levelCell(level: string) {
+  return (
+    <span className="flex items-center gap-1.5 max-sm:justify-end" title={level}>
+      <span className={`h-2 w-2 rounded-full ${levelDot(level)}`} aria-hidden="true" />
+      <span className="sr-only text-xs capitalize max-sm:not-sr-only">{level}</span>
+    </span>
+  );
+}
+
+const LEVEL_ORDER = ["error", "warn", "info", "debug"] as const;
+
+function rangeWords(range: RangeId): string {
+  switch (range) {
+    case "1h":
+      return "the last hour";
+    case "24h":
+      return "the last 24 hours";
+    case "7d":
+      return "the last 7 days";
+    default:
+      return "all";
+  }
 }
 
 function download(name: string, text: string) {
@@ -69,6 +94,7 @@ export default function LogsPanel() {
   const [limit, setLimit] = useState<number>(500);
   const [following, setFollowing] = useState(true);
   const [scrolled, setScrolled] = useState(false);
+  const hour12 = useHour12();
   const panel = useDetails<Panel>();
   const p = panel.selected;
 
@@ -112,12 +138,13 @@ export default function LogsPanel() {
   };
 
   const lineColumns: Column<AdminLog>[] = [
-    { id: "time", header: "Time", sortValue: (l) => l.dateTime, cell: (l) => timeCell(l.dateTime), className: "whitespace-nowrap" },
+    { id: "time", header: "Time", phone: "plain", sortValue: (l) => l.dateTime, cell: (l) => timeCell(l.dateTime, hour12), className: "whitespace-nowrap" },
     {
       id: "level",
       header: "Level",
+      phone: "plain",
       sortValue: (l) => l.level,
-      cell: (l) => <span className={`badge badge-sm ${levelBadge(l.level)}`}>{l.level}</span>,
+      cell: (l) => levelCell(l.level),
     },
     {
       id: "message",
@@ -141,7 +168,9 @@ export default function LogsPanel() {
             {parsed.chips.map((c) => (
               <span
                 key={c.key}
-                className={`badge badge-ghost badge-sm font-mono ${c.tone === "error" ? "text-error" : ""}`}
+                className={`rounded px-1.5 py-px font-mono text-xs ${
+                  c.tone === "error" ? "bg-admin-red-bg text-admin-red-fg" : "bg-base-300 text-base-content-dim"
+                }`}
                 title={`${c.key}=${c.value}`}
               >
                 {c.key}={c.value}
@@ -154,13 +183,13 @@ export default function LogsPanel() {
   ];
 
   const auditColumns: Column<AdminAuditRow>[] = [
-    { id: "time", header: "Time", sortValue: (r) => r.dateTime, cell: (r) => timeCell(r.dateTime), className: "whitespace-nowrap" },
+    { id: "time", header: "Time", phone: "plain", sortValue: (r) => r.dateTime, cell: (r) => timeCell(r.dateTime, hour12), className: "whitespace-nowrap" },
     {
       id: "level",
       header: "Level",
       phone: "hide",
       sortValue: (r) => r.level,
-      cell: (r) => <span className={`badge badge-sm ${levelBadge(r.level)}`}>{r.level}</span>,
+      cell: (r) => levelCell(r.level),
     },
     { id: "event", header: "Event", phone: "title", cell: (r) => <span className="break-words">{r.message}</span> },
   ];
@@ -175,38 +204,12 @@ export default function LogsPanel() {
       ]
     : [];
   const auditGo = selectedAudit ? auditLink(selectedAudit) : null;
-  const fetching = tab === "server" ? server.isFetching : audit.isFetching;
 
   return (
     <div className="space-y-[18px]">
       <PageHeader
         title="Logs & audit"
-        subtitle="What the server is doing, and who changed what."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => void (tab === "server" ? server.refetch() : audit.refetch())}
-            >
-              <RefreshCw className={`h-4 w-4 ${fetching ? "animate-spin" : ""}`} aria-hidden="true" />
-              Refresh
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={tab === "server" ? lines.length === 0 : auditRows.length === 0}
-              onClick={() =>
-                tab === "server"
-                  ? download(`squelch-log-${stamp()}.txt`, linesAsText(lines))
-                  : download(`squelch-audit-${stamp()}.txt`, auditAsText(auditRows))
-              }
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download
-            </button>
-          </div>
-        }
+        subtitle="Server log for troubleshooting, and the audit trail of who signed in and what admins changed."
       />
 
       <div role="tablist" aria-label="Log kind" className="tabs tabs-border">
@@ -222,14 +225,8 @@ export default function LogsPanel() {
         <SearchBox
           value={query}
           onChange={setQuery}
-          label={tab === "server" ? "Search the log" : "Search the audit trail"}
-          className="w-full sm:w-80"
-        />
-        <FilterChips
-          label="Range"
-          value={range}
-          onChange={setRange}
-          options={RANGES.map((r) => ({ id: r.id, label: r.label }))}
+          label={tab === "server" ? "Search messages" : "Search the audit trail"}
+          className="w-full md:max-w-[340px] md:min-w-[200px] md:flex-[1_1_240px]"
         />
         {tab === "server" && (
           <FilterChips
@@ -238,13 +235,53 @@ export default function LogsPanel() {
             onChange={setLevel}
             options={[
               { id: "all", label: "All", count: counts.all },
-              ...LOG_LEVELS.map((l) => ({ id: l, label: l, count: counts[l] })),
+              ...LEVEL_ORDER.map((l) => ({
+                id: l,
+                label: l.charAt(0).toUpperCase() + l.slice(1),
+                count: counts[l],
+                dot: levelDot(l),
+              })),
             ]}
           />
         )}
-        <label className="flex items-center gap-2 text-sm">
+        <FilterChips
+          label="Range"
+          value={range}
+          onChange={setRange}
+          options={RANGES.map((r) => ({ id: r.id, label: r.label }))}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={following}
+          title="Reloads every 5 seconds and after new calls."
+          onClick={() => setFollowing((f) => !f)}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${following && !paused ? "bg-success" : "bg-admin-dim2"}`}
+            aria-hidden="true"
+          />
+          Following
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={tab === "server" ? lines.length === 0 : auditRows.length === 0}
+          onClick={() =>
+            tab === "server"
+              ? download(`squelch-log-${stamp()}.txt`, linesAsText(lines))
+              : download(`squelch-audit-${stamp()}.txt`, auditAsText(auditRows))
+          }
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Download
+        </button>
+        <label className="flex items-center gap-2">
           <span className="text-base-content-dim">Up to</span>
-          <select className="select select-sm" aria-label="Lines to load" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
+          <select className="select w-auto" aria-label="Lines to load" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
             {LIMITS.map((n) => (
               <option key={n} value={n}>
                 {n.toLocaleString()}
@@ -252,28 +289,8 @@ export default function LogsPanel() {
             ))}
           </select>
         </label>
-      </div>
-
-      <div className="grid gap-3 rounded-box border border-admin-line p-3 sm:grid-cols-2">
-        <SwitchRow
-          id="logs-following"
-          label="Following"
-          hint={
-            scrolled || p !== null
-              ? "Paused while you read; new lines arrive when you scroll back up."
-              : "Reloads every 5 seconds and after new calls."
-          }
-          checked={following}
-          onChange={setFollowing}
-        />
-        {tab === "server" && (
-          <p className="text-xs text-base-content-dim sm:self-center">
-            The server log level is set under{" "}
-            <Link to="/admin/settings#settings-logging" className="link">
-              Settings → Logging
-            </Link>
-            .
-          </p>
+        {following && paused && (
+          <span className="text-xs text-base-content-dim">Paused while you read; new lines arrive when you scroll back up.</span>
         )}
       </div>
 
@@ -290,7 +307,6 @@ export default function LogsPanel() {
           onOpen={(l, trigger) => panel.open({ key: `line:${lines.indexOf(l)}`, kind: "line", index: lines.indexOf(l) }, trigger)}
           rowLabel={(l) => parseLog(l).summary}
           openKey={p?.kind === "line" ? p.index : null}
-          rowClassName={(l) => (l.level === "error" ? "bg-error/5" : l.level === "warn" ? "bg-warning/5" : "")}
         />
       ) : (
         <DataTable
@@ -307,6 +323,20 @@ export default function LogsPanel() {
           openKey={p?.kind === "audit" ? p.id : null}
         />
       )}
+
+      <p className="text-right text-xs text-base-content-dim">
+        Newest first · {plural(tab === "server" ? lines.length : auditRows.length, tab === "server" ? "line" : "event")}{" "}
+        {range === "all" ? "loaded" : `in ${rangeWords(range)}`}
+        {tab === "server" && (
+          <>
+            {" "}
+            · the log level is set under{" "}
+            <Link to="/admin/settings#settings-logging" className="link">
+              Settings → Logging
+            </Link>
+          </>
+        )}
+      </p>
 
       {p?.kind === "line" && selectedLine && (
         <LogDetails

@@ -41,7 +41,7 @@ export default function LogDetails({ log, index, count, onMove, onShowSimilar, o
 
   const facts: Fact[] = [
     { label: "Time", value: formatDateTime(log.dateTime) },
-    { label: "Level", value: <span className={`badge badge-sm ${levelBadge(log.level)}`}>{log.level}</span> },
+    { label: "Level", value: <span className={`badge ${levelBadge(log.level)}`}>{log.level}</span> },
     { label: "Message", value: <span className="break-words">{parsed.summary}</span> },
   ];
 

@@ -1,9 +1,9 @@
 // The Trunk Recorder page: one recorder at a time, chosen in the header and
 // kept in the URL, with a connection banner, four tiles and the live tabs.
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Plus, Settings2 } from "lucide-react";
-import { PageHeader, plural, useDetails } from "@/features/admin/_shell";
+import { COUNT, PageHeader, StatGrid, StatTile, plural, useDetails, useNow } from "@/features/admin/_shell";
 import { useAppDispatch } from "@/app/store";
 import CallsTab from "./CallsTab";
 import ConfigTab from "./ConfigTab";
@@ -44,26 +44,6 @@ type Panel = { kind: "create" } | { kind: "edit" };
 
 const SETTINGS_LINK = "/admin/settings?q=Trunk%20Recorder#settings-integrations";
 
-function Tile({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  return (
-    <div className="rounded-box border border-admin-line bg-base-100 p-3">
-      <p className="text-xs text-base-content-dim">{label}</p>
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-      {detail && <p className="truncate text-xs text-base-content-dim">{detail}</p>}
-    </div>
-  );
-}
-
-/** Ticks once a second so "last frame 3 s ago" stays honest. */
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, []);
-  return now;
-}
-
 function idParam(v: string | null): number | null {
   if (!v) return null;
   const n = Number(v);
@@ -76,7 +56,7 @@ export default function TrunkRecorderPanel() {
   const { data: instances = [], error, isLoading } = useListTrInstancesQuery();
   const live = useTrMqttState();
   const panel = useDetails<Panel>();
-  const now = useNow();
+  const now = useNow(1000);
 
   const tab = tabFrom(search.get("tab"));
   const callsView = search.get("calls") === "recent" ? "recent" : "active";
@@ -115,10 +95,13 @@ export default function TrunkRecorderPanel() {
   const version = pluginVersion(live.config[id], plugin);
   const lagging = live.lagWarning[id] != null && now - live.lagWarning[id] < 5000;
 
-  const bannerParts: string[] = [];
+  const bannerParts: ReactNode[] = [];
   if (selected) {
-    bannerParts.push(`broker ${selected.brokerUrl}`);
-    bannerParts.push(STATE_LABEL[state]);
+    bannerParts.push(
+      <>
+        broker <span className="font-mono">{selected.brokerUrl}</span> {STATE_LABEL[state]}
+      </>,
+    );
     if (state === "connected") {
       bannerParts.push(plugin ? `plugin ${plugin.status}${version ? ` ${version}` : ""}` : "plugin status not seen yet");
       bannerParts.push(`last frame ${formatFrameAge(conn?.lastSeenAt, now)}`);
@@ -145,7 +128,7 @@ export default function TrunkRecorderPanel() {
               {instances.length > 0 && (
                 <select
                   aria-label="Instance"
-                  className="select select-sm"
+                  className="select w-auto"
                   value={id}
                   onChange={(e) => selectInstance(Number(e.target.value))}
                 >
@@ -156,7 +139,7 @@ export default function TrunkRecorderPanel() {
                   ))}
                 </select>
               )}
-              <button type="button" className="btn btn-primary btn-sm" onClick={(e) => panel.open({ kind: "create" }, e.currentTarget)}>
+              <button type="button" className="btn" onClick={(e) => panel.open({ kind: "create" }, e.currentTarget)}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Add instance
               </button>
@@ -195,41 +178,42 @@ export default function TrunkRecorderPanel() {
           <div
             role="status"
             aria-label="Recorder connection"
-            className={`flex flex-wrap items-center gap-3 rounded-box border px-3 py-2 text-sm ${
-              state === "connected" ? "border-success/30 bg-success/10" : state === "disabled" ? "border-admin-line bg-base-200" : "border-warning/40 bg-warning/10"
-            }`}
+            className={`alert flex items-start ${state === "connected" ? "alert-success" : state === "disabled" ? "" : "alert-warning"}`}
           >
             <span
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ${state === "connected" ? "bg-success" : state === "disabled" ? "bg-base-content/30" : "bg-warning"}`}
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${state === "connected" ? "bg-success" : state === "disabled" ? "bg-admin-dim2" : "bg-warning"}`}
               aria-hidden="true"
             />
             <span className="min-w-0 flex-1">
-              <span className="font-medium">{selected.label}</span> · {bannerParts.join(" · ")}
+              <b>{selected.label}</b>
+              {bannerParts.map((part, i) => (
+                <Fragment key={i}> · {part}</Fragment>
+              ))}
             </span>
-            <button type="button" className="btn btn-xs" onClick={(e) => panel.open({ kind: "edit" }, e.currentTarget)}>
-              <Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
+            <button type="button" className="btn btn-sm shrink-0 self-center" onClick={(e) => panel.open({ kind: "edit" }, e.currentTarget)}>
+              <Settings2 className="h-4 w-4" aria-hidden="true" />
               Instance settings
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Tile label="Systems" value={String(systems.length)} detail={systems.length ? systems.map((s) => s.name).join(" · ") : "none reported yet"} />
-            <Tile
+          <StatGrid className="grid-cols-2 md:grid-cols-4">
+            <StatTile label="Systems" value={String(systems.length)} detail={systems.length ? systems.map((s) => s.name).join(" · ") : "none reported yet"} />
+            <StatTile
               label="Recorders"
               value={`${recorders.filter((r) => isRecording(r.state)).length} / ${recorders.length}`}
               detail="recording / total"
             />
-            <Tile
+            <StatTile
               label="Active calls"
               value={String(calls.length)}
               detail={calls.length ? `${calls.filter((c) => c.encrypted).length} encrypted` : "nothing in progress"}
             />
-            <Tile
+            <StatTile
               label="Decode rate"
               value={rate ? `${rate.last.toFixed(1)}` : "—"}
               detail={rate ? `msgs / s · min ${rate.min.toFixed(0)} · max ${rate.max.toFixed(0)}` : "no rate frames yet"}
             />
-          </div>
+          </StatGrid>
 
           <div role="tablist" aria-label="Recorder views" className="tabs tabs-border">
             {TABS.map((t) => (
@@ -242,7 +226,7 @@ export default function TrunkRecorderPanel() {
                 onClick={() => setParam("tab", t.id === "dashboard" ? null : t.id)}
               >
                 {t.label}
-                {t.id === "calls" && calls.length > 0 && <span className="badge badge-ghost badge-sm ml-2">{calls.length}</span>}
+                {t.id === "calls" && calls.length > 0 && <span className={`${COUNT} ml-2`}>{calls.length}</span>}
               </button>
             ))}
           </div>

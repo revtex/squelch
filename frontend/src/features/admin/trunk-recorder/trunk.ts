@@ -389,3 +389,10 @@ export function csvName(instance: TrInstance, what: string): string {
 }
 
 export { fmtFreqMHz };
+
+/** Decoding means the control channel is being heard; zero means it is not. */
+export function systemHealth(r: SystemRow): { label: string; badge: string } {
+  if (r.rate == null) return { label: "waiting", badge: "badge-neutral" };
+  if (r.rate > 0) return { label: "ok", badge: "badge-success" };
+  return { label: "not decoding", badge: "badge-warning" };
+}

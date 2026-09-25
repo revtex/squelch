@@ -12,6 +12,8 @@ export type SortValue = string | number | null | undefined;
 export interface Column<T> {
   id: string;
   header: string;
+  /** The header is read to assistive tech but not shown, as for a column of buttons. */
+  headerHidden?: boolean;
   cell: (row: T) => ReactNode;
   /** Sortable when present; compares these values. */
   sortValue?: (row: T) => SortValue;
@@ -22,9 +24,10 @@ export interface Column<T> {
   /**
    * On a phone each row becomes a card. `title` puts this cell first without a
    * label, `hide` drops it, `wide` gives it the card's full width (for a row
-   * of buttons), and the default shows it with its header as a label.
+   * of buttons), `plain` shows it without the label (a time, a status dot),
+   * and the default shows it with its header as a label.
    */
-  phone?: "title" | "hide" | "show" | "wide";
+  phone?: "title" | "hide" | "show" | "wide" | "plain";
 }
 
 export interface SortState {
@@ -60,6 +63,8 @@ export interface DataTableProps<T, K extends string | number> {
   /** The key whose panel is open, to mark its row. */
   openKey?: K | null;
   rowClassName?: (row: T) => string;
+  /** Drop the table's own border, for a table that sits inside a Card. */
+  bare?: boolean;
 }
 
 function compare(a: SortValue, b: SortValue): number {
@@ -94,6 +99,7 @@ export function DataTable<T, K extends string | number>({
   empty = "Nothing here yet.",
   defaultSort,
   pageSize = 25,
+  bare = false,
   selected,
   onSelectedChange,
   bulkActions,
@@ -188,7 +194,7 @@ export function DataTable<T, K extends string | number>({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-admin-line bg-base-200">
+      <div className={bare ? "overflow-hidden" : "overflow-hidden rounded-lg border border-admin-line bg-base-200"}>
         <div className="overflow-x-auto [scrollbar-width:thin]">
           <table className="table max-sm:block">
             <caption className="sr-only">{caption}</caption>
@@ -233,6 +239,8 @@ export function DataTable<T, K extends string | number>({
                             {active ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}
                           </span>
                         </button>
+                      ) : c.headerHidden ? (
+                        <span className="sr-only">{c.header}</span>
                       ) : (
                         c.header
                       )}
@@ -304,7 +312,7 @@ export function DataTable<T, K extends string | number>({
                       return (
                         <td
                           key={c.id}
-                          data-label={c.header}
+                          data-label={c.headerHidden || phone === "plain" ? undefined : c.header}
                           className={`${c.align === "right" ? "text-right tabular-nums max-sm:text-left" : ""} ${phoneClass} ${c.className ?? ""}`}
                         >
                           {c.cell(row)}

@@ -68,7 +68,7 @@ The page shows one instance at a time; the selector in the header switches betwe
 
 | Tab           | Shows                                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dashboard** | The decode-rate chart for the last five minutes and one row per system with its rate, control channel and P25 identifiers.                 |
+| **Dashboard** | Two cards: the decode-rate chart for the last five minutes, and one row per system with its rate, control channel, P25 identifiers and health (**ok** while it decodes, **not decoding** at zero, **waiting** before the first rate frame). |
 | **Calls**     | Calls in progress, or the ones that started and ended since the page opened. Sortable, with an **Export CSV** button.                        |
 | **Recorders** | Every recorder with its state, frequency and call count, so a stuck one stands out. Sortable, with **Export CSV**.                          |
 | **Units**     | Affiliations, calls and data events as radios key up. Search by unit, talkgroup or system; **Hold** freezes the list and counts what arrives.|
@@ -393,7 +393,7 @@ What happened to each call handed to the transcriber, with the time of the call 
 
 ## Settings
 
-Server-wide options, in named groups on one page. A **Find a setting** box narrows the page to the rows that mention what you type, and the group names under the title jump to each group. Nothing applies until you press **Save changes** in the bar at the bottom, which lists what you changed; **Discard** puts everything back. The one exception is the **Log level**, which applies the moment you pick it and says so. A changed row carries a **Changed** badge until it is saved, and leaving the page with unsaved changes asks first.
+Server-wide options, in named groups on one page. A **Find a setting** box narrows the page to the rows that mention what you type. The group names down the left side jump to each group and mark the one you are reading as you scroll; on a phone they sit in a row under the title. Nothing applies until you press **Save changes** in the bar at the bottom, which lists what you changed; **Discard** puts everything back. The one exception is the **Log level**, which applies the moment you pick it and says so. A changed row carries a **Changed** badge until it is saved, and leaving the page with unsaved changes asks first.
 
 Rows that depend on another are indented under it and greyed out while the parent is off: the duplicate window under **Reject duplicate calls**, the encoding under **Convert audio on upload**, the expiry under **Let listeners share calls**.
 
@@ -490,11 +490,11 @@ The group heading shows how much the recordings take and how many files there ar
 
 Two tabs: the **Server log**, what the server is doing right now, and the **Audit trail**, who changed what.
 
-Both are tables you can search, with **Range** chips (last hour, 24 h, 7 days, all) that apply at once, a choice of how many lines to load (200 to 5,000), **Refresh**, and **Download**, which saves what is loaded as a text file. **Following** reloads every 5 seconds and after new calls; it pauses while you have scrolled down into older lines or have a line open, and resumes when you come back up.
+Both are tables you can search, with **Range** chips (last hour, 24 h, 7 days, all) that apply at once, a choice of how many lines to load (200 to 5,000), and **Download**, which saves what is loaded as a text file. **Following** reloads every 5 seconds and after new calls; it pauses while you have scrolled down into older lines or have a line open, and resumes when you come back up. Press it to stop following, and again to pick up the newest lines.
 
 ### Server log
 
-The server keeps its recent log lines in memory. Each row shows the time (the full date on hover), the level as text, and the message with a few short chips for its attributes, for example `call=1234 sys=7 tg=5200` for an ingested call or `try=3 error=…` for a failed delivery. HTTP requests show the method, path, status and latency. **Level** chips filter the list and show how many lines each level has.
+The server keeps its recent log lines in memory. Each row shows the time (the full date on hover), the level as a coloured dot (red error, amber warn, blue info, grey debug), and the message with a few short chips for its attributes, for example `call=1234 sys=7 tg=5200` for an ingested call or `try=3 error=…` for a failed delivery. HTTP requests show the method, path, status and latency. **Level** chips, each with its dot, filter the list and show how many lines each level has.
 
 The **›** button opens a line in the side panel: every attribute, the raw JSON with a **Copy** button, **Newer** and **Older** to step through the list, **Show similar lines** to search for the same message, and a link to the page the line is about (a folder monitor, a forwarding target, a user, an API key, and so on).
 
@@ -526,10 +526,10 @@ Rows are matched by what stays the same between two servers, not by database ids
 
 ### Radio data
 
-One table with a row for talkgroups, units, groups and tags, each with its count.
+One table with a row for talkgroups, units, groups and tags, each with its count. The picker in the card's header chooses whether talkgroup and unit exports take every system or one.
 
 - **Import** opens the same wizard for every kind: pick the system (talkgroups and units belong to one), choose the CSV, review what is new, what would change field by field and which rows could not be read, untick anything to leave alone, and apply. Talkgroups take Squelch, rdio-scanner and RadioReference files; units take `unit_id, label, order`; groups and tags take one label per row. **Fill in blanks only** and **Overwrite** work as on the Systems page.
-- **Export** downloads a CSV of one system, chosen in the row, or **Export all** for every system with a leading `system` column that carries the system number. Groups and tags export as one label per row.
+- **Export** downloads a CSV of the system chosen in the header, or **Export all** for every system with a leading `system` column that carries the system number. Groups and tags export as one label per row.
 
 ### Enrich from RadioReference
 

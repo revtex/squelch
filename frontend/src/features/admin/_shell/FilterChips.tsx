@@ -16,6 +16,8 @@ export interface ChipOption<K extends string> {
   label: string;
   /** Shown after the label; the count of rows this chip would show. */
   count?: number;
+  /** A background class for a small colour dot before the label, e.g. a log level. */
+  dot?: string;
 }
 
 export interface FilterChipsProps<K extends string> {
@@ -73,6 +75,7 @@ export function FilterChips<K extends string>({
             onClick={() => onChange(o.id)}
             onKeyDown={(e) => onKeyDown(e, i)}
           >
+            {o.dot && <span className={`h-2 w-2 shrink-0 rounded-full ${o.dot}`} aria-hidden="true" />}
             {o.label}
             {o.count !== undefined && (
               <span className={COUNT} aria-hidden="true">

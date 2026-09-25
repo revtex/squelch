@@ -58,7 +58,9 @@ describe("LogsPanel", () => {
     expect(within(row).getByText("error=bad header")).toBeInTheDocument();
     const req = within(table).getByText("/api/v1/calls").closest("tr")!;
     expect(within(req).getByText("200")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^error/ })).toHaveTextContent("1");
+    expect(screen.getByRole("radio", { name: "Error" })).toHaveTextContent("1");
+    expect(within(row).getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Following" })).toHaveAttribute("aria-pressed", "true");
     expect(followingSeen.server).toBe(true);
     expect(followingSeen.audit).toBe(false);
   });
