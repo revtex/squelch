@@ -73,12 +73,15 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"talkgroups.delete": o.TalkgroupsDelete,
 		"talkgroups.bulk":   o.TalkgroupsBulk,
 		"talkgroups.import": o.TalkgroupsImport,
+		"groups.import":     o.GroupsImport,
+		"tags.import":       o.TagsImport,
 
 		// Units
 		"units.list":   o.UnitsList,
 		"units.create": o.UnitsCreate,
 		"units.update": o.UnitsUpdate,
 		"units.delete": o.UnitsDelete,
+		"units.import": o.UnitsImport,
 
 		// Groups
 		"groups.list":   o.GroupsList,
@@ -143,7 +146,9 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"export.tags":       o.ExportTags,
 
 		// Import
-		"import.config": o.ImportConfig,
+		"import.config":  o.ImportConfig,
+		"backup.preview": o.BackupPreview,
+		"backup.counts":  o.BackupCounts,
 
 		// RadioReference
 		"radioreference.apply": o.RadioReferenceApply,

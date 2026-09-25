@@ -37,8 +37,11 @@ import type {
   SharedLinkAdmin,
   RestoreSharedLinkPayload,
   ServerDirectoryListResponse,
-  RRApplyRequest,
-  RRApplyResponse,
+  BackupCounts,
+  BackupPreview,
+  ImportApplyResult,
+  RestoreResult,
+  UnitImportRow,
   TranscriptionStatus,
   AdminConnectionsList,
   AdminSessionsList,
@@ -260,6 +263,18 @@ export function useApplyTalkgroupImportMutation() {
   return useWsMutation<TalkgroupImportResult, { systemId: number; mode: ImportMode; rows: ImportRow[] }>(
     "talkgroups.import",
   );
+}
+
+export function useApplyUnitImportMutation() {
+  return useWsMutation<ImportApplyResult, { systemId: number; mode: ImportMode; rows: UnitImportRow[] }>("units.import");
+}
+
+export function useApplyGroupImportMutation() {
+  return useWsMutation<ImportApplyResult, { labels: string[] }>("groups.import");
+}
+
+export function useApplyTagImportMutation() {
+  return useWsMutation<ImportApplyResult, { labels: string[] }>("tags.import");
 }
 
 // ─── Units ──────────────────────────────────────────────────────────────────
@@ -540,20 +555,21 @@ export function useLazyExportTagsQuery() {
 }
 
 export function useImportConfigMutation() {
-  return useWsMutation<void, unknown>("import.config", {
-    // The backup file IS the params object — the backend unmarshals
-    // params directly into a struct with top-level settings/groups/
-    // systems/etc. fields. Wrapping it as { data } here would put
-    // everything one level too deep and silently parse zero entities.
-    transformArg: (data) => data as Record<string, unknown>,
-  });
+  // The restore request is the backup file itself with `mode` beside its
+  // tables; the backend reads both from the one object.
+  return useWsMutation<RestoreResult, Record<string, unknown>>("import.config");
+}
+
+export function useBackupPreviewMutation() {
+  return useWsMutation<BackupPreview, Record<string, unknown>>("backup.preview");
+}
+
+export function useBackupCountsQuery() {
+  return useWsQuery<BackupCounts>("backup.counts", undefined, "talkgroups.updated", 60_000);
 }
 
 // ─── RadioReference ─────────────────────────────────────────────────────────
 
-export function useRrApplyMutation() {
-  return useWsMutation<RRApplyResponse, RRApplyRequest>("radioreference.apply");
-}
 
 // ─── Transcription ──────────────────────────────────────────────────────────
 

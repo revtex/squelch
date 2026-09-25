@@ -305,8 +305,11 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 		v1Admin.POST("/import/talkgroups", importsHandler.ImportTalkgroups)
 		v1Admin.POST("/import/talkgroups/preview", importsHandler.PreviewTalkgroups)
 		v1Admin.POST("/import/units", importsHandler.ImportUnits)
+		v1Admin.POST("/import/units/preview", importsHandler.PreviewUnits)
 		v1Admin.POST("/import/groups", importsHandler.ImportGroups)
+		v1Admin.POST("/import/groups/preview", importsHandler.PreviewGroups)
 		v1Admin.POST("/import/tags", importsHandler.ImportTags)
+		v1Admin.POST("/import/tags/preview", importsHandler.PreviewTags)
 		// Plan §4.1 drops the trailing `/csv` segment on the v1 path.
 		v1Admin.POST("/radioreference/preview", rrHandler.PreviewCSV)
 		v1Admin.GET("/transcriptions/status", transcriptionsHandler.GetStatus)

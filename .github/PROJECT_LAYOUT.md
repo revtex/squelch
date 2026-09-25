@@ -181,8 +181,8 @@ frontend/
         groups-tags/       components, and colocated tests
         systems/           SystemsPanel (master–detail) + SystemList/SystemForm,
                            TalkgroupsTab/TalkgroupDetails/TalkgroupForm/
-                           TalkgroupFields, UnitsTab, BlockedTab, ImportWizard,
-                           systems.ts helpers
+                           TalkgroupFields, UnitsTab, BlockedTab (Import uses
+                           tools/ImportWizard), systems.ts helpers
         dashboards/        the old Dashboards page: a redirect, plus
           DashboardsPanel.tsx
           activity/        ActivityPanel + activitySlice + useAdminActivity
@@ -192,8 +192,11 @@ frontend/
                            trMqttSlice (tr.* events + snapshot hydration),
                            trMqttApi (REST), trunk.ts row/CSV helpers
         logs/              LogsPanel + useAdminLogs
-        legacy-usage/  radio-reference/  tools/  settings/
-        dir-monitor/   forwarding/   shared-links/
+        tools/             the Backup & import page: ToolsPanel, RestorePanel
+                           (review → mode → typed word), ImportWizard (one
+                           wizard for talkgroups/units/groups/tags and
+                           RadioReference), tools.ts review + restore helpers
+        legacy-usage/  settings/  dir-monitor/  forwarding/  shared-links/
         transcription/     TranscriptionPanel (banner, tiles, tabs) +
                            SettingsTab/ModelsTab/JobsTab, useModelDownloads
                            (download progress events), transcription.ts catalogue

@@ -5,9 +5,6 @@ import type {
   AdminTalkgroup,
   AdminTalkgroupInput,
   AdminUnit,
-  ImportChange,
-  ImportMode,
-  ImportPreviewRow,
 } from "@/types";
 
 export type Tab = "talkgroups" | "units" | "blocked";
@@ -99,24 +96,6 @@ export function formatFrequency(hz: number | null | undefined): string {
 export function systemsInOrder(systems: AdminSystem[] | undefined): AdminSystem[] {
   return systems ? [...systems].sort((a, b) => a.order - b.order || a.id - b.id) : [];
 }
-
-/** The changes an import row would make in a mode: all of them, or only blanks. */
-export function applicableChanges(row: ImportPreviewRow, mode: ImportMode): ImportChange[] {
-  const changes = row.changes ?? [];
-  if (mode === "overwrite") return changes;
-  return changes.filter((c) => c.now === "");
-}
-
-/** Rows an import would touch in a mode, excluding the ones ticked off. */
-export function rowsToApply(rows: ImportPreviewRow[], mode: ImportMode, excluded: ReadonlySet<number>): ImportPreviewRow[] {
-  return rows.filter((r) => !excluded.has(r.talkgroupId) && (r.status === "new" || applicableChanges(r, mode).length > 0));
-}
-
-export const FORMAT_LABEL: Record<string, string> = {
-  squelch: "Squelch",
-  "rdio-scanner": "rdio-scanner",
-  radioreference: "RadioReference",
-};
 
 /** The talkgroup form's fields as strings, the way inputs hold them. */
 export interface TalkgroupFormState {

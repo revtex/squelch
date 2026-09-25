@@ -133,7 +133,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         to: "/admin/tools",
         label: "Backup & import",
         icon: ArchiveRestore,
-        keywords: "tools export restore csv radioreference",
+        keywords: "tools export restore backup csv radioreference import",
       },
     ],
   },

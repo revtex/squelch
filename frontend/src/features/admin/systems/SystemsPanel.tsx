@@ -30,7 +30,7 @@ import {
 } from "@/features/admin/_shell";
 import type { AdminSystemInput, AdminTalkgroup, AdminTalkgroupInput, AdminUnit, AdminUnitInput } from "@/types";
 import BlockedTab from "./BlockedTab";
-import ImportWizard from "./ImportWizard";
+import { ImportWizard } from "@/features/admin/tools";
 import SystemForm from "./SystemForm";
 import SystemList from "./SystemList";
 import TalkgroupDetails from "./TalkgroupDetails";
@@ -513,10 +513,11 @@ export default function SystemsPanel() {
       )}
       {p?.kind === "import" && system && (
         <ImportWizard
+          entity="talkgroups"
           system={system}
           onClose={panel.close}
-          onDone={(r) => {
-            toast.success(`Imported: ${plural(r.created, "new talkgroup")}, ${r.updated} updated, ${r.unchanged} unchanged.`);
+          onDone={(summary) => {
+            toast.success(summary);
             panel.close();
           }}
         />

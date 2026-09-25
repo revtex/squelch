@@ -22,7 +22,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Transcription](#transcription)
 - [Settings](#settings)
 - [Logs & audit](#logs--audit)
-- [Tools](#tools)
+- [Backup & import](#backup--import)
 
 ---
 
@@ -506,33 +506,35 @@ Events are kept for **90 days** by default; change **Keep the audit trail for** 
 
 ---
 
-## Tools
+## Backup & import
 
-Utilities for bulk data management and maintenance.
+The whole configuration in and out as one file, radio data in and out as CSV, RadioReference enrichment, and the API docs. Every import shows what it would change before it writes anything.
 
-### CSV Import
+### Configuration backup
 
-- **Import Talkgroups** — the same reviewed import as **Systems → Import**, for when you want to pick the system here.
-- **Import Units** — upload a CSV to bulk-create or update unit records for a system.
+**Download backup** saves systems, talkgroups, units, groups, tags, users and settings as one JSON file, named after the date. Users come without their passwords. API keys (hashed), forwarding keys and webhook secrets are in the file too, so keep it private. If secrets encryption is on, encrypted values keep their `enc::` form and can only be restored on a server with the same `--encryption-key`. The card says when a backup was last downloaded from this server.
 
-Both report how many records were inserted, updated, and skipped.
+**Restore from backup…** is guarded in three steps:
 
-### CSV Export
+1. **Choose file** — a backup from this page, or from another Squelch.
+2. **Review** — a table compares the file with what is live, one row per kind of data: how many are in the file, how many are here now, and the result: *n added* (in the file, not here), *n differ* (in both, different), and what is here but not in the file, with a few names. A kind of data the file does not carry is left alone. Choose **Merge** (add and update, never delete) or **Replace everything** (the tables in the file end up exactly as the file has them; what the file lacks is removed). Settings are only ever added or updated. Your own account and the primary admin are never removed or demoted.
+3. **Restore** — type `RESTORE` and confirm. Squelch first saves the current configuration to a `backups/` folder beside the database (`pre-restore-<time>.json`, the ten newest kept), then applies the file in one transaction and tells you where the previous configuration went. Folder monitors, forwarding and transcription pick up the restored settings without a restart.
 
-- **Export Talkgroups** — download all talkgroups (or filter by system) as CSV.
-- **Export Units** — download all units (or filter by system) as CSV.
+Rows are matched by what stays the same between two servers, not by database ids: system number, talkgroup number within a system, unit number, label, username, API key, folder, URL. A user the restore adds has no password until an admin sets one under **Users**.
 
-### JSON Config
+### Radio data
 
-- **Export Config** — download the full server configuration as `squelch-config.json`. Useful for backups or migrating to a new server. If secrets encryption is enabled, exported values retain their `enc::` encrypted form.
-- **Import Config** — restore configuration from a previously exported JSON file. If the backup contains encrypted values (`enc::` prefix), the target server must have the same `--encryption-key` configured. The import is rejected if no key is set or the key cannot decrypt the values.
+One table with a row for talkgroups, units, groups and tags, each with its count.
 
-### RadioReference
+- **Import** opens the same wizard for every kind: pick the system (talkgroups and units belong to one), choose the CSV, review what is new, what would change field by field and which rows could not be read, untick anything to leave alone, and apply. Talkgroups take Squelch, rdio-scanner and RadioReference files; units take `unit_id, label, order`; groups and tags take one label per row. **Fill in blanks only** and **Overwrite** work as on the Systems page.
+- **Export** downloads a CSV of one system, chosen in the row, or **Export all** for every system with a leading `system` column that carries the system number. Groups and tags export as one label per row.
 
-Preview and apply talkgroup metadata from RadioReference. This lets you pull talkgroup names, groups, and tags from RadioReference data and merge them into your system.
+### Enrich from RadioReference
 
-### API Docs
+Pick a system and **Choose CSV…** to bring labels, names, categories and tags in from a RadioReference talkgroup export. It is the same wizard as Import, opened on that system with the changes-only view.
 
-Opens the Swagger API documentation at `/api/v1/admin/docs`. Squelch issues a short-lived session for it when you click through, so the browser can authenticate to the docs UI.
+### API documentation
+
+**Open Swagger UI** issues a short-lived session for the docs and opens them at `/api/v1/admin/docs` in a new tab; the page says so if the session is refused or the tab is blocked. **Copy an access token…** shows your live admin token behind a warning: anyone holding it is you for the next 15 minutes.
 
 ---

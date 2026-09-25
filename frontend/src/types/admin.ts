@@ -383,55 +383,94 @@ export interface MaskTestResult {
   values: Record<string, string>;
 }
 
-// --- RadioReference enrichment types ---
+// --- Backup & import ---
 
-export interface RRTalkgroupCandidate {
+/** One unit read from a CSV. */
+export interface UnitImportRow {
   row: number;
-  talkgroupId: number;
+  unitId: number;
   label?: string;
-  name?: string;
-  group?: string;
-  tag?: string;
-  led?: string;
   order?: number;
 }
 
-export interface RRPreviewRow extends RRTalkgroupCandidate {
-  matched: boolean;
-  wouldUpdate: boolean;
-  wouldUpdateFields: string[];
-  skipReason?: string;
+export interface UnitImportPreviewRow extends UnitImportRow {
+  status: "new" | "unchanged" | "changed";
+  changes: ImportChange[];
 }
 
-export interface RRRowError {
+export interface UnitImportPreview {
+  rows: UnitImportPreviewRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
+  changed: number;
+}
+
+/** One group or tag label read from a CSV, judged against what exists. */
+export interface LabelImportRow {
   row: number;
-  reason: string;
+  label: string;
+  status: "new" | "unchanged";
 }
 
-export interface RRPreviewResponse {
-  processed: number;
-  matched: number;
-  wouldUpdate: number;
-  skipped: number;
-  errors: number;
-  rowErrors: RRRowError[];
-  rows: RRPreviewRow[];
+export interface LabelImportPreview {
+  rows: LabelImportRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
 }
 
-export interface RRApplyRequest {
-  systemId: number;
-  candidates: RRTalkgroupCandidate[];
-  mergeMode: string;
-  selectedFields: string[];
+/** What units.import, groups.import and tags.import report. */
+export interface ImportApplyResult {
+  ok: boolean;
+  created: number;
+  updated?: number;
+  unchanged: number;
 }
 
-export interface RRApplyResponse {
-  processed: number;
-  matched: number;
+/** One table compared between a backup file and the live data. */
+export interface BackupEntity {
+  key: string;
+  label: string;
+  /** False when the file does not carry this table. */
+  included: boolean;
+  inFile: number;
+  now: number;
+  /** In the file, not here. */
+  added: number;
+  /** In both, but different. */
+  changed: number;
+  /** Here, not in the file: only Replace deletes these. */
+  removed: number;
+  /** A few names of what Replace would remove. */
+  examples: string[];
+}
+
+export interface BackupPreview {
+  entities: BackupEntity[];
+  warnings: string[];
+}
+
+export interface BackupCounts {
+  systems: number;
+  talkgroups: number;
+  units: number;
+  groups: number;
+  tags: number;
+  users: number;
+  lastBackupAt: number | null;
+}
+
+export type RestoreMode = "merge" | "replace";
+
+export interface RestoreResult {
+  ok: boolean;
+  mode: RestoreMode;
+  created: number;
   updated: number;
-  skipped: number;
-  errors: number;
-  rowErrors: RRRowError[];
+  removed: number;
+  /** Where the previous configuration was saved, or "" when the server has no database file. */
+  snapshot: string;
 }
 
 // --- Shared Links (admin) ---

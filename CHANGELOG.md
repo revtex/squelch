@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Backup & import, one page instead of ten cards.** A Configuration
+  backup card downloads the whole configuration as one JSON file (users
+  without passwords) and remembers when it was last taken. Restore is
+  guarded: a review compares the file with what is live, kind by kind
+  (in file, now, added, differ, and what is here but not in the file, with
+  names), then you choose Merge (add and update, never delete) or Replace
+  everything, and type RESTORE. The server saves the previous configuration
+  beside the database first (`backups/pre-restore-<time>.json`, ten kept),
+  matches rows by system number, talkgroup number, label, username, key,
+  folder or URL rather than database ids, updates what it matches, and
+  never removes your own account or the primary admin. One Radio data
+  table lists talkgroups, units, groups and tags with counts; every import
+  goes through the same wizard as Systems → Import (units, groups and tags
+  now preview too, and can be unticked row by row); exports take one
+  system or all, the all-systems CSV carrying a `system` column.
+  RadioReference enrichment is that wizard opened on a system. The API
+  docs card reports a refused session instead of doing nothing, and the
+  access token sits behind a warning that anyone holding it is you for 15
+  minutes. New admin operations: `backup.preview`, `backup.counts`,
+  `units.import`, `groups.import`, `tags.import`; `import.config` takes a
+  `mode`; `export.talkgroups` and `export.units` no longer need a system;
+  `POST /api/v1/admin/import/{units,groups,tags}/preview` read a CSV
+  without writing.
 - **Trunk Recorder, its own page.** One recorder at a time, chosen with a
   selector in the header that stays in the link; the old Instances tab is
   gone. A banner says whether the broker is connected, whether the plugin

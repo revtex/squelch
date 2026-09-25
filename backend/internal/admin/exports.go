@@ -7,120 +7,58 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/revtex/squelch/internal/db"
 )
 
-// ExportConfig returns the full config (settings, systems, talkgroups, …)
-// shaped for import.go to round-trip.
-func (o *Operations) ExportConfig(ctx context.Context, _ json.RawMessage, _ int64) (any, error) {
-	allSettings, err := o.Queries.ListSettings(ctx)
+// exportConfigData gathers the full configuration (settings, users without
+// passwords, systems, talkgroups, units, groups, tags, API keys, folder
+// monitors, forwarding targets and webhooks) in the shape ImportConfig
+// reads back. API keys carry their hashed key, forwarding targets their
+// key and webhooks their secret, so the file is sensitive.
+func (o *Operations) exportConfigData(ctx context.Context) (map[string]any, error) {
+	live, err := o.loadLiveConfig(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to export settings: %w", err)
+		return nil, err
 	}
-	settings := make([]db.Setting, 0, len(allSettings))
-	for _, s := range allSettings {
+	settings := make([]db.Setting, 0, len(live.Settings))
+	for _, s := range live.Settings {
 		if !serverOnlySettingKeys[s.Key] {
 			settings = append(settings, s)
 		}
 	}
-	users, err := o.Queries.ListUsers(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export users: %w", err)
-	}
-	systems, err := o.Queries.ListSystems(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export systems: %w", err)
-	}
-	talkgroups, err := o.Queries.ListAllTalkgroups(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export talkgroups: %w", err)
-	}
-	units, err := o.Queries.ListAllUnits(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export units: %w", err)
-	}
-	groups, err := o.Queries.ListGroups(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export groups: %w", err)
-	}
-	tags, err := o.Queries.ListTags(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export tags: %w", err)
-	}
-	apiKeys, err := o.Queries.ListAPIKeys(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export api keys: %w", err)
-	}
-	dirmonitors, err := o.Queries.ListDirMonitors(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export dirmonitors: %w", err)
-	}
-	downstreams, err := o.Queries.ListDownstreams(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export downstreams: %w", err)
-	}
-	webhooks, err := o.Queries.ListWebhooks(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to export webhooks: %w", err)
-	}
-
-	// Export all fields — use snake_case keys to match db struct JSON tags.
-	// API keys include the hashed key so import can restore authentication.
-	// Downstream API keys and webhook secrets are included for full backup.
-	// The exported JSON file should be treated as sensitive.
-	exportAPIKeys := make([]map[string]any, len(apiKeys))
-	for i, k := range apiKeys {
-		exportAPIKeys[i] = map[string]any{
-			"id":              k.ID,
-			"key":             k.Key,
-			"ident":           nullStr(k.Ident),
-			"disabled":        k.Disabled,
-			"systems_json":    nullStr(k.SystemsJson),
-			"call_rate_limit": nullInt(k.CallRateLimit),
-			"order":           k.Order,
-		}
-	}
-	exportDownstreams := make([]map[string]any, len(downstreams))
-	for i, d := range downstreams {
-		exportDownstreams[i] = map[string]any{
-			"id":           d.ID,
-			"url":          d.Url,
-			"api_key":      d.ApiKey,
-			"systems_json": nullStr(d.SystemsJson),
-			"disabled":     d.Disabled,
-			"order":        d.Order,
-		}
-	}
-	exportWebhooks := make([]map[string]any, len(webhooks))
-	for i, w := range webhooks {
-		exportWebhooks[i] = map[string]any{
-			"id":           w.ID,
-			"url":          w.Url,
-			"type":         w.Type,
-			"secret":       nullStr(w.Secret),
-			"systems_json": nullStr(w.SystemsJson),
-			"disabled":     w.Disabled,
-			"order":        w.Order,
-		}
-	}
-
 	return map[string]any{
 		"settings":    settings,
-		"users":       users,
-		"systems":     systems,
-		"talkgroups":  talkgroups,
-		"units":       units,
-		"groups":      groups,
-		"tags":        tags,
-		"apiKeys":     exportAPIKeys,
-		"dirmonitors": dirmonitors,
-		"downstreams": exportDownstreams,
-		"webhooks":    exportWebhooks,
+		"users":       live.Users,
+		"systems":     live.Systems,
+		"talkgroups":  live.Talkgroups,
+		"units":       live.Units,
+		"groups":      live.Groups,
+		"tags":        live.Tags,
+		"apiKeys":     flattenAPIKeys(live.APIKeys),
+		"dirmonitors": live.DirMonitors,
+		"downstreams": flattenDownstreams(live.Downstreams),
+		"webhooks":    flattenWebhooks(live.Webhooks),
 	}, nil
 }
 
-// ExportTalkgroups returns a CSV export of talkgroups for a given system.
+// ExportConfig is the configuration backup download. It remembers when it
+// was taken, for the Backup & import page.
+func (o *Operations) ExportConfig(ctx context.Context, _ json.RawMessage, callerID int64) (any, error) {
+	data, err := o.exportConfigData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.Queries.UpsertSetting(ctx, db.UpsertSettingParams{Key: configBackupLastAtKey, Value: strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
+		return nil, fmt.Errorf("failed to record the backup time: %w", err)
+	}
+	o.audit(ctx, fmt.Sprintf("admin: configuration backup downloaded by %s", o.callerName(ctx, callerID)))
+	return data, nil
+}
+
+// ExportTalkgroups returns a CSV of one system's talkgroups, or of every
+// system's with the system number in a leading column.
 func (o *Operations) ExportTalkgroups(ctx context.Context, params json.RawMessage, _ int64) (any, error) {
 	var req struct {
 		SystemID *int64 `json:"systemId"`
@@ -128,13 +66,20 @@ func (o *Operations) ExportTalkgroups(ctx context.Context, params json.RawMessag
 	if params != nil {
 		_ = json.Unmarshal(params, &req)
 	}
-	if req.SystemID == nil {
-		return nil, fmt.Errorf("systemId is required")
-	}
 
-	talkgroups, err := o.Queries.ListTalkgroupsBySystem(ctx, *req.SystemID)
+	var talkgroups []db.Talkgroup
+	var err error
+	if req.SystemID != nil {
+		talkgroups, err = o.Queries.ListTalkgroupsBySystem(ctx, *req.SystemID)
+	} else {
+		talkgroups, err = o.Queries.ListAllTalkgroups(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list talkgroups: %w", err)
+	}
+	systemNums, err := o.systemNumbersByPK(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build ID→label maps so we can emit portable text names instead of
@@ -154,7 +99,11 @@ func (o *Operations) ExportTalkgroups(ctx context.Context, params json.RawMessag
 
 	var buf strings.Builder
 	w := csv.NewWriter(&buf)
-	_ = w.Write([]string{"talkgroup_id", "label", "name", "tag", "group", "frequency", "led", "order"})
+	header := []string{"talkgroup_id", "label", "name", "tag", "group", "frequency", "led", "order"}
+	if req.SystemID == nil {
+		header = append([]string{"system"}, header...)
+	}
+	_ = w.Write(header)
 	for _, tg := range talkgroups {
 		freq := ""
 		if tg.Frequency.Valid {
@@ -168,7 +117,7 @@ func (o *Operations) ExportTalkgroups(ctx context.Context, params json.RawMessag
 		if tg.TagID.Valid {
 			tagLabel = tagMap[tg.TagID.Int64]
 		}
-		_ = w.Write([]string{
+		rec := []string{
 			strconv.FormatInt(tg.TalkgroupID, 10),
 			tg.Label.String,
 			tg.Name.String,
@@ -177,14 +126,29 @@ func (o *Operations) ExportTalkgroups(ctx context.Context, params json.RawMessag
 			freq,
 			tg.Led.String,
 			strconv.FormatInt(tg.Order, 10),
-		})
+		}
+		if req.SystemID == nil {
+			rec = append([]string{strconv.FormatInt(systemNums[tg.SystemID], 10)}, rec...)
+		}
+		_ = w.Write(rec)
 	}
 	w.Flush()
 
 	return buf.String(), nil
 }
 
-// ExportUnits returns a CSV export of units for a given system.
+// systemNumbersByPK maps system PKs to radio system numbers, for exports
+// that span systems.
+func (o *Operations) systemNumbersByPK(ctx context.Context) (map[int64]int64, error) {
+	systems, err := o.Queries.ListSystems(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list systems: %w", err)
+	}
+	return systemNumbers(systems), nil
+}
+
+// ExportUnits returns a CSV of one system's units, or of every system's
+// with the system number in a leading column.
 func (o *Operations) ExportUnits(ctx context.Context, params json.RawMessage, _ int64) (any, error) {
 	var req struct {
 		SystemID *int64 `json:"systemId"`
@@ -192,24 +156,39 @@ func (o *Operations) ExportUnits(ctx context.Context, params json.RawMessage, _ 
 	if params != nil {
 		_ = json.Unmarshal(params, &req)
 	}
-	if req.SystemID == nil {
-		return nil, fmt.Errorf("systemId is required")
-	}
 
-	units, err := o.Queries.ListUnitsBySystem(ctx, *req.SystemID)
+	var units []db.Unit
+	var err error
+	if req.SystemID != nil {
+		units, err = o.Queries.ListUnitsBySystem(ctx, *req.SystemID)
+	} else {
+		units, err = o.Queries.ListAllUnits(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to list units: %w", err)
+	}
+	systemNums, err := o.systemNumbersByPK(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	var buf strings.Builder
 	w := csv.NewWriter(&buf)
-	_ = w.Write([]string{"unit_id", "label", "order"})
+	header := []string{"unit_id", "label", "order"}
+	if req.SystemID == nil {
+		header = append([]string{"system"}, header...)
+	}
+	_ = w.Write(header)
 	for _, u := range units {
-		_ = w.Write([]string{
+		rec := []string{
 			strconv.FormatInt(u.UnitID, 10),
 			u.Label.String,
 			strconv.FormatInt(u.Order, 10),
-		})
+		}
+		if req.SystemID == nil {
+			rec = append([]string{strconv.FormatInt(systemNums[u.SystemID], 10)}, rec...)
+		}
+		_ = w.Write(rec)
 	}
 	w.Flush()
 

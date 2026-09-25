@@ -286,6 +286,7 @@ var SensitiveSettingKeys = map[string]bool{
 // tokens for any user, and it outlives the admin's own revocation.
 var serverOnlySettingKeys = map[string]bool{
 	auth.JWTSecretKeyName: true,
+	configBackupLastAtKey: true,
 }
 
 // allowedSettingKeys mirrors the allowed setting keys from config.go.

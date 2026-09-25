@@ -1,652 +1,322 @@
-import { useState, useRef, useCallback, type RefObject } from "react";
+// Backup & import: the whole configuration as one file, in and out; radio
+// data as CSV per kind, one system or all; RadioReference enrichment; and
+// the API docs. Every import reviews before it writes, and a restore is
+// guarded by a review, a mode and a typed word.
+import { useState } from "react";
+import { ArchiveRestore, Copy, Database, Download, ExternalLink, FileText, KeyRound, Upload } from "lucide-react";
 import {
-  Upload,
-  Download,
-  ExternalLink,
-  Database,
-  FileText,
-} from "lucide-react";
-import {
-  useImportTalkgroupsMutation,
-  useImportUnitsMutation,
-  useImportGroupsMutation,
-  useImportTagsMutation,
-} from "@/features/admin/_shell";
-import {
+  DataTable,
+  DetailsPanel,
+  PageHeader,
+  formatAgo,
+  plural,
+  useBackupCountsQuery,
+  useDetails,
   useLazyExportConfigQuery,
-  useLazyExportTalkgroupsQuery,
-  useLazyExportUnitsQuery,
   useLazyExportGroupsQuery,
   useLazyExportTagsQuery,
-  useImportConfigMutation,
+  useLazyExportTalkgroupsQuery,
+  useLazyExportUnitsQuery,
   useListSystemsQuery,
+  useToast,
+  type Column,
 } from "@/features/admin/_shell";
 import { selectToken } from "@/features/auth";
 import { useAppSelector } from "@/app/store";
-import RadioReferenceCard from "@/features/admin/radio-reference";
+import ImportWizard from "./ImportWizard";
+import RestorePanel from "./RestorePanel";
+import { ENTITY_LABEL, NEEDS_SYSTEM, downloadText, exportFilename, type ImportEntity } from "./tools";
+import type { AdminSystem } from "@/types";
 
 const SWAGGER_URL = "/api/v1/admin/docs/index.html";
+const DOCS_SESSION_URL = "/api/v1/admin/docs/session";
+
+type Panel =
+  | { kind: "restore" }
+  | { kind: "import"; entity: ImportEntity; system?: AdminSystem; title?: string }
+  | { kind: "token" };
+
+interface RadioRow {
+  entity: ImportEntity;
+  label: string;
+  count: number | undefined;
+  detail: string;
+}
+
+function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section aria-label={title} className="space-y-3 rounded-box border border-base-300 bg-base-100 p-4">
+      <h3 className="flex items-center gap-2 text-base font-semibold">
+        {icon}
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function backupFilename(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `squelch-backup-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+}
 
 export default function ToolsPanel() {
+  const toast = useToast();
   const token = useAppSelector(selectToken);
-  const [importTalkgroups] = useImportTalkgroupsMutation();
-  const [importUnits] = useImportUnitsMutation();
-  const [importGroups] = useImportGroupsMutation();
-  const [importTags] = useImportTagsMutation();
-  const [triggerExport] = useLazyExportConfigQuery();
-  const [triggerExportTalkgroups] = useLazyExportTalkgroupsQuery();
-  const [triggerExportUnits] = useLazyExportUnitsQuery();
-  const [triggerExportGroups] = useLazyExportGroupsQuery();
-  const [triggerExportTags] = useLazyExportTagsQuery();
-  const [importConfig] = useImportConfigMutation();
-  const { data: systems } = useListSystemsQuery();
+  const { data: systems = [] } = useListSystemsQuery();
+  const counts = useBackupCountsQuery();
+  const [exportConfig, { isFetching: preparingBackup }] = useLazyExportConfigQuery();
+  const [exportTalkgroups] = useLazyExportTalkgroupsQuery();
+  const [exportUnits] = useLazyExportUnitsQuery();
+  const [exportGroups] = useLazyExportGroupsQuery();
+  const [exportTags] = useLazyExportTagsQuery();
+  const panel = useDetails<Panel>();
+  const [exportSystem, setExportSystem] = useState<Record<ImportEntity, number>>({ talkgroups: 0, units: 0, groups: 0, tags: 0 });
+  const [exporting, setExporting] = useState<ImportEntity | null>(null);
+  const [rrSystemId, setRrSystemId] = useState(0);
+  const [openingDocs, setOpeningDocs] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"error" | "success">("error");
-  const tgFileRef = useRef<HTMLInputElement>(null);
-  const unitFileRef = useRef<HTMLInputElement>(null);
-  const configFileRef = useRef<HTMLInputElement>(null);
-  const groupsFileRef = useRef<HTMLInputElement>(null);
-  const tagsFileRef = useRef<HTMLInputElement>(null);
-  const [hasGroupsFile, setHasGroupsFile] = useState(false);
-  const [hasTagsFile, setHasTagsFile] = useState(false);
-  const [hasConfigFile, setHasConfigFile] = useState(false);
-  const [hasTgFile, setHasTgFile] = useState(false);
-  const [hasUnitFile, setHasUnitFile] = useState(false);
-  const [selectedTgSystemId, setSelectedTgSystemId] = useState<string>("");
-  const [tgImportMode, setTgImportMode] = useState<"overwrite" | "skip">(
-    "overwrite",
-  );
-  const [selectedUnitSystemId, setSelectedUnitSystemId] = useState<string>("");
-  const [unitImportMode, setUnitImportMode] = useState<"overwrite" | "skip">(
-    "overwrite",
-  );
-  const [exportTgSystemId, setExportTgSystemId] = useState<string>("");
-  const [exportUnitSystemId, setExportUnitSystemId] = useState<string>("");
+  const rrSystem = systems.find((s) => s.id === rrSystemId) ?? systems[0];
 
-  const showToast = useCallback(
-    (msg: string, type: "error" | "success" = "error") => {
-      setToast(msg);
-      setToastType(type);
-      setTimeout(() => setToast(null), 5000);
+  const downloadBackup = async () => {
+    try {
+      const data = await exportConfig().unwrap();
+      downloadText(backupFilename(), JSON.stringify(data, null, 2), "application/json");
+      toast.success("Backup downloaded. Keep it private: it holds API keys and forwarding secrets.");
+      counts.refetch();
+    } catch {
+      toast.error("The backup could not be prepared.");
+    }
+  };
+
+  const runExport = async (entity: ImportEntity) => {
+    setExporting(entity);
+    const system = NEEDS_SYSTEM[entity] ? (systems.find((s) => s.id === exportSystem[entity]) ?? null) : null;
+    const arg = system ? { systemId: system.id } : {};
+    try {
+      let csv: string;
+      if (entity === "talkgroups") csv = await exportTalkgroups(arg).unwrap();
+      else if (entity === "units") csv = await exportUnits(arg).unwrap();
+      else if (entity === "groups") csv = await exportGroups().unwrap();
+      else csv = await exportTags().unwrap();
+      downloadText(exportFilename(entity, system), csv);
+    } catch {
+      toast.error(`The ${ENTITY_LABEL[entity]} export failed.`);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const openDocs = async () => {
+    setOpeningDocs(true);
+    try {
+      const res = await fetch(DOCS_SESSION_URL, { method: "POST", headers: { Authorization: `Bearer ${token ?? ""}` } });
+      if (!res.ok) throw new Error(String(res.status));
+      const win = window.open(SWAGGER_URL, "_blank", "noopener");
+      if (!win) toast.error("The browser blocked the new tab; allow pop-ups for this site and try again.");
+    } catch {
+      toast.error("The API docs could not be opened: the session for them was refused.");
+    } finally {
+      setOpeningDocs(false);
+    }
+  };
+
+  const copyToken = async () => {
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(`Bearer ${token}`);
+      setCopied(true);
+      toast.success("Access token copied. It expires in 15 minutes.");
+    } catch {
+      toast.error("The clipboard refused; select the token below and copy it by hand.");
+    }
+  };
+
+  const c = counts.data;
+  const rows: RadioRow[] = [
+    { entity: "talkgroups", label: "Talkgroups", count: c?.talkgroups, detail: c ? `across ${plural(c.systems, "system")}` : "" },
+    { entity: "units", label: "Units", count: c?.units, detail: c ? `across ${plural(c.systems, "system")}` : "" },
+    { entity: "groups", label: "Groups", count: c?.groups, detail: "shared by every system" },
+    { entity: "tags", label: "Tags", count: c?.tags, detail: "shared by every system" },
+  ];
+
+  const columns: Column<RadioRow>[] = [
+    { id: "data", header: "Data", phone: "title", cell: (r) => <span className="font-medium">{r.label}</span> },
+    {
+      id: "count",
+      header: "Count",
+      align: "right",
+      cell: (r) => (
+        <span className="tabular-nums">
+          {r.count ?? "…"}
+          {r.detail && <span className="ml-1 text-xs text-base-content/60">{r.detail}</span>}
+        </span>
+      ),
     },
-    [],
-  );
-
-  const handleImportTalkgroups = async () => {
-    const file = tgFileRef.current?.files?.[0];
-    if (!file) return;
-    if (!selectedTgSystemId) {
-      showToast("Please select a system");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("system_id", selectedTgSystemId);
-    formData.append("mode", tgImportMode);
-    try {
-      const result = await importTalkgroups(formData).unwrap();
-      const failed = result.failed ?? 0;
-      const parts = [
-        `${result.inserted} inserted`,
-        `${result.updated} updated`,
-        `${result.skipped} skipped`,
-      ];
-      if (failed > 0) parts.push(`${failed} failed`);
-      const msg = result.message
-        ? `Talkgroups: ${result.message}`
-        : `Talkgroups imported: ${parts.join(", ")}`;
-      const tone = result.inserted + result.updated === 0 ? "error" : "success";
-      showToast(msg, tone);
-      if (tgFileRef.current) tgFileRef.current.value = "";
-      setHasTgFile(false);
-    } catch {
-      showToast("Failed to import talkgroups");
-    }
-  };
-
-  const handleImportUnits = async () => {
-    const file = unitFileRef.current?.files?.[0];
-    if (!file) return;
-    if (!selectedUnitSystemId) {
-      showToast("Please select a system");
-      return;
-    }
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("system_id", selectedUnitSystemId);
-    formData.append("mode", unitImportMode);
-    try {
-      const result = await importUnits(formData).unwrap();
-      const failed = result.failed ?? 0;
-      const parts = [
-        `${result.inserted} inserted`,
-        `${result.updated} updated`,
-        `${result.skipped} skipped`,
-      ];
-      if (failed > 0) parts.push(`${failed} failed`);
-      const tone = result.inserted + result.updated === 0 ? "error" : "success";
-      showToast(`Units imported: ${parts.join(", ")}`, tone);
-      if (unitFileRef.current) unitFileRef.current.value = "";
-      setHasUnitFile(false);
-    } catch {
-      showToast("Failed to import units");
-    }
-  };
-
-  const handleImportLabels = async (
-    kind: "groups" | "tags",
-    fileRef: RefObject<HTMLInputElement | null>,
-    resetHasFile: (v: boolean) => void,
-    mutate: (fd: FormData) => {
-      unwrap: () => Promise<{
-        inserted: number;
-        skipped: number;
-        failed?: number;
-        message?: string;
-      }>;
+    {
+      id: "actions",
+      header: "Actions",
+      className: "whitespace-nowrap",
+      cell: (r) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-xs"
+            disabled={NEEDS_SYSTEM[r.entity] && systems.length === 0}
+            onClick={(e) => panel.open({ kind: "import", entity: r.entity }, e.currentTarget)}
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+            Import
+          </button>
+          {NEEDS_SYSTEM[r.entity] && (
+            <select
+              aria-label={`Export ${r.label.toLowerCase()} from`}
+              className="select select-xs"
+              value={exportSystem[r.entity]}
+              onChange={(e) => setExportSystem((s) => ({ ...s, [r.entity]: Number(e.target.value) }))}
+            >
+              <option value={0}>All systems</option>
+              {systems.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="button" className="btn btn-xs" disabled={exporting != null} onClick={() => void runExport(r.entity)}>
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            {exporting === r.entity ? "Exporting…" : NEEDS_SYSTEM[r.entity] && exportSystem[r.entity] === 0 ? "Export all" : "Export"}
+          </button>
+        </div>
+      ),
     },
-  ) => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const result = await mutate(formData).unwrap();
-      const failed = result.failed ?? 0;
-      const parts = [
-        `${result.inserted} inserted`,
-        `${result.skipped} skipped`,
-      ];
-      if (failed > 0) parts.push(`${failed} failed`);
-      const msg = result.message
-        ? `${kind}: ${result.message}`
-        : `${kind} imported: ${parts.join(", ")}`;
-      const tone = result.inserted === 0 && failed > 0 ? "error" : "success";
-      showToast(msg, tone);
-      if (fileRef.current) fileRef.current.value = "";
-      resetHasFile(false);
-    } catch {
-      showToast(`Failed to import ${kind}`);
-    }
-  };
-
-  const handleImportGroups = () =>
-    handleImportLabels("groups", groupsFileRef, setHasGroupsFile, importGroups);
-  const handleImportTags = () =>
-    handleImportLabels("tags", tagsFileRef, setHasTagsFile, importTags);
-
-  const handleExportLabels = async (
-    kind: "groups" | "tags",
-    trigger: () => { unwrap: () => Promise<unknown> },
-  ) => {
-    try {
-      const csv = await trigger().unwrap();
-      if (typeof csv !== "string") {
-        showToast("Export returned unexpected payload");
-        return;
-      }
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${kind}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast(`Failed to export ${kind}`);
-    }
-  };
-
-  const handleExportGroups = () =>
-    handleExportLabels("groups", triggerExportGroups);
-  const handleExportTags = () => handleExportLabels("tags", triggerExportTags);
-
-  const handleExportConfig = async () => {
-    try {
-      const result = await triggerExport().unwrap();
-      const blob = new Blob([JSON.stringify(result, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "squelch-config.json";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast("Failed to export config");
-    }
-  };
-
-  const handleExportTalkgroups = async () => {
-    if (!exportTgSystemId) {
-      showToast("Please select a system");
-      return;
-    }
-    try {
-      const csv = await triggerExportTalkgroups({
-        systemId: Number(exportTgSystemId),
-      }).unwrap();
-      if (typeof csv !== "string") {
-        showToast("Export returned unexpected payload");
-        return;
-      }
-      const sys = systems?.find((s) => String(s.id) === exportTgSystemId);
-      const slug =
-        sys?.label.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") ||
-        `system-${exportTgSystemId}`;
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `talkgroups-${slug}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast("Failed to export talkgroups");
-    }
-  };
-
-  const handleExportUnits = async () => {
-    if (!exportUnitSystemId) {
-      showToast("Please select a system");
-      return;
-    }
-    try {
-      const csv = await triggerExportUnits({
-        systemId: Number(exportUnitSystemId),
-      }).unwrap();
-      if (typeof csv !== "string") {
-        showToast("Export returned unexpected payload");
-        return;
-      }
-      const sys = systems?.find((s) => String(s.id) === exportUnitSystemId);
-      const slug =
-        sys?.label.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") ||
-        `system-${exportUnitSystemId}`;
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `units-${slug}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      showToast("Failed to export units");
-    }
-  };
-
-  const handleImportConfig = async () => {
-    const file = configFileRef.current?.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const json: unknown = JSON.parse(text);
-      await importConfig(json).unwrap();
-      showToast("Config imported successfully", "success");
-      if (configFileRef.current) configFileRef.current.value = "";
-      setHasConfigFile(false);
-    } catch {
-      showToast("Failed to import config");
-    }
-  };
+  ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold mb-1">Tools</h1>
+    <div className="space-y-4">
+      <PageHeader
+        title="Backup & import"
+        subtitle="The whole configuration as one file, radio data as CSV, RadioReference enrichment, and the API docs."
+      />
+
+      <Card title="Configuration backup" icon={<ArchiveRestore className="h-4 w-4" aria-hidden="true" />}>
         <p className="text-sm text-base-content/70">
-          Import, export, and enrich your scanner data.
+          Systems, talkgroups, units, groups, tags, users (no passwords) and settings, as one JSON file. API keys and forwarding secrets are
+          in it too, so keep it private.
         </p>
-      </div>
-
-      {/* ── Import ─────────────────────────────────────── */}
-      <section>
-        <h2 className="flex items-center gap-2 text-base font-semibold mb-3">
-          <Upload className="w-4 h-4" /> Import
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Import Talkgroups */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Talkgroups (CSV)</h3>
-              <select
-                value={selectedTgSystemId}
-                onChange={(e) => setSelectedTgSystemId(e.target.value)}
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="">Select a system…</option>
-                {systems?.map((sys) => (
-                  <option key={sys.id} value={sys.id}>
-                    {sys.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={tgImportMode}
-                onChange={(e) =>
-                  setTgImportMode(e.target.value as "overwrite" | "skip")
-                }
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="overwrite">Overwrite existing</option>
-                <option value="skip">Skip existing</option>
-              </select>
-              <input
-                ref={tgFileRef}
-                type="file"
-                accept=".csv"
-                onChange={(e) => setHasTgFile(!!e.target.files?.length)}
-                className="file-input file-input-bordered file-input-sm w-full"
-              />
-              <p className="text-xs text-base-content/50">
-                Supports Squelch and rdio-scanner CSV formats. Headers are
-                auto-detected; tag and group names are resolved automatically.
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleImportTalkgroups}
-                disabled={!selectedTgSystemId || !hasTgFile}
-              >
-                Upload
-              </button>
-            </div>
-          </div>
-
-          {/* Import Units */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Units (CSV)</h3>
-              <select
-                value={selectedUnitSystemId}
-                onChange={(e) => setSelectedUnitSystemId(e.target.value)}
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="">Select a system…</option>
-                {systems?.map((sys) => (
-                  <option key={sys.id} value={sys.id}>
-                    {sys.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={unitImportMode}
-                onChange={(e) =>
-                  setUnitImportMode(e.target.value as "overwrite" | "skip")
-                }
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="overwrite">Overwrite existing</option>
-                <option value="skip">Skip existing</option>
-              </select>
-              <input
-                ref={unitFileRef}
-                type="file"
-                accept=".csv"
-                onChange={(e) => setHasUnitFile(!!e.target.files?.length)}
-                className="file-input file-input-bordered file-input-sm w-full"
-              />
-              <p className="text-xs text-base-content/50">
-                Columns: unit_id, label, order
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleImportUnits}
-                disabled={!selectedUnitSystemId || !hasUnitFile}
-              >
-                Upload
-              </button>
-            </div>
-          </div>
+        <p className="text-sm" role="status">
+          {counts.isLoading ? "…" : c?.lastBackupAt ? `Last download ${formatAgo(c.lastBackupAt)}.` : "Never downloaded from this server."}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary btn-sm" disabled={preparingBackup} onClick={() => void downloadBackup()}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            {preparingBackup ? "Preparing…" : "Download backup"}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={(e) => panel.open({ kind: "restore" }, e.currentTarget)}>
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Restore from backup…
+          </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">
-          {/* Import Groups */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Groups (CSV)</h3>
-              <input
-                ref={groupsFileRef}
-                type="file"
-                accept=".csv"
-                onChange={(e) => setHasGroupsFile(!!e.target.files?.length)}
-                className="file-input file-input-bordered file-input-sm w-full"
-              />
-              <p className="text-xs text-base-content/50">
-                One label per line, optional 'label' header. Existing labels are
-                skipped.
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleImportGroups}
-                disabled={!hasGroupsFile}
-              >
-                Upload
-              </button>
-            </div>
-          </div>
+      </Card>
 
-          {/* Import Tags */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Tags (CSV)</h3>
-              <input
-                ref={tagsFileRef}
-                type="file"
-                accept=".csv"
-                onChange={(e) => setHasTagsFile(!!e.target.files?.length)}
-                className="file-input file-input-bordered file-input-sm w-full"
-              />
-              <p className="text-xs text-base-content/50">
-                One label per line, optional 'label' header. Existing labels are
-                skipped.
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleImportTags}
-                disabled={!hasTagsFile}
-              >
-                Upload
-              </button>
-            </div>
-          </div>
+      <Card title="Radio data" icon={<Database className="h-4 w-4" aria-hidden="true" />}>
+        <DataTable columns={columns} rows={rows} rowKey={(r) => r.entity} caption="Radio data" pageSize={0} loading={counts.isLoading && !c} />
+        <p className="text-xs text-base-content/60">Exports can be one system or all. Imports always preview before they write.</p>
+      </Card>
 
-          {/* Import Config */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Server Config (JSON)</h3>
-              <input
-                ref={configFileRef}
-                type="file"
-                accept=".json"
-                onChange={(e) => setHasConfigFile(!!e.target.files?.length)}
-                className="file-input file-input-bordered file-input-sm w-full"
-              />
-              <p className="text-xs text-base-content/50">
-                Restore a full server configuration from a previously exported
-                JSON backup.
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleImportConfig}
-                disabled={!hasConfigFile}
-              >
-                Upload
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Export ─────────────────────────────────────── */}
-      <section>
-        <h2 className="flex items-center gap-2 text-base font-semibold mb-3">
-          <Download className="w-4 h-4" /> Export
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Export Talkgroups */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Talkgroups (CSV)</h3>
-              <select
-                value={exportTgSystemId}
-                onChange={(e) => setExportTgSystemId(e.target.value)}
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="">Select a system…</option>
-                {systems?.map((sys) => (
-                  <option key={sys.id} value={sys.id}>
-                    {sys.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleExportTalkgroups}
-                disabled={!exportTgSystemId}
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-
-          {/* Export Units */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Units (CSV)</h3>
-              <select
-                value={exportUnitSystemId}
-                onChange={(e) => setExportUnitSystemId(e.target.value)}
-                className="select select-bordered select-sm w-full"
-              >
-                <option value="">Select a system…</option>
-                {systems?.map((sys) => (
-                  <option key={sys.id} value={sys.id}>
-                    {sys.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleExportUnits}
-                disabled={!exportUnitSystemId}
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">
-          {/* Export Groups */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Groups (CSV)</h3>
-              <p className="text-xs text-base-content/50">
-                All talkgroup groups (one label per row).
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleExportGroups}
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-
-          {/* Export Tags */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Tags (CSV)</h3>
-              <p className="text-xs text-base-content/50">
-                All talkgroup tags (one label per row).
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleExportTags}
-              >
-                Download CSV
-              </button>
-            </div>
-          </div>
-
-          {/* Export Config */}
-          <div className="card bg-base-200">
-            <div className="card-body gap-3">
-              <h3 className="card-title text-sm">Server Config (JSON)</h3>
-              <p className="text-xs text-base-content/50">
-                Download a full snapshot of systems, talkgroups, units, groups,
-                tags, and settings.
-              </p>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleExportConfig}
-              >
-                Download JSON
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Enrich ─────────────────────────────────────── */}
-      <section>
-        <h2 className="flex items-center gap-2 text-base font-semibold mb-3">
-          <Database className="w-4 h-4" /> Enrich
-        </h2>
-        <RadioReferenceCard />
-      </section>
-
-      {/* ── API Docs ───────────────────────────────────── */}
-      <section>
-        <h2 className="flex items-center gap-2 text-base font-semibold mb-3">
-          <FileText className="w-4 h-4" /> API Documentation
-        </h2>
-        <div className="card bg-base-200">
-          <div className="card-body gap-3">
-            <p className="text-sm text-base-content/70">
-              Interactive Swagger UI for exploring and testing API endpoints.
-              Sessions expire after 1 hour.
-            </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={async () => {
-                  const res = await fetch("/api/v1/admin/docs/session", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${token}` },
-                  });
-                  if (res.ok) {
-                    window.open(SWAGGER_URL, "_blank", "noopener");
-                  }
-                }}
-              >
-                Open Swagger UI
-                <ExternalLink className="w-4 h-4" />
-              </button>
-              <button
-                className="btn btn-outline btn-sm"
-                onClick={() => {
-                  if (token) {
-                    navigator.clipboard.writeText(`Bearer ${token}`);
-                    showToast("Bearer token copied to clipboard", "success");
-                  }
-                }}
-              >
-                Copy Bearer Token
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {toast && (
-        <div className="toast toast-end">
-          <div
-            className={`alert ${toastType === "success" ? "alert-success" : "alert-error"}`}
+      <Card title="Enrich from RadioReference" icon={<FileText className="h-4 w-4" aria-hidden="true" />}>
+        <p className="text-sm text-base-content/70">
+          Bring labels, names, categories and tags in from a RadioReference talkgroup export. Same three-step wizard as Import, with a
+          changes-only view.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="System to enrich"
+            className="select select-sm"
+            value={rrSystem?.id ?? 0}
+            onChange={(e) => setRrSystemId(Number(e.target.value))}
+            disabled={systems.length === 0}
           >
-            <span>{toast}</span>
-          </div>
+            {systems.length === 0 && <option value={0}>No systems yet</option>}
+            {systems.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={!rrSystem}
+            onClick={(e) => rrSystem && panel.open({ kind: "import", entity: "talkgroups", system: rrSystem, title: `Enrich ${rrSystem.label} from RadioReference` }, e.currentTarget)}
+          >
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Choose CSV…
+          </button>
         </div>
+      </Card>
+
+      <Card title="API documentation" icon={<KeyRound className="h-4 w-4" aria-hidden="true" />}>
+        <p className="text-sm text-base-content/70">
+          Swagger UI lists every endpoint and lets you try them as yourself. It opens in a new tab with a short-lived session of its own.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-sm" disabled={openingDocs} onClick={() => void openDocs()}>
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            {openingDocs ? "Opening…" : "Open Swagger UI"}
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={!token} onClick={(e) => panel.open({ kind: "token" }, e.currentTarget)}>
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            Copy an access token…
+          </button>
+        </div>
+      </Card>
+
+      {panel.selected?.kind === "restore" && (
+        <RestorePanel
+          onClose={panel.close}
+          onDone={(r) => {
+            panel.close();
+            counts.refetch();
+            const saved = r.snapshot ? ` The previous configuration was saved to ${r.snapshot}.` : "";
+            toast.success(`Restored (${r.mode}): ${r.created} added, ${r.updated} updated, ${r.removed} removed.${saved}`);
+          }}
+        />
+      )}
+      {panel.selected?.kind === "import" && (
+        <ImportWizard
+          entity={panel.selected.entity}
+          systems={systems}
+          system={panel.selected.system}
+          title={panel.selected.title}
+          onClose={panel.close}
+          onDone={(summary) => {
+            panel.close();
+            counts.refetch();
+            toast.success(summary);
+          }}
+        />
+      )}
+      {panel.selected?.kind === "token" && (
+        <DetailsPanel
+          title="Your access token"
+          subtitle="For curl, scripts and the Authorization header."
+          onClose={() => {
+            setCopied(false);
+            panel.close();
+          }}
+        >
+          <p role="alert" className="alert alert-warning text-sm">
+            This is your live admin token. Anyone holding it is you for the next 15 minutes.
+          </p>
+          <textarea aria-label="Access token" className="textarea mt-3 w-full font-mono text-xs" rows={5} readOnly value={`Bearer ${token ?? ""}`} />
+          <button type="button" className="btn btn-primary btn-sm mt-3" onClick={() => void copyToken()}>
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            {copied ? "Copied" : "Copy token"}
+          </button>
+        </DetailsPanel>
       )}
     </div>
   );
