@@ -91,6 +91,7 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"apikeys.create": o.APIKeysCreate,
 		"apikeys.update": o.APIKeysUpdate,
 		"apikeys.delete": o.APIKeysDelete,
+		"apikeys.rotate": o.APIKeysRotate,
 
 		// DirMonitors
 		"dirmonitors.list":   o.DirMonitorsList,

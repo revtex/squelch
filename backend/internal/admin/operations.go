@@ -21,6 +21,7 @@ import (
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/geoip"
 	"github.com/revtex/squelch/internal/ipblock"
+	"github.com/revtex/squelch/internal/middleware"
 )
 
 // ── Public helper types ──
@@ -79,6 +80,9 @@ type Deps struct {
 	// LoginLimiter is the sign-in rate limiter; nil leaves the lockout
 	// list empty.
 	LoginLimiter *auth.RateLimiter
+	// LegacyUsage counts requests on the deprecated /api/* surface; nil
+	// reports none.
+	LegacyUsage *middleware.LegacyUsageStore
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -395,19 +399,34 @@ func mapUnits(units []db.Unit) []map[string]any {
 	return out
 }
 
-func mapAPIKey(k db.ApiKey) map[string]any {
+// apiKeyFingerprint is a short, stable handle for a key that never reveals
+// the secret: the first 12 hex characters of the hash of the stored hash.
+func apiKeyFingerprint(k db.ApiKey) string {
 	fingerprint := auth.HashAPIKey(k.Key)
 	if len(fingerprint) > 12 {
 		fingerprint = fingerprint[:12]
 	}
+	return fingerprint
+}
+
+func mapAPIKey(k db.ApiKey) map[string]any {
+	var rotating *int64
+	if k.PreviousKeyExpiresAt.Valid && k.PreviousKeyExpiresAt.Int64 > time.Now().Unix() {
+		v := k.PreviousKeyExpiresAt.Int64
+		rotating = &v
+	}
 	return map[string]any{
-		"id":            k.ID,
-		"fingerprint":   fingerprint,
-		"ident":         nullStr(k.Ident),
-		"disabled":      k.Disabled,
-		"systemsJson":   nullStr(k.SystemsJson),
-		"callRateLimit": nullInt(k.CallRateLimit),
-		"order":         k.Order,
+		"id":                   k.ID,
+		"fingerprint":          apiKeyFingerprint(k),
+		"ident":                nullStr(k.Ident),
+		"disabled":             k.Disabled,
+		"systemsJson":          nullStr(k.SystemsJson),
+		"callRateLimit":        nullInt(k.CallRateLimit),
+		"order":                k.Order,
+		"createdAt":            k.CreatedAt,
+		"lastUsedAt":           nullInt(k.LastUsedAt),
+		"lastUsedIp":           nullStr(k.LastUsedIp),
+		"previousKeyExpiresAt": rotating,
 	}
 }
 

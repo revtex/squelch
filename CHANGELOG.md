@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **API keys, rebuilt.** Keys are listed by label with their status, the
+  systems they may upload to by name, calls uploaded in the last 24 hours and
+  when and from where they were last used, with search and filters for
+  disabled, never-used and **legacy uploads** (keys still sending to the
+  deprecated `/api/*` path now carry a badge and an explanation of their
+  own). A key's details offer **Rotate secret**, which issues a new secret
+  while the old one keeps working for 24 hours, plus disable, enable and
+  delete with in-place confirmation. Creating a key shows the secret once
+  together with a `curl` test command and a Trunk-Recorder plugin entry ready
+  to paste; a label is now required.
 - **Groups & tags, edited in place.** Add a group or tag from a row at the
   top of its list, rename with the pencil, and see how many talkgroups use
   each one (click the count to open Systems filtered to them). Deleting an

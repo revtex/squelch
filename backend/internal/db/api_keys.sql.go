@@ -17,14 +17,16 @@ INSERT INTO api_keys (
     disabled,
     systems_json,
     call_rate_limit,
-    "order"
+    "order",
+    created_at
 ) VALUES (
     ?1,
     ?2,
     ?3,
     ?4,
     ?5,
-    ?6
+    ?6,
+    ?7
 ) RETURNING id
 `
 
@@ -35,6 +37,7 @@ type CreateAPIKeyParams struct {
 	SystemsJson   sql.NullString `db:"systems_json" json:"systems_json"`
 	CallRateLimit sql.NullInt64  `db:"call_rate_limit" json:"call_rate_limit"`
 	Order         int64          `db:"order" json:"order"`
+	CreatedAt     int64          `db:"created_at" json:"created_at"`
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error) {
@@ -45,6 +48,7 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int
 		arg.SystemsJson,
 		arg.CallRateLimit,
 		arg.Order,
+		arg.CreatedAt,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -61,7 +65,7 @@ func (q *Queries) DeleteAPIKey(ctx context.Context, id int64) error {
 }
 
 const getAPIKey = `-- name: GetAPIKey :one
-SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order" FROM api_keys WHERE id = ? LIMIT 1
+SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order", created_at, last_used_at, last_used_ip, previous_key, previous_key_expires_at FROM api_keys WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetAPIKey(ctx context.Context, id int64) (ApiKey, error) {
@@ -75,12 +79,17 @@ func (q *Queries) GetAPIKey(ctx context.Context, id int64) (ApiKey, error) {
 		&i.SystemsJson,
 		&i.CallRateLimit,
 		&i.Order,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.LastUsedIp,
+		&i.PreviousKey,
+		&i.PreviousKeyExpiresAt,
 	)
 	return i, err
 }
 
 const getAPIKeyByKey = `-- name: GetAPIKeyByKey :one
-SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order" FROM api_keys WHERE key = ? LIMIT 1
+SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order", created_at, last_used_at, last_used_ip, previous_key, previous_key_expires_at FROM api_keys WHERE key = ? LIMIT 1
 `
 
 func (q *Queries) GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error) {
@@ -94,12 +103,48 @@ func (q *Queries) GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error
 		&i.SystemsJson,
 		&i.CallRateLimit,
 		&i.Order,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.LastUsedIp,
+		&i.PreviousKey,
+		&i.PreviousKeyExpiresAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByPreviousKey = `-- name: GetAPIKeyByPreviousKey :one
+SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order", created_at, last_used_at, last_used_ip, previous_key, previous_key_expires_at FROM api_keys
+WHERE previous_key = ? AND previous_key_expires_at > ?
+LIMIT 1
+`
+
+type GetAPIKeyByPreviousKeyParams struct {
+	PreviousKey          sql.NullString `db:"previous_key" json:"previous_key"`
+	PreviousKeyExpiresAt sql.NullInt64  `db:"previous_key_expires_at" json:"previous_key_expires_at"`
+}
+
+func (q *Queries) GetAPIKeyByPreviousKey(ctx context.Context, arg GetAPIKeyByPreviousKeyParams) (ApiKey, error) {
+	row := q.db.QueryRowContext(ctx, getAPIKeyByPreviousKey, arg.PreviousKey, arg.PreviousKeyExpiresAt)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Ident,
+		&i.Disabled,
+		&i.SystemsJson,
+		&i.CallRateLimit,
+		&i.Order,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+		&i.LastUsedIp,
+		&i.PreviousKey,
+		&i.PreviousKeyExpiresAt,
 	)
 	return i, err
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order" FROM api_keys ORDER BY "order" ASC, id ASC
+SELECT id, "key", ident, disabled, systems_json, call_rate_limit, "order", created_at, last_used_at, last_used_ip, previous_key, previous_key_expires_at FROM api_keys ORDER BY "order" ASC, id ASC
 `
 
 func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
@@ -119,6 +164,11 @@ func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
 			&i.SystemsJson,
 			&i.CallRateLimit,
 			&i.Order,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+			&i.LastUsedIp,
+			&i.PreviousKey,
+			&i.PreviousKeyExpiresAt,
 		); err != nil {
 			return nil, err
 		}
@@ -131,6 +181,46 @@ func (q *Queries) ListAPIKeys(ctx context.Context) ([]ApiKey, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const rotateAPIKey = `-- name: RotateAPIKey :exec
+UPDATE api_keys SET
+    key                     = ?1,
+    previous_key            = ?2,
+    previous_key_expires_at = ?3
+WHERE id = ?4
+`
+
+type RotateAPIKeyParams struct {
+	Key                  string         `db:"key" json:"key"`
+	PreviousKey          sql.NullString `db:"previous_key" json:"previous_key"`
+	PreviousKeyExpiresAt sql.NullInt64  `db:"previous_key_expires_at" json:"previous_key_expires_at"`
+	ID                   int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error {
+	_, err := q.db.ExecContext(ctx, rotateAPIKey,
+		arg.Key,
+		arg.PreviousKey,
+		arg.PreviousKeyExpiresAt,
+		arg.ID,
+	)
+	return err
+}
+
+const touchAPIKeyUsed = `-- name: TouchAPIKeyUsed :exec
+UPDATE api_keys SET last_used_at = ?1, last_used_ip = ?2 WHERE id = ?3
+`
+
+type TouchAPIKeyUsedParams struct {
+	LastUsedAt sql.NullInt64  `db:"last_used_at" json:"last_used_at"`
+	LastUsedIp sql.NullString `db:"last_used_ip" json:"last_used_ip"`
+	ID         int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) TouchAPIKeyUsed(ctx context.Context, arg TouchAPIKeyUsedParams) error {
+	_, err := q.db.ExecContext(ctx, touchAPIKeyUsed, arg.LastUsedAt, arg.LastUsedIp, arg.ID)
+	return err
 }
 
 const updateAPIKey = `-- name: UpdateAPIKey :exec

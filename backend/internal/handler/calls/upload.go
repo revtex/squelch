@@ -492,6 +492,7 @@ func (h *Handler) PostCallUpload(c *gin.Context) {
 		ErrorCount:      errorCount,
 		SpikeCount:      spikeCount,
 		TalkerAlias:     talkerAliasCol,
+		ApiKeyID:        sql.NullInt64{Int64: apiKeyID, Valid: true},
 	})
 	if err != nil {
 		slog.Error("failed to insert call", "error", err)

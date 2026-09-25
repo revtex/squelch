@@ -226,20 +226,29 @@ Assign groups and tags to talkgroups in the **Systems** panel. Squelch ships wit
 
 ## API Keys
 
-API keys authenticate recorders that upload calls to Squelch over HTTP.
+API keys authenticate recorders that upload calls to Squelch over HTTP. **Admin → API keys** lists every key by its label with its status, the systems it may upload to (by name), calls uploaded in the last 24 hours and when it was last used. Search by label, fingerprint, system or address, and filter to active, disabled, **Legacy uploads** (keys still sending to the deprecated `/api/*` path) or **Never used** keys.
 
-Each key has:
+**Add key** asks for:
 
-| Field       | Description                                                                   |
-| ----------- | ----------------------------------------------------------------------------- |
-| Fingerprint | Auto-generated unique identifier (read-only)                                  |
-| Label       | Optional friendly name                                                        |
-| Disabled    | Temporarily stop accepting uploads from this key                              |
-| Systems     | Restrict which systems this key can upload to (empty = all)                   |
-| Rate Limit  | Optional per-key call rate limit (calls/minute); overrides the global default |
-| Order       | Display position                                                              |
+| Field      | Description                                                        |
+| ---------- | ------------------------------------------------------------------ |
+| Label      | Where the key is used, e.g. the recorder's name or site. Required. |
+| Systems    | Which systems the key may upload to. Pick none to allow them all.  |
+| Rate limit | Calls a minute this key may upload. Empty uses the server default. |
+| Enabled    | Turn off to refuse uploads with this key without deleting it.      |
 
-Copy the full API key when creating it — it's shown once. See the [Recorder Guide](recorder-guide.md) for how to configure your recorder with the key.
+After you save, the **secret is shown once**, with a copy button, a `curl` test command and a ready-made Trunk-Recorder plugin entry. It cannot be looked up later; rotate the key if it is lost.
+
+The **›** button opens a key's details: its fingerprint (a short, stable handle that never reveals the secret), where and when it was last used, and these actions:
+
+- **Edit** — label, systems and rate limit.
+- **Rotate secret** — issues a new secret. The old one keeps working for 24 hours so the recorder can be updated without a gap; the key shows as **Rotating** until then.
+- **Disable / Enable** — refuse or accept uploads without deleting the key.
+- **Delete** — asks first. Calls the key uploaded are kept.
+
+A key that sent requests to the deprecated `/api/*` path in the last 24 hours carries a **legacy uploads** badge, and its details explain what to change. Every create, edit, rotate, disable and delete is recorded in **Logs**.
+
+See the [Recorder Guide](recorder-guide.md) for how to configure your recorder with the key.
 
 ---
 

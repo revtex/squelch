@@ -20,6 +20,7 @@ type Querier interface {
 	CountActiveRefreshTokenFamilies(ctx context.Context, arg CountActiveRefreshTokenFamiliesParams) (int64, error)
 	CountCalls(ctx context.Context) (int64, error)
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
+	CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) ([]CountCallsPerAPIKeySinceRow, error)
 	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
 	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
 	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
@@ -65,6 +66,7 @@ type Querier interface {
 	DeleteWebhook(ctx context.Context, id int64) error
 	GetAPIKey(ctx context.Context, id int64) (ApiKey, error)
 	GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error)
+	GetAPIKeyByPreviousKey(ctx context.Context, arg GetAPIKeyByPreviousKeyParams) (ApiKey, error)
 	// The account a signed-in device belongs to, if the device can still mint
 	// an access token. Backed by idx_refresh_tokens_family_id.
 	GetActiveSessionOwner(ctx context.Context, arg GetActiveSessionOwnerParams) (GetActiveSessionOwnerRow, error)
@@ -150,8 +152,10 @@ type Querier interface {
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error
+	RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error
 	SetSetupComplete(ctx context.Context, setupComplete int64) error
 	SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error
+	TouchAPIKeyUsed(ctx context.Context, arg TouchAPIKeyUsedParams) error
 	TouchTRInstanceLastSeen(ctx context.Context, arg TouchTRInstanceLastSeenParams) error
 	TranscriptionStats(ctx context.Context, since int64) (TranscriptionStatsRow, error)
 	TranscriptionsByLanguage(ctx context.Context) ([]TranscriptionsByLanguageRow, error)

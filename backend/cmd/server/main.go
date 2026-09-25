@@ -50,6 +50,7 @@ import (
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
 	"github.com/revtex/squelch/internal/ipblock"
 	"github.com/revtex/squelch/internal/logging"
+	"github.com/revtex/squelch/internal/middleware"
 	"github.com/revtex/squelch/internal/secrets"
 	"github.com/revtex/squelch/internal/seed"
 	"github.com/revtex/squelch/internal/trmqtt"
@@ -946,6 +947,7 @@ func (p *program) run() {
 		IPBlocks:          ipBlocks,
 		GeoIP:             geoDB,
 		LoginLimiter:      rateLimiter,
+		LegacyUsage:       middleware.DefaultLegacyUsageStore,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
 	// reports here, for the admin's connection list.

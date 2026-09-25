@@ -85,11 +85,13 @@ CREATE TABLE IF NOT EXISTS calls (
     decoder          TEXT,
     error_count      INTEGER,
     spike_count      INTEGER,
-    talker_alias     TEXT
+    talker_alias     TEXT,
+    api_key_id       INTEGER REFERENCES api_keys(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_calls_datetime_system_tg ON calls(date_time, system_id, talkgroup_id);
 CREATE INDEX IF NOT EXISTS idx_calls_system_tg ON calls(system_id, talkgroup_id);
+CREATE INDEX IF NOT EXISTS idx_calls_api_key_datetime ON calls(api_key_id, date_time);
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,7 +100,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
     disabled     INTEGER NOT NULL DEFAULT 0,
     systems_json TEXT,
     call_rate_limit INTEGER,
-    "order"      INTEGER NOT NULL DEFAULT 0
+    "order"      INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL DEFAULT 0,
+    last_used_at INTEGER,
+    last_used_ip TEXT,
+    previous_key TEXT,
+    previous_key_expires_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS dirmonitors (

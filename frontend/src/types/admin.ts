@@ -103,6 +103,16 @@ export interface AdminApiKey {
   systemsJson: string | null;
   callRateLimit: number | null;
   order: number;
+  createdAt: number;
+  /** Unix seconds of the last authenticated request, or null if never. */
+  lastUsedAt: number | null;
+  lastUsedIp: string | null;
+  /** Calls uploaded with this key in the last 24 hours. */
+  calls24h: number;
+  /** Requests on the deprecated /api/* surface in the last 24 hours. */
+  legacy24h: number;
+  /** While set, the secret this key had before its last rotation still works until then. */
+  previousKeyExpiresAt: number | null;
 }
 
 export interface AdminApiKeyCreateResponse extends AdminApiKey {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/db"
@@ -248,6 +249,7 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 			SystemsJson:   ptrToNullStr(remapSystemsJSON(k.SystemsJson, systemRemap)),
 			CallRateLimit: ptrToNullInt(k.CallRateLimit),
 			Order:         k.Order,
+			CreatedAt:     time.Now().Unix(),
 		}); err != nil && !isUniqueViolation(err) {
 			return nil, fmt.Errorf("failed to import api keys: %w", err)
 		}

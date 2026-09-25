@@ -35,7 +35,8 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 	// readable when an op is intentionally added.
 	want := []string{
 		"activity.chart", "activity.stats", "activity.top-talkgroups",
-		"apikeys.create", "apikeys.delete", "apikeys.list", "apikeys.update",
+		"apikeys.create", "apikeys.delete",
+		"apikeys.list", "apikeys.rotate", "apikeys.update",
 		"config.get", "config.update",
 		"connections.disconnect", "connections.history", "connections.list",
 		"dirmonitors.create", "dirmonitors.delete", "dirmonitors.list", "dirmonitors.update",

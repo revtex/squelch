@@ -299,6 +299,13 @@ export function useDeleteApiKeyMutation() {
   });
 }
 
+/** Replaces the secret; the old one keeps working for a day. */
+export function useRotateApiKeyMutation() {
+  return useWsMutation<AdminApiKeyCreateResponse, number>("apikeys.rotate", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
 // ─── DirMonitors ────────────────────────────────────────────────────────────
 
 export function useListDirMonitorsQuery() {

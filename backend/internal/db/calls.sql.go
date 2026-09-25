@@ -66,6 +66,41 @@ func (q *Queries) CountCallsFiltered(ctx context.Context, arg CountCallsFiltered
 	return count, err
 }
 
+const countCallsPerAPIKeySince = `-- name: CountCallsPerAPIKeySince :many
+SELECT api_key_id, COUNT(*) AS calls
+FROM calls
+WHERE api_key_id IS NOT NULL AND date_time >= ?
+GROUP BY api_key_id
+`
+
+type CountCallsPerAPIKeySinceRow struct {
+	ApiKeyID sql.NullInt64 `db:"api_key_id" json:"api_key_id"`
+	Calls    int64         `db:"calls" json:"calls"`
+}
+
+func (q *Queries) CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) ([]CountCallsPerAPIKeySinceRow, error) {
+	rows, err := q.db.QueryContext(ctx, countCallsPerAPIKeySince, dateTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountCallsPerAPIKeySinceRow{}
+	for rows.Next() {
+		var i CountCallsPerAPIKeySinceRow
+		if err := rows.Scan(&i.ApiKeyID, &i.Calls); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createCall = `-- name: CreateCall :one
 INSERT INTO calls (
     audio_path,
@@ -85,7 +120,8 @@ INSERT INTO calls (
     decoder,
     error_count,
     spike_count,
-    talker_alias
+    talker_alias,
+    api_key_id
 ) VALUES (
     ?1,
     ?2,
@@ -104,7 +140,8 @@ INSERT INTO calls (
     ?15,
     ?16,
     ?17,
-    ?18
+    ?18,
+    ?19
 ) RETURNING id
 `
 
@@ -127,6 +164,7 @@ type CreateCallParams struct {
 	ErrorCount      sql.NullInt64  `db:"error_count" json:"error_count"`
 	SpikeCount      sql.NullInt64  `db:"spike_count" json:"spike_count"`
 	TalkerAlias     sql.NullString `db:"talker_alias" json:"talker_alias"`
+	ApiKeyID        sql.NullInt64  `db:"api_key_id" json:"api_key_id"`
 }
 
 func (q *Queries) CreateCall(ctx context.Context, arg CreateCallParams) (int64, error) {
@@ -149,6 +187,7 @@ func (q *Queries) CreateCall(ctx context.Context, arg CreateCallParams) (int64, 
 		arg.ErrorCount,
 		arg.SpikeCount,
 		arg.TalkerAlias,
+		arg.ApiKeyID,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -166,7 +205,7 @@ func (q *Queries) DeleteCallBatch(ctx context.Context, id int64) error {
 
 const getCall = `-- name: GetCall :one
 SELECT
-    c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias,
+    c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias, c.api_key_id,
     s.label  AS system_label,
     t.label  AS talkgroup_label,
     t.name   AS talkgroup_name
@@ -197,6 +236,7 @@ type GetCallRow struct {
 	ErrorCount      sql.NullInt64  `db:"error_count" json:"error_count"`
 	SpikeCount      sql.NullInt64  `db:"spike_count" json:"spike_count"`
 	TalkerAlias     sql.NullString `db:"talker_alias" json:"talker_alias"`
+	ApiKeyID        sql.NullInt64  `db:"api_key_id" json:"api_key_id"`
 	SystemLabel     sql.NullString `db:"system_label" json:"system_label"`
 	TalkgroupLabel  sql.NullString `db:"talkgroup_label" json:"talkgroup_label"`
 	TalkgroupName   sql.NullString `db:"talkgroup_name" json:"talkgroup_name"`
@@ -225,6 +265,7 @@ func (q *Queries) GetCall(ctx context.Context, id int64) (GetCallRow, error) {
 		&i.ErrorCount,
 		&i.SpikeCount,
 		&i.TalkerAlias,
+		&i.ApiKeyID,
 		&i.SystemLabel,
 		&i.TalkgroupLabel,
 		&i.TalkgroupName,
@@ -320,7 +361,7 @@ func (q *Queries) HasCallInTimeRange(ctx context.Context, arg HasCallInTimeRange
 }
 
 const listCalls = `-- name: ListCalls :many
-SELECT c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias
+SELECT c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias, c.api_key_id
 FROM calls c
 LEFT JOIN talkgroups tg ON tg.id = c.talkgroup_id
 LEFT JOIN transcriptions tr ON tr.call_id = c.id
@@ -393,6 +434,7 @@ func (q *Queries) ListCalls(ctx context.Context, arg ListCallsParams) ([]Call, e
 			&i.ErrorCount,
 			&i.SpikeCount,
 			&i.TalkerAlias,
+			&i.ApiKeyID,
 		); err != nil {
 			return nil, err
 		}
@@ -408,7 +450,7 @@ func (q *Queries) ListCalls(ctx context.Context, arg ListCallsParams) ([]Call, e
 }
 
 const listCallsAsc = `-- name: ListCallsAsc :many
-SELECT c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias
+SELECT c.id, c.audio_path, c.audio_name, c.audio_type, c.date_time, c.frequency, c.duration, c.source, c.sources_json, c.frequencies_json, c.patches_json, c.system_id, c.talkgroup_id, c.site, c.channel, c.decoder, c.error_count, c.spike_count, c.talker_alias, c.api_key_id
 FROM calls c
 LEFT JOIN talkgroups tg ON tg.id = c.talkgroup_id
 LEFT JOIN transcriptions tr ON tr.call_id = c.id
@@ -481,6 +523,7 @@ func (q *Queries) ListCallsAsc(ctx context.Context, arg ListCallsAscParams) ([]C
 			&i.ErrorCount,
 			&i.SpikeCount,
 			&i.TalkerAlias,
+			&i.ApiKeyID,
 		); err != nil {
 			return nil, err
 		}

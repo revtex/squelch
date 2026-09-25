@@ -1,423 +1,346 @@
-import { useState, useMemo, useCallback } from "react";
-import { Pencil, Trash2, Plus, Copy, Check } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
 import {
-  useListApiKeysQuery,
+  DataTable,
+  FilterChips,
+  PageHeader,
+  SearchBox,
+  formatAgo,
   useCreateApiKeyMutation,
-  useUpdateApiKeyMutation,
   useDeleteApiKeyMutation,
-  useListSystemsQuery,
+  useDetails,
   useGetConfigQuery,
+  useListApiKeysQuery,
+  useListSystemsQuery,
+  useRotateApiKeyMutation,
+  useToast,
+  useUpdateApiKeyMutation,
+  type Column,
 } from "@/features/admin/_shell";
 import type { AdminApiKey } from "@/types";
+import ApiKeyDetails, { type KeyAction } from "./ApiKeyDetails";
+import ApiKeyForm, { type ApiKeyFormValues } from "./ApiKeyForm";
+import NewSecretPanel from "./NewSecretPanel";
+import {
+  keyName,
+  keyStatus,
+  matchesFilter,
+  matchesSearch,
+  systemsLabel,
+  type StatusFilter,
+} from "./keys";
 
-// ─── Form state ───
+type Panel =
+  | { key: string; kind: "details"; id: number }
+  | { key: string; kind: "edit"; id: number }
+  | { key: string; kind: "create" }
+  | {
+      key: string;
+      kind: "secret";
+      /** Carried along so the secret shows before the list has refreshed. */
+      apiKey: AdminApiKey;
+      secret: string;
+      previousUntil: number | null;
+    };
 
-interface ApiKeyFormState {
-  ident: string;
-  disabled: number;
-  systemsJson: string;
-  callRateLimit: string;
+const SERVER_DEFAULT_RATE = 60;
+
+function message(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
-const emptyForm: ApiKeyFormState = {
-  ident: "",
-  disabled: 0,
-  systemsJson: "",
-  callRateLimit: "",
-};
-
-// ─── Copy button ───
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <button
-      className="btn btn-ghost btn-xs"
-      onClick={handleCopy}
-      aria-label="Copy key"
-    >
-      {copied ? (
-        <Check className="w-3 h-3 text-success" />
-      ) : (
-        <Copy className="w-3 h-3" />
-      )}
-    </button>
-  );
-}
-
-// ─── Main panel ───
-
+/** API keys: who may upload calls, and whether they still do. */
 export default function ApiKeysPanel() {
   const { data: apiKeys, isLoading } = useListApiKeysQuery();
   const { data: systems } = useListSystemsQuery();
   const { data: config } = useGetConfigQuery();
-  const [createApiKey] = useCreateApiKeyMutation();
-  const [updateApiKey] = useUpdateApiKeyMutation();
-  const [deleteApiKey] = useDeleteApiKeyMutation();
+  const [createKey] = useCreateApiKeyMutation();
+  const [updateKey] = useUpdateApiKeyMutation();
+  const [deleteKey] = useDeleteApiKeyMutation();
+  const [rotateKey] = useRotateApiKeyMutation();
+  const toast = useToast();
 
-  const globalRateLimit = useMemo(() => {
-    const val = config?.settings?.find(
-      (s) => s.key === "apiKeyCallRate",
-    )?.value;
-    if (val) {
-      const n = Number(val);
-      if (n > 0) return n;
-    }
-    return 60; // hardcoded server default
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const panel = useDetails<Panel>();
+  const p = panel.selected;
+
+  const defaultRate = useMemo(() => {
+    const raw = config?.settings?.find((s) => s.key === "apiKeyCallRate")?.value;
+    const n = raw ? Number(raw) : NaN;
+    return n > 0 ? n : SERVER_DEFAULT_RATE;
   }, [config]);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<ApiKeyFormState>(emptyForm);
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const showError = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 5000);
-  }, []);
-
-  const sortedKeys = useMemo(
-    () => (apiKeys ? [...apiKeys].sort((a, b) => a.order - b.order) : []),
+  const all = useMemo(
+    () => (apiKeys ? [...apiKeys].sort((a, b) => a.order - b.order || a.id - b.id) : []),
     [apiKeys],
   );
+  const systemList = useMemo(() => systems ?? [], [systems]);
+  const rows = useMemo(
+    () => all.filter((k) => matchesFilter(k, filter) && matchesSearch(k, systemList, query)),
+    [all, filter, query, systemList],
+  );
+  const counts = useMemo(() => {
+    const c = { all: all.length, active: 0, disabled: 0, legacy: 0, unused: 0 };
+    for (const k of all) {
+      if (k.disabled === 1) c.disabled++;
+      else c.active++;
+      if (k.legacy24h > 0) c.legacy++;
+      if (k.lastUsedAt === null) c.unused++;
+    }
+    return c;
+  }, [all]);
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setModalOpen(true);
+  const current = p && "id" in p ? (all.find((k) => k.id === p.id) ?? null) : null;
+
+  const columns: Column<AdminApiKey>[] = [
+    {
+      id: "label",
+      header: "Key",
+      phone: "title",
+      sortValue: (k) => keyName(k),
+      cell: (k) => (
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium">{keyName(k)}</span>
+          <span className="font-mono text-xs text-base-content/60">{k.fingerprint}</span>
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      sortValue: (k) => keyStatus(k).id,
+      cell: (k) => {
+        const s = keyStatus(k);
+        return (
+          <span className="flex flex-wrap gap-1">
+            <span className={`badge badge-sm ${s.badge}`}>{s.label}</span>
+            {k.legacy24h > 0 && (
+              <span className="badge badge-warning badge-sm">legacy uploads</span>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      id: "systems",
+      header: "Systems",
+      cell: (k) => systemsLabel(k, systemList),
+    },
+    {
+      id: "rate",
+      header: "Rate",
+      align: "right",
+      phone: "hide",
+      sortValue: (k) => k.callRateLimit ?? defaultRate,
+      cell: (k) => (k.callRateLimit != null ? `${k.callRateLimit}/min` : "default"),
+    },
+    {
+      id: "calls",
+      header: "Calls, 24 h",
+      align: "right",
+      sortValue: (k) => k.calls24h,
+      cell: (k) => (k.calls24h > 0 ? k.calls24h.toLocaleString() : "—"),
+    },
+    {
+      id: "lastUsed",
+      header: "Last used",
+      sortValue: (k) => k.lastUsedAt ?? 0,
+      cell: (k) =>
+        k.lastUsedAt ? (
+          <span title={k.lastUsedIp ?? undefined}>{formatAgo(k.lastUsedAt)}</span>
+        ) : (
+          <span className="text-base-content/60">never</span>
+        ),
+    },
+  ];
+
+  const openDetails = (k: AdminApiKey, trigger: HTMLElement) =>
+    panel.open({ key: `details:${k.id}`, kind: "details", id: k.id }, trigger);
+
+  const closeForm = () => {
+    setFormError(null);
+    panel.close();
   };
 
-  const openEdit = (ak: AdminApiKey) => {
-    setEditingId(ak.id);
-    setForm({
-      ident: ak.ident ?? "",
-      disabled: ak.disabled,
-      systemsJson: ak.systemsJson ?? "",
-      callRateLimit:
-        ak.callRateLimit != null && ak.callRateLimit > 0
-          ? String(ak.callRateLimit)
-          : "",
-    });
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onCreate = async (values: ApiKeyFormValues) => {
+    setBusy(true);
+    setFormError(null);
     try {
-      if (editingId != null) {
-        await updateApiKey({
-          id: editingId,
-          ident: form.ident || null,
-          disabled: form.disabled,
-          systemsJson: form.systemsJson || null,
-          callRateLimit: form.callRateLimit ? Number(form.callRateLimit) : null,
-          order: sortedKeys.find((k) => k.id === editingId)?.order ?? 0,
-        }).unwrap();
-      } else {
-        const created = await createApiKey({
-          ident: form.ident || null,
-          disabled: form.disabled,
-          systemsJson: form.systemsJson || null,
-          callRateLimit: form.callRateLimit ? Number(form.callRateLimit) : null,
-          order: sortedKeys.length,
-        }).unwrap();
-        setCreatedKey(created.createdKey);
-      }
-      setModalOpen(false);
-    } catch {
-      showError(
-        editingId ? "Failed to update API key" : "Failed to create API key",
-      );
+      const { createdKey, ...created } = await createKey({ ...values, order: all.length }).unwrap();
+      panel.replace({
+        key: `secret:${created.id}`,
+        kind: "secret",
+        apiKey: created,
+        secret: createdKey,
+        previousUntil: null,
+      });
+    } catch (e) {
+      setFormError(message(e, "Failed to create the key."));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleDelete = async (ak: AdminApiKey) => {
-    if (!window.confirm(`Delete API key "${ak.ident || ak.fingerprint}"?`))
-      return;
+  const onUpdate = async (k: AdminApiKey, values: ApiKeyFormValues) => {
+    setBusy(true);
+    setFormError(null);
     try {
-      await deleteApiKey(ak.id).unwrap();
-    } catch {
-      showError("Failed to delete API key");
+      await updateKey({ id: k.id, ...values, order: k.order }).unwrap();
+      toast.success(`Saved ${values.ident || keyName(k)}.`);
+      panel.replace({ key: `details:${k.id}`, kind: "details", id: k.id });
+    } catch (e) {
+      setFormError(message(e, "Failed to save the key."));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleToggleDisabled = async (ak: AdminApiKey) => {
+  const act = async (k: AdminApiKey, action: KeyAction): Promise<string | null> => {
+    setBusy(true);
+    const name = keyName(k);
     try {
-      await updateApiKey({
-        id: ak.id,
-        ident: ak.ident,
-        disabled: ak.disabled ? 0 : 1,
-        systemsJson: ak.systemsJson,
-        callRateLimit: ak.callRateLimit,
-        order: ak.order,
-      }).unwrap();
-    } catch {
-      showError("Failed to update API key");
-    }
-  };
-
-  const updateField = <K extends keyof ApiKeyFormState>(
-    key: K,
-    value: ApiKeyFormState[K],
-  ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  // Parse selected systems for checkbox UI
-  const selectedSystems: number[] = form.systemsJson
-    ? (() => {
-        try {
-          return JSON.parse(form.systemsJson) as number[];
-        } catch {
-          return [];
+      switch (action) {
+        case "disable":
+        case "enable":
+          await updateKey({
+            id: k.id,
+            ident: k.ident ?? "",
+            disabled: action === "disable" ? 1 : 0,
+            systemsJson: k.systemsJson,
+            callRateLimit: k.callRateLimit,
+            order: k.order,
+          }).unwrap();
+          toast.success(action === "disable" ? `Disabled ${name}.` : `Enabled ${name}.`);
+          break;
+        case "rotate": {
+          const { createdKey, ...rotated } = await rotateKey(k.id).unwrap();
+          panel.replace({
+            key: `secret:${k.id}:${rotated.previousKeyExpiresAt ?? ""}`,
+            kind: "secret",
+            apiKey: rotated,
+            secret: createdKey,
+            previousUntil: rotated.previousKeyExpiresAt,
+          });
+          break;
         }
-      })()
-    : [];
-
-  const toggleSystem = (systemId: number) => {
-    const updated = selectedSystems.includes(systemId)
-      ? selectedSystems.filter((id) => id !== systemId)
-      : [...selectedSystems, systemId];
-    updateField(
-      "systemsJson",
-      updated.length > 0 ? JSON.stringify(updated) : "",
-    );
+        case "delete":
+          await deleteKey(k.id).unwrap();
+          toast.success(`Deleted ${name}.`);
+          break;
+      }
+      return null;
+    } catch (e) {
+      return message(e, "That did not work.");
+    } finally {
+      setBusy(false);
+    }
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold mb-4">API Keys</h1>
-      <p className="text-sm text-base-content/70 mb-4">
-        API keys authenticate external sources (e.g. trunk-recorder) that upload
-        calls. Each key can be restricted to specific systems and optionally
-        rate-limited. Provide the key in the X-API-Key header.
-      </p>
-      <div className="card bg-base-200">
-        <div className="card-body">
-          <div className="overflow-x-auto">
-            <table className="table table-zebra w-full">
-              <thead>
-                <tr>
-                  <th>Fingerprint</th>
-                  <th>Ident</th>
-                  <th>Rate Limit</th>
-                  <th>Disabled</th>
-                  <th>Systems</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedKeys.map((ak) => {
-                  const systemsList = ak.systemsJson
-                    ? (() => {
-                        try {
-                          return (JSON.parse(ak.systemsJson) as number[]).join(
-                            ", ",
-                          );
-                        } catch {
-                          return ak.systemsJson;
-                        }
-                      })()
-                    : "All";
-                  return (
-                    <tr key={ak.id}>
-                      <td className="font-mono text-sm">{ak.fingerprint}</td>
-                      <td>{ak.ident ?? "—"}</td>
-                      <td>
-                        {ak.callRateLimit != null
-                          ? `${ak.callRateLimit}/min`
-                          : "Default"}
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          className="toggle toggle-primary toggle-sm"
-                          checked={ak.disabled === 1}
-                          onChange={() => handleToggleDisabled(ak)}
-                        />
-                      </td>
-                      <td>{systemsList}</td>
-                      <td className="flex gap-1">
-                        <button
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => openEdit(ak)}
-                          aria-label="Edit API key"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => handleDelete(ak)}
-                          aria-label="Delete API key"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {sortedKeys.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center opacity-60">
-                      No API keys yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="API keys"
+        subtitle="What recorders use to upload calls. Each key can be limited to some systems and rate-limited."
+        actions={
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => panel.open({ key: "create", kind: "create" })}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add key
+          </button>
+        }
+      />
 
-          <div className="mt-4">
-            <button className="btn btn-primary btn-sm" onClick={openCreate}>
-              <Plus className="w-4 h-4" /> Add API Key
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label="Search by label, fingerprint, system or address"
+          className="w-full sm:w-80"
+        />
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { id: "all", label: "All", count: counts.all },
+            { id: "active", label: "Active", count: counts.active },
+            { id: "disabled", label: "Disabled", count: counts.disabled },
+            { id: "legacy", label: "Legacy uploads", count: counts.legacy },
+            { id: "unused", label: "Never used", count: counts.unused },
+          ]}
+        />
       </div>
 
-      {/* Modal */}
-      <dialog className={`modal ${modalOpen ? "modal-open" : ""}`}>
-        <div className="modal-box">
-          <h3 className="font-bold text-lg">
-            {editingId != null ? "Edit API Key" : "Create API Key"}
-          </h3>
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Identifier</span>
-              <input
-                type="text"
-                className="input w-full"
-                value={form.ident}
-                onChange={(e) => updateField("ident", e.target.value)}
-                placeholder="Optional description"
-              />
-              <span className="text-xs text-base-content/60">
-                A label to help you identify this key (e.g. &ldquo;Trunk
-                Recorder North Site&rdquo;).
-              </span>
-            </div>
+      <DataTable
+        caption="API keys"
+        columns={columns}
+        rows={rows}
+        rowKey={(k) => k.id}
+        loading={isLoading}
+        empty={
+          all.length === 0
+            ? "No keys yet. Add one and put its secret in your recorder."
+            : "No key matches that search."
+        }
+        defaultSort={{ id: "label", dir: "asc" }}
+        onOpen={openDetails}
+        rowLabel={keyName}
+        openKey={p?.kind === "details" ? p.id : null}
+      />
 
-            {systems && systems.length > 0 && (
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-medium">Systems</span>
-                <span className="text-xs text-base-content/60">
-                  Select which systems this key can upload to. If none are
-                  selected, the key has access to all systems.
-                </span>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {systems.map((sys) => {
-                    const selected = selectedSystems.includes(sys.id);
-                    return (
-                      <button
-                        key={sys.id}
-                        type="button"
-                        className={`badge badge-lg gap-1.5 cursor-pointer transition-colors ${
-                          selected
-                            ? "badge-primary"
-                            : "badge-ghost hover:badge-outline"
-                        }`}
-                        onClick={() => toggleSystem(sys.id)}
-                      >
-                        <span
-                          className={`inline-block w-2 h-2 rounded-full ${selected ? "bg-primary-content" : "bg-base-content/30"}`}
-                        />
-                        {sys.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+      {p?.kind === "details" && current && (
+        <ApiKeyDetails
+          key={current.id}
+          apiKey={current}
+          systems={systemList}
+          defaultRate={defaultRate}
+          busy={busy}
+          onEdit={() => panel.replace({ key: `edit:${current.id}`, kind: "edit", id: current.id })}
+          onAction={(action) => act(current, action)}
+          onClose={panel.close}
+        />
+      )}
 
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">
-                Call Rate Limit (per minute)
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={600}
-                className="input w-full"
-                value={form.callRateLimit}
-                onChange={(e) => updateField("callRateLimit", e.target.value)}
-                placeholder={`Global default: ${globalRateLimit}/min`}
-              />
-              <span className="text-xs text-base-content/60">
-                Override the per-key inbound call upload limit. Leave blank to
-                use the global default ({globalRateLimit}/min).
-              </span>
-            </div>
+      {p?.kind === "create" && (
+        <ApiKeyForm
+          apiKey={null}
+          systems={systemList}
+          defaultRate={defaultRate}
+          busy={busy}
+          error={formError}
+          onSubmit={(values) => void onCreate(values)}
+          onClose={closeForm}
+        />
+      )}
 
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {editingId != null ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={() => setModalOpen(false)}>
-            close
-          </button>
-        </form>
-      </dialog>
+      {p?.kind === "edit" && current && (
+        <ApiKeyForm
+          key={current.id}
+          apiKey={current}
+          systems={systemList}
+          defaultRate={defaultRate}
+          busy={busy}
+          error={formError}
+          onSubmit={(values) => void onUpdate(current, values)}
+          onClose={closeForm}
+        />
+      )}
 
-      <dialog className={`modal ${createdKey ? "modal-open" : ""}`}>
-        <div className="modal-box">
-          <h3 className="font-bold text-lg">API Key Created</h3>
-          <p className="mt-2 text-sm text-base-content/70">
-            Copy this key now. For security, it is shown only once and cannot be
-            retrieved later.
-          </p>
-          <div className="mt-4 flex items-center gap-2">
-            <input
-              type="text"
-              className="input w-full font-mono text-sm"
-              value={createdKey ?? ""}
-              readOnly
-            />
-            {createdKey && <CopyButton text={createdKey} />}
-          </div>
-          <div className="modal-action">
-            <button
-              className="btn btn-primary"
-              onClick={() => setCreatedKey(null)}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      </dialog>
-
-      {toast && (
-        <div className="toast toast-end">
-          <div className="alert alert-error">
-            <span>{toast}</span>
-          </div>
-        </div>
+      {p?.kind === "secret" && (
+        <NewSecretPanel
+          key={p.key}
+          apiKey={p.apiKey}
+          secret={p.secret}
+          previousUntil={p.previousUntil}
+          systems={systemList}
+          onClose={panel.close}
+        />
       )}
     </div>
   );

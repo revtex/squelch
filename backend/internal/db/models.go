@@ -9,13 +9,18 @@ import (
 )
 
 type ApiKey struct {
-	ID            int64          `db:"id" json:"id"`
-	Key           string         `db:"key" json:"key"`
-	Ident         sql.NullString `db:"ident" json:"ident"`
-	Disabled      int64          `db:"disabled" json:"disabled"`
-	SystemsJson   sql.NullString `db:"systems_json" json:"systems_json"`
-	CallRateLimit sql.NullInt64  `db:"call_rate_limit" json:"call_rate_limit"`
-	Order         int64          `db:"order" json:"order"`
+	ID                   int64          `db:"id" json:"id"`
+	Key                  string         `db:"key" json:"key"`
+	Ident                sql.NullString `db:"ident" json:"ident"`
+	Disabled             int64          `db:"disabled" json:"disabled"`
+	SystemsJson          sql.NullString `db:"systems_json" json:"systems_json"`
+	CallRateLimit        sql.NullInt64  `db:"call_rate_limit" json:"call_rate_limit"`
+	Order                int64          `db:"order" json:"order"`
+	CreatedAt            int64          `db:"created_at" json:"created_at"`
+	LastUsedAt           sql.NullInt64  `db:"last_used_at" json:"last_used_at"`
+	LastUsedIp           sql.NullString `db:"last_used_ip" json:"last_used_ip"`
+	PreviousKey          sql.NullString `db:"previous_key" json:"previous_key"`
+	PreviousKeyExpiresAt sql.NullInt64  `db:"previous_key_expires_at" json:"previous_key_expires_at"`
 }
 
 type AppState struct {
@@ -51,6 +56,7 @@ type Call struct {
 	ErrorCount      sql.NullInt64  `db:"error_count" json:"error_count"`
 	SpikeCount      sql.NullInt64  `db:"spike_count" json:"spike_count"`
 	TalkerAlias     sql.NullString `db:"talker_alias" json:"talker_alias"`
+	ApiKeyID        sql.NullInt64  `db:"api_key_id" json:"api_key_id"`
 }
 
 type ConnectionLog struct {
