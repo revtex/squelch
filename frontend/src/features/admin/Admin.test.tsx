@@ -111,8 +111,7 @@ describe("Admin", () => {
       "Groups & tags",
       "API keys",
       "Folder monitors",
-      "Downstreams",
-      "Webhooks",
+      "Forwarding",
       "Settings",
       "Logs & audit",
       "Trunk Recorder",
@@ -163,9 +162,9 @@ describe("Admin", () => {
 
     await user.click(screen.getByRole("button", { name: "More" }));
     const sheet = screen.getByRole("dialog", { name: "All sections" });
-    expect(within(sheet).getByRole("link", { name: "Webhooks" })).toBeInTheDocument();
-    await user.click(within(sheet).getByRole("link", { name: "Webhooks" }));
-    expect(mockNavigate).toHaveBeenCalledWith("/admin/webhooks");
+    expect(within(sheet).getByRole("link", { name: "Forwarding" })).toBeInTheDocument();
+    await user.click(within(sheet).getByRole("link", { name: "Forwarding" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/forwarding");
     expect(screen.queryByRole("dialog", { name: "All sections" })).toBeNull();
   });
 

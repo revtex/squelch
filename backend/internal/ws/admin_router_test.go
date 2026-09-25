@@ -40,7 +40,7 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 		"config.get", "config.update",
 		"connections.disconnect", "connections.history", "connections.list",
 		"dirmonitors.create", "dirmonitors.delete", "dirmonitors.list", "dirmonitors.update",
-		"downstreams.create", "downstreams.delete", "downstreams.list", "downstreams.update",
+		"downstreams.create", "downstreams.delete", "downstreams.list", "downstreams.test", "downstreams.update",
 		"export.config", "export.groups", "export.tags", "export.talkgroups", "export.units",
 		"fs.directories",
 		"groups.create", "groups.delete", "groups.list", "groups.update",
@@ -59,7 +59,7 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 		"transcription.stats", "transcription.status",
 		"units.create", "units.delete", "units.list", "units.update",
 		"users.create", "users.delete", "users.list", "users.signout", "users.update",
-		"webhooks.create", "webhooks.delete", "webhooks.list", "webhooks.update",
+		"webhooks.create", "webhooks.delete", "webhooks.list", "webhooks.sample", "webhooks.test", "webhooks.update",
 	}
 	for _, op := range want {
 		if _, ok := handlers[op]; !ok {

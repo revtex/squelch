@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   ArchiveRestore,
-  ArrowDownToLine,
   AudioLines,
   Cable,
   FolderSearch,
@@ -11,10 +10,10 @@ import {
   Radio,
   RadioTower,
   ScrollText,
+  Send,
   Settings,
   Share2,
   Users,
-  Webhook,
 } from "lucide-react";
 
 export interface NavItem {
@@ -92,16 +91,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         keywords: "directory watch ingest",
       },
       {
-        to: "/admin/downstreams",
-        label: "Downstreams",
-        icon: ArrowDownToLine,
-        keywords: "forward forwarding",
-      },
-      {
-        to: "/admin/webhooks",
-        label: "Webhooks",
-        icon: Webhook,
-        keywords: "discord notify forwarding",
+        to: "/admin/forwarding",
+        label: "Forwarding",
+        icon: Send,
+        keywords: "downstreams webhooks discord forward notify",
       },
       {
         to: "/admin/shared-links",

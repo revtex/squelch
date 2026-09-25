@@ -149,6 +149,8 @@ type Querier interface {
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error
 	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
+	RecordDownstreamDelivery(ctx context.Context, arg RecordDownstreamDeliveryParams) error
+	RecordWebhookDelivery(ctx context.Context, arg RecordWebhookDeliveryParams) error
 	RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error

@@ -17,7 +17,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Groups & Tags](#groups--tags)
 - [API Keys](#api-keys)
 - [Monitors (Directory Monitors)](#monitors-directory-monitors)
-- [Downstreams](#downstreams)
+- [Forwarding](#forwarding)
 - [Shared Links](#shared-links)
 - [Transcription](#transcription)
 - [Settings](#settings)
@@ -33,7 +33,7 @@ The sidebar groups the admin into five areas:
 - **Overview** — stats and recent activity
 - **People & access** — **Users** and **Connections**
 - **Radio data** — **Systems**, **Groups & tags** and **API keys**
-- **Ingest & delivery** — **Folder monitors**, **Downstreams**, **Webhooks**, **Shared links** and **Transcription**
+- **Ingest & delivery** — **Folder monitors**, **Forwarding**, **Shared links** and **Transcription**
 - **Server** — **Settings**, **Logs & audit**, **Trunk Recorder** and **Backup & import**
 
 Press **Ctrl K** (or choose **Go to** in the top bar) and type a few letters to jump to any section. The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
@@ -285,23 +285,26 @@ The UI includes a help section with the full token reference.
 
 ---
 
-## Downstreams
+## Forwarding
 
-> **Note:** Downstream forwarding is implemented but has not been tested. Use at your own risk.
+**Forwarding** is where a copy of each new call goes once Squelch has accepted it. It has two tabs: **Downstreams**, other Squelch servers that receive the call and its audio, and **Webhooks**, URLs that receive a message about the call. Both are listed the same way: a label, the address, a status badge (**ok**, **failing** with the reason, **nothing sent yet** or **disabled**), the systems they get, when the last delivery happened and how many failed in the last 24 hours. Search by label, address or system, and filter to **Active**, **Failing** or **Disabled**.
 
-Downstreams forward ingested calls to other Squelch instances. Use this to fan out from a central server to regional or public-facing instances.
+The **›** button opens a target's details: the delivery facts, a **Send a test** button that posts a test message and shows what the other end answered right there, **Edit**, **Disable** or **Enable**, and **Delete**. Every change and every test is written to the audit log with the target's label.
 
-Each downstream has:
+### Downstreams
 
-| Field    | Description                                     |
-| -------- | ----------------------------------------------- |
-| URL      | Remote server's call-upload endpoint            |
-| API Key  | Authentication key for the remote server        |
-| Systems  | Restrict which systems to forward (empty = all) |
-| Disabled | Temporarily stop forwarding                     |
-| Order    | Display position                                |
+A downstream is another Squelch server. Use it to fan out from a central server to regional or public-facing ones. Each downstream has a **label**, the other server's **base address** (calls are uploaded to its `/api/v1/calls` endpoint), an **API key** created on that server, an optional list of **systems** to forward (none means all), and an **Enabled** switch. Deliveries are retried three times with increasing waits before a call is dropped for that downstream; the last failure is shown on the row.
 
-Downstream API keys are encrypted at rest in the database when an [encryption key](deployment-guide.md#keeping-secrets-safe) is configured. The admin UI never displays API keys — they are shown as masked dots. To change a key, enter a new one in the edit form; leave it blank to keep the existing key.
+Downstream API keys are encrypted at rest when an [encryption key](deployment-guide.md#keeping-secrets-safe) is configured. The key is never shown again after you save it; to change it, enter a new one in the edit form, or leave the field blank to keep the current key. **Send a test** checks that the other server is reachable and accepts the key without uploading a call.
+
+### Webhooks
+
+A webhook posts a message to a URL for every accepted call. Each one has a **label**, a **type**, the **URL**, an optional list of **systems** (none means all) and an **Enabled** switch.
+
+- **Generic JSON** sends Squelch's own payload: a `call` event with the call's id, time, frequency, length, source unit and its system and talkgroup labels. The details panel shows the exact headers and body under **What your service receives**. When a **secret** is set, every post carries an `X-Squelch-Signature: sha256=…` header holding the HMAC-SHA256 of the body under that secret, so your service can check the post came from Squelch. The secret is stored encrypted, never shown again and never sent to the browser; leave the field blank while editing to keep it, or tick **Remove the secret** to send unsigned posts.
+- **Discord** posts an embed to a Discord channel's webhook URL, with the talkgroup, system, length and unit.
+
+**Send a test** posts a test message (event `test`) so you can confirm the target accepts it before any call is sent. Failed deliveries are retried three times, then dropped and logged.
 
 ---
 

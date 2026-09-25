@@ -42,11 +42,10 @@ import SystemsPanel from "@/features/admin/systems";
 import GroupsTagsPanel from "@/features/admin/groups-tags";
 import ApiKeysPanel from "@/features/admin/api-keys";
 import DirMonitorPanel from "@/features/admin/dir-monitor";
-import DownstreamsPanel from "@/features/admin/downstreams";
+import ForwardingPanel from "@/features/admin/forwarding";
 import OptionsPanel from "@/features/admin/options";
 import LogsPanel from "@/features/admin/logs";
 import ToolsPanel from "@/features/admin/tools";
-import WebhooksPanel from "@/features/admin/webhooks";
 import DashboardsPanel, {
   ActivityPanel,
   TrMqttPanel,
@@ -364,8 +363,12 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             <Route path="groups" element={<GroupsTagsPanel />} />
             <Route path="apikeys" element={<ApiKeysPanel />} />
             <Route path="dirmonitors" element={<DirMonitorPanel />} />
-            <Route path="downstreams" element={<DownstreamsPanel />} />
-            <Route path="webhooks" element={<WebhooksPanel />} />
+            <Route path="forwarding" element={<ForwardingPanel />} />
+            <Route path="downstreams" element={<Navigate to="/admin/forwarding" replace />} />
+            <Route
+              path="webhooks"
+              element={<Navigate to="/admin/forwarding?tab=webhooks" replace />}
+            />
             <Route path="shared-links" element={<SharedLinksPanel />} />
             <Route path="transcription" element={<TranscriptionPanel />} />
             <Route path="options" element={<OptionsPanel />} />

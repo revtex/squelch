@@ -14,14 +14,16 @@ INSERT INTO webhooks (
     secret,
     systems_json,
     disabled,
-    "order"
+    "order",
+    label
 ) VALUES (
     :url,
     :type,
     :secret,
     :systems_json,
     :disabled,
-    :order
+    :order,
+    :label
 ) RETURNING id;
 
 -- name: UpdateWebhook :exec
@@ -31,8 +33,18 @@ UPDATE webhooks SET
     secret       = :secret,
     systems_json = :systems_json,
     disabled     = :disabled,
-    "order"      = :order
+    "order"      = :order,
+    label        = :label
 WHERE id = :id;
 
 -- name: DeleteWebhook :exec
 DELETE FROM webhooks WHERE id = ?;
+
+-- name: RecordWebhookDelivery :exec
+UPDATE webhooks SET
+    last_at     = sqlc.arg('at'),
+    last_ok     = sqlc.arg('ok'),
+    last_status = sqlc.arg('status'),
+    last_error  = sqlc.arg('error'),
+    last_ok_at  = CASE WHEN sqlc.arg('ok') = 1 THEN sqlc.arg('at') ELSE last_ok_at END
+WHERE id = sqlc.arg('id');

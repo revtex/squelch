@@ -16,13 +16,15 @@ INSERT INTO downstreams (
     api_key,
     systems_json,
     disabled,
-    "order"
+    "order",
+    label
 ) VALUES (
     ?1,
     ?2,
     ?3,
     ?4,
-    ?5
+    ?5,
+    ?6
 ) RETURNING id
 `
 
@@ -32,6 +34,7 @@ type CreateDownstreamParams struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
 }
 
 func (q *Queries) CreateDownstream(ctx context.Context, arg CreateDownstreamParams) (int64, error) {
@@ -41,6 +44,7 @@ func (q *Queries) CreateDownstream(ctx context.Context, arg CreateDownstreamPara
 		arg.SystemsJson,
 		arg.Disabled,
 		arg.Order,
+		arg.Label,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -57,7 +61,7 @@ func (q *Queries) DeleteDownstream(ctx context.Context, id int64) error {
 }
 
 const getDownstream = `-- name: GetDownstream :one
-SELECT id, url, api_key, systems_json, disabled, "order" FROM downstreams WHERE id = ? LIMIT 1
+SELECT id, url, api_key, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM downstreams WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetDownstream(ctx context.Context, id int64) (Downstream, error) {
@@ -70,12 +74,18 @@ func (q *Queries) GetDownstream(ctx context.Context, id int64) (Downstream, erro
 		&i.SystemsJson,
 		&i.Disabled,
 		&i.Order,
+		&i.Label,
+		&i.LastAt,
+		&i.LastOk,
+		&i.LastStatus,
+		&i.LastError,
+		&i.LastOkAt,
 	)
 	return i, err
 }
 
 const listActiveDownstreams = `-- name: ListActiveDownstreams :many
-SELECT id, url, api_key, systems_json, disabled, "order" FROM downstreams WHERE disabled = 0 ORDER BY "order" ASC, id ASC
+SELECT id, url, api_key, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM downstreams WHERE disabled = 0 ORDER BY "order" ASC, id ASC
 `
 
 func (q *Queries) ListActiveDownstreams(ctx context.Context) ([]Downstream, error) {
@@ -94,6 +104,12 @@ func (q *Queries) ListActiveDownstreams(ctx context.Context) ([]Downstream, erro
 			&i.SystemsJson,
 			&i.Disabled,
 			&i.Order,
+			&i.Label,
+			&i.LastAt,
+			&i.LastOk,
+			&i.LastStatus,
+			&i.LastError,
+			&i.LastOkAt,
 		); err != nil {
 			return nil, err
 		}
@@ -109,7 +125,7 @@ func (q *Queries) ListActiveDownstreams(ctx context.Context) ([]Downstream, erro
 }
 
 const listDownstreams = `-- name: ListDownstreams :many
-SELECT id, url, api_key, systems_json, disabled, "order" FROM downstreams ORDER BY "order" ASC, id ASC
+SELECT id, url, api_key, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM downstreams ORDER BY "order" ASC, id ASC
 `
 
 func (q *Queries) ListDownstreams(ctx context.Context) ([]Downstream, error) {
@@ -128,6 +144,12 @@ func (q *Queries) ListDownstreams(ctx context.Context) ([]Downstream, error) {
 			&i.SystemsJson,
 			&i.Disabled,
 			&i.Order,
+			&i.Label,
+			&i.LastAt,
+			&i.LastOk,
+			&i.LastStatus,
+			&i.LastError,
+			&i.LastOkAt,
 		); err != nil {
 			return nil, err
 		}
@@ -142,14 +164,44 @@ func (q *Queries) ListDownstreams(ctx context.Context) ([]Downstream, error) {
 	return items, nil
 }
 
+const recordDownstreamDelivery = `-- name: RecordDownstreamDelivery :exec
+UPDATE downstreams SET
+    last_at     = ?1,
+    last_ok     = ?2,
+    last_status = ?3,
+    last_error  = ?4,
+    last_ok_at  = CASE WHEN ?2 = 1 THEN ?1 ELSE last_ok_at END
+WHERE id = ?5
+`
+
+type RecordDownstreamDeliveryParams struct {
+	At     sql.NullInt64 `db:"at" json:"at"`
+	Ok     int64         `db:"ok" json:"ok"`
+	Status int64         `db:"status" json:"status"`
+	Error  string        `db:"error" json:"error"`
+	ID     int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) RecordDownstreamDelivery(ctx context.Context, arg RecordDownstreamDeliveryParams) error {
+	_, err := q.db.ExecContext(ctx, recordDownstreamDelivery,
+		arg.At,
+		arg.Ok,
+		arg.Status,
+		arg.Error,
+		arg.ID,
+	)
+	return err
+}
+
 const updateDownstream = `-- name: UpdateDownstream :exec
 UPDATE downstreams SET
     url          = ?1,
     api_key      = ?2,
     systems_json = ?3,
     disabled     = ?4,
-    "order"      = ?5
-WHERE id = ?6
+    "order"      = ?5,
+    label        = ?6
+WHERE id = ?7
 `
 
 type UpdateDownstreamParams struct {
@@ -158,6 +210,7 @@ type UpdateDownstreamParams struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
 	ID          int64          `db:"id" json:"id"`
 }
 
@@ -168,6 +221,7 @@ func (q *Queries) UpdateDownstream(ctx context.Context, arg UpdateDownstreamPara
 		arg.SystemsJson,
 		arg.Disabled,
 		arg.Order,
+		arg.Label,
 		arg.ID,
 	)
 	return err

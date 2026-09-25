@@ -104,12 +104,15 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"downstreams.create": o.DownstreamsCreate,
 		"downstreams.update": o.DownstreamsUpdate,
 		"downstreams.delete": o.DownstreamsDelete,
+		"downstreams.test":   o.DownstreamsTest,
 
 		// Webhooks
 		"webhooks.list":   o.WebhooksList,
 		"webhooks.create": o.WebhooksCreate,
 		"webhooks.update": o.WebhooksUpdate,
 		"webhooks.delete": o.WebhooksDelete,
+		"webhooks.test":   o.WebhooksTest,
+		"webhooks.sample": o.WebhooksSample,
 
 		// Shared Links
 		"shared-links.list":           o.SharedLinksList,

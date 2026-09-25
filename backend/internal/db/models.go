@@ -97,6 +97,12 @@ type Downstream struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
+	LastAt      sql.NullInt64  `db:"last_at" json:"last_at"`
+	LastOk      int64          `db:"last_ok" json:"last_ok"`
+	LastStatus  int64          `db:"last_status" json:"last_status"`
+	LastError   string         `db:"last_error" json:"last_error"`
+	LastOkAt    sql.NullInt64  `db:"last_ok_at" json:"last_ok_at"`
 }
 
 type Group struct {
@@ -249,4 +255,10 @@ type Webhook struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
+	LastAt      sql.NullInt64  `db:"last_at" json:"last_at"`
+	LastOk      int64          `db:"last_ok" json:"last_ok"`
+	LastStatus  int64          `db:"last_status" json:"last_status"`
+	LastError   string         `db:"last_error" json:"last_error"`
+	LastOkAt    sql.NullInt64  `db:"last_ok_at" json:"last_ok_at"`
 }

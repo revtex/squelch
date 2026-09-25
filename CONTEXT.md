@@ -55,6 +55,11 @@ package `internal/dirmonitor`.
 **Downstream** — another Squelch or rdio-scanner instance this one forwards
 Calls to. Table `downstreams`, package `internal/downstream`.
 
+**Webhook** — a URL that is sent a message about each Call (generic signed
+JSON, or a Discord embed) rather than the Call itself. Table `webhooks`,
+package `internal/webhook`. Downstreams and Webhooks together are
+**Forwarding** in the admin.
+
 ## Listening
 
 **Selection** — the set of Talkgroups a Listener has chosen to hear. Stored

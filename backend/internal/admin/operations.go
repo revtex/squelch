@@ -83,6 +83,10 @@ type Deps struct {
 	// LegacyUsage counts requests on the deprecated /api/* surface; nil
 	// reports none.
 	LegacyUsage *middleware.LegacyUsageStore
+	// Downstreams and Webhooks are the forwarding services, for delivery
+	// state and tests; nil reports nothing and refuses tests.
+	Downstreams Forwarder
+	Webhooks    Forwarder
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -464,9 +468,13 @@ func mapDirMonitors(dms []db.Dirmonitor) []map[string]any {
 	return out
 }
 
+// sqlNullInt is a short name for the nullable integer columns the mappers read.
+type sqlNullInt = sql.NullInt64
+
 func mapDownstream(d db.Downstream) map[string]any {
 	return map[string]any{
 		"id":          d.ID,
+		"label":       d.Label,
 		"url":         d.Url,
 		"hasApiKey":   d.ApiKey != "",
 		"systemsJson": nullStr(d.SystemsJson),
@@ -486,9 +494,10 @@ func mapDownstreams(ds []db.Downstream) []map[string]any {
 func mapWebhook(w db.Webhook) map[string]any {
 	return map[string]any{
 		"id":          w.ID,
+		"label":       w.Label,
 		"url":         w.Url,
 		"type":        w.Type,
-		"secret":      nullStr(w.Secret),
+		"hasSecret":   w.Secret.Valid && w.Secret.String != "",
 		"systemsJson": nullStr(w.SystemsJson),
 		"disabled":    w.Disabled,
 		"order":       w.Order,

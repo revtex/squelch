@@ -119,16 +119,35 @@ export interface AdminApiKeyCreateResponse extends AdminApiKey {
   createdKey: string;
 }
 
-export interface AdminDownstream {
+/** How one delivery went: a call forwarded, or a test. */
+export interface DeliveryResult {
+  at: number;
+  ok: boolean;
+  status: number;
+  error: string;
+  millis: number;
+}
+
+/** What downstreams and webhooks share: an address and how sending goes. */
+export interface ForwardingTarget {
   id: number;
+  label: string;
   url: string;
-  hasApiKey: boolean;
   systemsJson: string | null;
   disabled: number;
   order: number;
+  last: DeliveryResult | null;
+  lastOkAt: number | null;
+  sent24h: number;
+  failed24h: number;
+}
+
+export interface AdminDownstream extends ForwardingTarget {
+  hasApiKey: boolean;
 }
 
 export interface AdminDownstreamCreate {
+  label: string;
   url: string;
   apiKey: string;
   systemsJson: string | null;
@@ -136,23 +155,38 @@ export interface AdminDownstreamCreate {
   order: number;
 }
 
-export interface AdminDownstreamUpdate {
+export interface AdminDownstreamUpdate extends AdminDownstreamCreate {
   id: number;
+}
+
+export type WebhookType = "generic" | "discord";
+
+export interface AdminWebhook extends ForwardingTarget {
+  type: WebhookType;
+  /** The secret itself never reaches the browser. */
+  hasSecret: boolean;
+}
+
+export interface AdminWebhookCreate {
+  label: string;
   url: string;
-  apiKey: string;
+  type: WebhookType;
+  /** Blank keeps the current secret when editing. */
+  secret?: string;
+  clearSecret?: boolean;
   systemsJson: string | null;
   disabled: number;
   order: number;
 }
 
-export interface AdminWebhook {
+export interface AdminWebhookUpdate extends AdminWebhookCreate {
   id: number;
-  url: string;
-  type: string;
-  secret: string | null;
-  systemsJson: string | null;
-  disabled: number;
-  order: number;
+}
+
+/** The payload and headers a generic webhook receives, for the preview. */
+export interface WebhookSample {
+  payload: unknown;
+  headers: Record<string, string>;
 }
 
 export interface AdminSetting {

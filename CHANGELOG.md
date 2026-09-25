@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Forwarding, rebuilt.** Downstreams and webhooks share one **Forwarding**
+  page with two tabs. Each target has a label, a status badge that explains
+  a failing delivery, the last delivery time and failures in the last 24
+  hours, and a details panel with **Send a test** that shows the other end's
+  answer in place. Webhooks can be generic JSON (signed with
+  `X-Squelch-Signature` when a secret is set, with a payload preview) or a
+  Discord embed. The old **/admin/downstreams** and **/admin/webhooks**
+  addresses redirect to the new page.
 - **Shared links, rebuilt.** The list shows how many times each shared
   call has been opened and when it expires (expired links are dimmed and can
   be filtered or revoked in one go), with search by talkgroup, system or
@@ -169,6 +177,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Webhooks are now delivered.** They could be created but nothing ever
+  posted to them. A webhook's secret is no longer sent to the browser or
+  pre-filled in the edit form; it is write-only and stored encrypted like a
+  downstream's API key.
 - **Changing a user's password from Admin → Users now works.** The edit
   form sent the new password but the server dropped it, so the old password
   stayed in force.

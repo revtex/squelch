@@ -131,6 +131,13 @@ CREATE TABLE IF NOT EXISTS downstreams (
     systems_json TEXT,
     disabled     INTEGER NOT NULL DEFAULT 0,
     "order"      INTEGER NOT NULL DEFAULT 0
+,
+    label        TEXT    NOT NULL DEFAULT '',
+    last_at      INTEGER,
+    last_ok      INTEGER NOT NULL DEFAULT 0,
+    last_status  INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT    NOT NULL DEFAULT '',
+    last_ok_at   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -158,6 +165,13 @@ CREATE TABLE IF NOT EXISTS webhooks (
     systems_json TEXT,
     disabled     INTEGER NOT NULL DEFAULT 0,
     "order"      INTEGER NOT NULL DEFAULT 0
+,
+    label        TEXT    NOT NULL DEFAULT '',
+    last_at      INTEGER,
+    last_ok      INTEGER NOT NULL DEFAULT 0,
+    last_status  INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT    NOT NULL DEFAULT '',
+    last_ok_at   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (

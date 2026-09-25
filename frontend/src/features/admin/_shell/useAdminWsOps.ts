@@ -15,6 +15,10 @@ import type {
   AdminDownstreamCreate,
   AdminDownstreamUpdate,
   AdminWebhook,
+  AdminWebhookCreate,
+  AdminWebhookUpdate,
+  DeliveryResult,
+  WebhookSample,
   ConfigResponse,
   AdminSetting,
   CreateUserPayload,
@@ -370,6 +374,12 @@ export function useDeleteDownstreamMutation() {
   });
 }
 
+export function useTestDownstreamMutation() {
+  return useWsMutation<DeliveryResult, number>("downstreams.test", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
 // ─── Webhooks ───────────────────────────────────────────────────────────────
 
 export function useListWebhooksQuery() {
@@ -380,20 +390,26 @@ export function useListWebhooksQuery() {
   );
 }
 
+export function useGetWebhookSampleQuery() {
+  return useWsQuery<WebhookSample>("webhooks.sample");
+}
+
 export function useCreateWebhookMutation() {
-  return useWsMutation<AdminWebhook, CreatePayload<AdminWebhook>>(
-    "webhooks.create",
-  );
+  return useWsMutation<AdminWebhook, AdminWebhookCreate>("webhooks.create");
 }
 
 export function useUpdateWebhookMutation() {
-  return useWsMutation<AdminWebhook, UpdatePayload<AdminWebhook>>(
-    "webhooks.update",
-  );
+  return useWsMutation<AdminWebhook, AdminWebhookUpdate>("webhooks.update");
 }
 
 export function useDeleteWebhookMutation() {
   return useWsMutation<void, number>("webhooks.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useTestWebhookMutation() {
+  return useWsMutation<DeliveryResult, number>("webhooks.test", {
     transformArg: (id) => ({ id }),
   });
 }

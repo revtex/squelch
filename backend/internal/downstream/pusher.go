@@ -21,6 +21,7 @@ import (
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/db"
+	"github.com/revtex/squelch/internal/delivery"
 	"github.com/revtex/squelch/internal/safehttp"
 )
 
@@ -73,16 +74,99 @@ type Service struct {
 	cancel        context.CancelFunc
 	wg            sync.WaitGroup
 	pushers       []pusherEntry
+	deliveries    *delivery.Tracker
 }
 
 // NewService creates a downstream pusher service.
 func NewService(queries *db.Queries, processor *audio.Processor, encryptionKey string) *Service {
-	return &Service{
+	s := &Service{
 		queries:       queries,
 		encryptionKey: encryptionKey,
 		processor:     processor,
 		client:        safehttp.Client(30 * time.Second),
 	}
+	s.deliveries = delivery.New(func(id int64, r delivery.Result) {
+		ok := int64(0)
+		if r.OK {
+			ok = 1
+		}
+		if err := queries.RecordDownstreamDelivery(context.Background(), db.RecordDownstreamDeliveryParams{
+			At: sql.NullInt64{Int64: r.At, Valid: true}, Ok: ok, Status: int64(r.Status), Error: r.Error, ID: id,
+		}); err != nil {
+			slog.Warn("downstream: failed to record delivery", "downstream_id", id, "error", err)
+		}
+	})
+	return s
+}
+
+// Stats reports how deliveries to one downstream have been going.
+func (s *Service) Stats(id int64) delivery.Stats {
+	return s.deliveries.Stats(id)
+}
+
+// Forget drops a deleted downstream's delivery history.
+func (s *Service) Forget(id int64) {
+	s.deliveries.Forget(id)
+}
+
+// Test checks that a downstream answers with the configured key, without
+// sending a call: it calls the remote's /api/v1/calls/test. An older
+// server without that endpoint answers 404, which is reported as reachable
+// but unverified.
+func (s *Service) Test(ctx context.Context, id int64) (delivery.Result, error) {
+	ds, err := s.queries.GetDownstream(ctx, id)
+	if err != nil {
+		return delivery.Result{}, fmt.Errorf("downstream not found")
+	}
+	apiKey, err := s.plainKey(ds)
+	if err != nil {
+		return delivery.Result{}, err
+	}
+	url := strings.TrimRight(ds.Url, "/") + "/api/v1/calls/test"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return delivery.Result{}, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	start := time.Now()
+	r := delivery.Result{At: start.Unix()}
+	resp, err := s.client.Do(req)
+	r.Millis = time.Since(start).Milliseconds()
+	if err != nil {
+		r.Error = err.Error()
+		return r, nil
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	r.Status = resp.StatusCode
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		r.OK = true
+	case resp.StatusCode == http.StatusNotFound:
+		r.OK = true
+		r.Error = "reachable, but the server has no /api/v1/calls/test (older Squelch or rdio-scanner); the key was not checked"
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		r.Error = "the server refused the API key"
+	default:
+		r.Error = fmt.Sprintf("unexpected status %d", resp.StatusCode)
+	}
+	return r, nil
+}
+
+// plainKey returns the downstream's API key, decrypted when stored encrypted.
+func (s *Service) plainKey(ds db.Downstream) (string, error) {
+	apiKey := ds.ApiKey
+	if !auth.IsEncrypted(apiKey) {
+		return apiKey, nil
+	}
+	if s.encryptionKey == "" {
+		return "", fmt.Errorf("downstream %d: api key encrypted but no encryption key configured", ds.ID)
+	}
+	plain, err := auth.DecryptString(apiKey, s.encryptionKey)
+	if err != nil {
+		return "", fmt.Errorf("downstream %d: decrypt api key: %w", ds.ID, err)
+	}
+	return plain, nil
 }
 
 // Start loads active downstream configs and starts one goroutine per entry.
@@ -104,6 +188,11 @@ func (s *Service) Start(ctx context.Context) {
 	entries := make([]pusherEntry, len(downstreams))
 	slog.Debug("downstream: starting pushers", "count", len(downstreams))
 	for i, ds := range downstreams {
+		if ds.LastAt.Valid {
+			s.deliveries.Seed(ds.ID, delivery.Result{
+				At: ds.LastAt.Int64, OK: ds.LastOk == 1, Status: int(ds.LastStatus), Error: ds.LastError,
+			}, ds.LastOkAt.Int64)
+		}
 		ch := make(chan CallEvent, 1000)
 		entries[i] = pusherEntry{ch: ch}
 		s.wg.Add(1)
@@ -212,17 +301,17 @@ const maxRetries = 5
 func (s *Service) pushWithRetry(ctx context.Context, ds db.Downstream, event CallEvent) {
 	backoff := time.Second
 
+	var last pushOutcome
 	for attempt := range maxRetries {
 		slog.Debug("downstream: push attempt", "downstream_id", ds.ID, "call_id", event.CallID, "attempt", attempt+1)
-		err := s.pushCall(ctx, ds, event)
+		start := time.Now()
+		status, err := s.doPush(ctx, ds, event)
+		outcome := pushOutcome{status: status, millis: time.Since(start).Milliseconds(), err: err}
+		last = outcome
 		if err == nil {
 			slog.Info("downstream: call pushed successfully",
 				"downstream_id", ds.ID, "call_id", event.CallID)
-			_ = s.queries.CreateLog(ctx, db.CreateLogParams{
-				DateTime: time.Now().Unix(),
-				Level:    "info",
-				Message:  fmt.Sprintf("Downstream %d: pushed call %d", ds.ID, event.CallID),
-			})
+			s.deliveries.Record(ds.ID, delivery.Result{OK: true, Status: outcome.status, Millis: outcome.millis})
 			return
 		}
 
@@ -258,23 +347,50 @@ func (s *Service) pushWithRetry(ctx context.Context, ds db.Downstream, event Cal
 	slog.Error("downstream: giving up after max retries",
 		"downstream_id", ds.ID,
 		"call_id", event.CallID)
+	errText := ""
+	if last.err != nil {
+		errText = last.err.Error()
+	}
+	s.deliveries.Record(ds.ID, delivery.Result{OK: false, Status: last.status, Error: errText, Millis: last.millis})
 	_ = s.queries.CreateLog(ctx, db.CreateLogParams{
 		DateTime: time.Now().Unix(),
 		Level:    "error",
-		Message:  fmt.Sprintf("Downstream %d: failed to push call %d after %d retries", ds.ID, event.CallID, maxRetries),
+		Message:  fmt.Sprintf("Downstream %s: failed to push call %d after %d retries: %s", downstreamName(ds), event.CallID, maxRetries, errText),
 	})
+}
+
+// downstreamName is the label, or the URL for an unlabelled downstream.
+func downstreamName(ds db.Downstream) string {
+	if ds.Label != "" {
+		return ds.Label
+	}
+	return ds.Url
+}
+
+// pushOutcome is what one push attempt came back with.
+type pushOutcome struct {
+	status int
+	millis int64
+	err    error
 }
 
 // pushCall performs a single HTTP multipart POST to the downstream's
 // /api/call-upload endpoint.
 func (s *Service) pushCall(ctx context.Context, ds db.Downstream, event CallEvent) error {
+	_, err := s.doPush(ctx, ds, event)
+	return err
+}
+
+// doPush is pushCall with the HTTP status the remote answered, for the
+// delivery record.
+func (s *Service) doPush(ctx context.Context, ds db.Downstream, event CallEvent) (int, error) {
 	audioPath := filepath.Join(s.processor.RecordingsDir(), event.AudioPath)
 	if rel, err := filepath.Rel(s.processor.RecordingsDir(), audioPath); err != nil || strings.HasPrefix(rel, "..") {
-		return fmt.Errorf("audio path escapes base directory: %s", event.AudioPath)
+		return 0, fmt.Errorf("audio path escapes base directory: %s", event.AudioPath)
 	}
 	f, err := os.Open(audioPath)
 	if err != nil {
-		return fmt.Errorf("open audio file: %w", err)
+		return 0, fmt.Errorf("open audio file: %w", err)
 	}
 	defer f.Close()
 
@@ -284,21 +400,21 @@ func (s *Service) pushCall(ctx context.Context, ds db.Downstream, event CallEven
 	// Audio file part.
 	part, err := writer.CreateFormFile("audio", event.AudioName)
 	if err != nil {
-		return fmt.Errorf("create form file: %w", err)
+		return 0, fmt.Errorf("create form file: %w", err)
 	}
 	if _, err := io.Copy(part, f); err != nil {
-		return fmt.Errorf("copy audio data: %w", err)
+		return 0, fmt.Errorf("copy audio data: %w", err)
 	}
 
 	// Required fields.
 	if err := writer.WriteField("systemId", strconv.FormatInt(event.SystemID, 10)); err != nil {
-		return fmt.Errorf("write systemId field: %w", err)
+		return 0, fmt.Errorf("write systemId field: %w", err)
 	}
 	if err := writer.WriteField("talkgroupId", strconv.FormatInt(event.TalkgroupID, 10)); err != nil {
-		return fmt.Errorf("write talkgroupId field: %w", err)
+		return 0, fmt.Errorf("write talkgroupId field: %w", err)
 	}
 	if err := writer.WriteField("dateTime", strconv.FormatInt(event.DateTime, 10)); err != nil {
-		return fmt.Errorf("write dateTime field: %w", err)
+		return 0, fmt.Errorf("write dateTime field: %w", err)
 	}
 
 	// Optional fields — include only if non-zero/non-empty.
@@ -353,42 +469,27 @@ func (s *Service) pushCall(ctx context.Context, ds db.Downstream, event CallEven
 	}
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("close multipart writer: %w", err)
+		return 0, fmt.Errorf("close multipart writer: %w", err)
 	}
 
 	url := strings.TrimRight(ds.Url, "/") + "/api/call-upload"
 	slog.Debug("downstream: http post", "url", url, "system", event.SystemID, "talkgroup", event.TalkgroupID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	apiKey := ds.ApiKey
-	if auth.IsEncrypted(apiKey) {
-		if s.encryptionKey == "" {
-			slog.Error("downstream: api key is encrypted but no encryption key configured — aborting push",
-				"downstream_id", ds.ID,
-				"url", ds.Url,
-			)
-			return fmt.Errorf("downstream %d: api key encrypted but no encryption key configured", ds.ID)
-		}
-		plain, err := auth.DecryptString(apiKey, s.encryptionKey)
-		if err != nil {
-			slog.Error("downstream: failed to decrypt api key — aborting push",
-				"downstream_id", ds.ID,
-				"url", ds.Url,
-				"error", err,
-			)
-			return fmt.Errorf("downstream %d: decrypt api key: %w", ds.ID, err)
-		}
-		apiKey = plain
+	apiKey, err := s.plainKey(ds)
+	if err != nil {
+		slog.Error("downstream: cannot use the api key — aborting push", "downstream_id", ds.ID, "url", ds.Url, "error", err)
+		return 0, err
 	}
 	req.Header.Set("X-API-Key", apiKey)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("http request: %w", err)
+		return 0, fmt.Errorf("http request: %w", err)
 	}
 	defer resp.Body.Close()
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
@@ -396,12 +497,12 @@ func (s *Service) pushCall(ctx context.Context, ds db.Downstream, event CallEven
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status %d from %s", resp.StatusCode, ds.Url)
+		return resp.StatusCode, fmt.Errorf("unexpected status %d from %s", resp.StatusCode, ds.Url)
 	}
 	slog.Debug("downstream: push response received",
 		"downstream_id", ds.ID,
 		"call_id", event.CallID,
 		"status_code", resp.StatusCode,
 	)
-	return nil
+	return resp.StatusCode, nil
 }

@@ -54,6 +54,7 @@ import (
 	"github.com/revtex/squelch/internal/secrets"
 	"github.com/revtex/squelch/internal/seed"
 	"github.com/revtex/squelch/internal/trmqtt"
+	"github.com/revtex/squelch/internal/webhook"
 	"github.com/revtex/squelch/internal/ws"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -933,6 +934,10 @@ func (p *program) run() {
 	// Services are created first so their Reloader interfaces can be injected into the hub.
 	dsService := downstream.NewService(queries, processor, cfg.EncryptionKey)
 	dsService.Start(ctx)
+	whService := webhook.NewService(queries, cfg.EncryptionKey, config.Version)
+	whService.Start(ctx)
+	// Every accepted call goes to both forwarding services.
+	forwarders := callFanout{dsService, whService}
 
 	hub := ws.NewHub(queries, config.Version, ws.HubDeps{
 		SQLDB:             sqlDB,
@@ -948,6 +953,8 @@ func (p *program) run() {
 		GeoIP:             geoDB,
 		LoginLimiter:      rateLimiter,
 		LegacyUsage:       middleware.DefaultLegacyUsageStore,
+		Downstreams:       dsService,
+		Webhooks:          whService,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
 	// reports here, for the admin's connection list.
@@ -976,7 +983,7 @@ func (p *program) run() {
 		streamMgr.SetCuePublisher(hub.SendStreamCue)
 	}
 
-	dwService := dirmonitor.NewService(queries, processor, hub, dsService, transcriberMgr)
+	dwService := dirmonitor.NewService(queries, processor, hub, forwarders, transcriberMgr)
 	dwService.Start(ctx)
 	hub.SetDirMonitorReloader(dwService)
 
@@ -1024,7 +1031,7 @@ func (p *program) run() {
 		SQLDB:              sqlDB,
 		DirMonitorReloader: dwService,
 		DownstreamReloader: dsService,
-		DownstreamNotifier: dsService,
+		DownstreamNotifier: forwarders,
 		Transcriber:        transcriberMgr,
 		Version:            config.Version,
 		FFmpegAvailable:    hasFFmpeg,
@@ -1499,4 +1506,13 @@ func migrateSecrets(ctx context.Context, queries *db.Queries, sqlDB *sql.DB, enc
 		slog.Info("secrets: encryption migration complete", "migrated", migrated)
 	}
 	return nil
+}
+
+// callFanout tells every forwarding service about an accepted call.
+type callFanout []interface{ Notify(downstream.CallEvent) }
+
+func (f callFanout) Notify(event downstream.CallEvent) {
+	for _, n := range f {
+		n.Notify(event)
+	}
 }

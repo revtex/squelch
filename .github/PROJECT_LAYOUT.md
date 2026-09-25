@@ -41,6 +41,7 @@ backend/
     config/                config loading + validation
     connections/           registry of live connections (sockets + streams) for the admin
     db/                    sqlc-generated code + DB connection
+    delivery/              per-target delivery tracker shared by downstream and webhook
     dirmonitor/            filesystem watchers for recorder ingest
     downstream/            forwarding to other rdio-scanner / squelch instances
     handler/               HTTP handlers (Gin) — feature-scoped
@@ -69,6 +70,7 @@ backend/
     static/                frontend `dist/` embed via go:embed
     stream/                continuous server-encoded audio stream (background listening)
     trmqtt/                trunk-recorder MQTT status ingest
+    webhook/               webhook sender (generic signed JSON, Discord)
     ws/                    WebSocket hub + protocol (listener + admin)
   migrations/              numbered .sql files, append-only
   sqlc/
@@ -182,7 +184,7 @@ frontend/
           trmqtt/          trunk-recorder MQTT dashboard
         logs/              LogsPanel + useAdminLogs
         legacy-usage/  radio-reference/  tools/  options/
-        dir-monitor/   downstreams/  webhooks/  shared-links/
+        dir-monitor/   forwarding/   shared-links/
         groups-tags/   transcription/
     shared/                lowest layer — cross-feature primitives. No imports
                            from features/ (a few documented exceptions live in
