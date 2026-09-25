@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Ban, CheckCircle2, Pencil, RotateCw, ScrollText, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, Pencil, RotateCw, ScrollText, Trash2, TriangleAlert } from "lucide-react";
 import {
   ActionButton,
   DetailsPanel,
   FactList,
   InlineConfirm,
+  Notice,
   PanelSection,
   formatAgo,
   formatDateTime,
+  plural,
   type Fact,
 } from "@/features/admin/_shell";
 import type { AdminDirMonitor, AdminSystem, AdminTalkgroup, MonitorStatus } from "@/types";
@@ -128,7 +130,7 @@ export default function DirMonitorDetails({
         "None yet"
       ),
     },
-    { label: "Calls, 24 h", value: s.ingested24h.toLocaleString() },
+    { label: "Calls 24 h", value: s.ingested24h.toLocaleString() },
   ];
 
   const ask = pending ? question(pending, m) : null;
@@ -137,29 +139,28 @@ export default function DirMonitorDetails({
     <DetailsPanel
       title={m.directory}
       titleClassName="font-mono break-all"
-      subtitle="Folder monitor"
-      badges={<span className={`badge badge-sm ${badge.badge}`}>{badge.label}</span>}
+      subtitle={`${type.label} · ${badge.label} · ${plural(s.ingested24h, "call")} in 24 h`}
       onClose={onClose}
     >
-      <FactList facts={facts} />
-
       {s.state === "stopped" && s.error && (
-        <div className="alert alert-error text-sm">
-          <span>
-            The monitor stopped: {s.error}. Fix the folder or its permissions, then restart it.
-          </span>
-        </div>
+        <Notice tone="bad" icon={<TriangleAlert />}>
+          <b>Stopped{s.since ? ` ${formatAgo(s.since)}` : ""}.</b> Fix the folder or its permissions, then
+          restart it. Last error: <span className="font-mono">{s.error}</span>.
+        </Notice>
       )}
       {(s.state === "watching" || s.state === "polling") && s.error && (
-        <div className="alert alert-warning text-sm">
-          <span>Still running, but the last attempt hit a problem: {s.error}</span>
-        </div>
+        <Notice tone="warn" icon={<TriangleAlert />}>
+          <b>Still running,</b> but the last attempt hit a problem:{" "}
+          <span className="font-mono">{s.error}</span>
+        </Notice>
       )}
       {error && (
-        <div role="alert" className="alert alert-error text-sm">
+        <Notice role="alert" tone="bad">
           {error}
-        </div>
+        </Notice>
       )}
+
+      <FactList facts={facts} />
 
       {ask && pending ? (
         <InlineConfirm
@@ -192,7 +193,7 @@ export default function DirMonitorDetails({
             {restartNote && (
               <div
                 role={restartNote.ok ? "status" : "alert"}
-                className={`alert text-sm ${restartNote.ok ? "alert-success" : "alert-error"}`}
+                className={`alert ${restartNote.ok ? "alert-success" : "alert-error"}`}
               >
                 {restartNote.text}
               </div>

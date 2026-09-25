@@ -3,6 +3,7 @@ import { ArrowLeft, FolderOpen } from "lucide-react";
 import {
   DetailsPanel,
   Field,
+  Segmented,
   SwitchRow,
   useLazyListServerDirectoriesQuery,
   useNavigationGuard,
@@ -167,29 +168,25 @@ export default function DirMonitorForm({
     >
       <form id={formId} onSubmit={submit} className="space-y-4">
         {error && (
-          <div role="alert" className="alert alert-error text-sm">
+          <div role="alert" className="alert alert-error">
             {error}
           </div>
         )}
 
-        <Field htmlFor={`${id}-type`} label="Recorder" hint={type.hint}>
-          <select
-            id={`${id}-type`}
-            className="select w-full"
+        <div className="fieldset">
+          <span className="fieldset-legend">Recorder</span>
+          <Segmented
+            label="Recorder"
+            options={RECORDER_TYPES.map((t) => ({ id: t.id, label: t.label }))}
             value={form.type}
-            onChange={(e) => {
-              set("type", e.target.value);
+            onChange={(v) => {
+              set("type", v);
               set("systemId", "");
               set("talkgroupId", "");
             }}
-          >
-            {RECORDER_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+          />
+          <p className="label whitespace-normal">{type.hint}</p>
+        </div>
 
         <Field
           htmlFor={`${id}-dir`}
@@ -251,7 +248,7 @@ export default function DirMonitorForm({
                   set("talkgroupId", "");
                 }}
               >
-                <option value="">Read from the files</option>
+                <option value="">From filename</option>
                 {systems
                   .slice()
                   .sort((a, b) => a.order - b.order)
@@ -274,7 +271,7 @@ export default function DirMonitorForm({
                 disabled={!form.systemId}
                 onChange={(e) => set("talkgroupId", e.target.value)}
               >
-                <option value="">Read from the files</option>
+                <option value="">From filename</option>
                 {talkgroupsForSystem.map((t) => (
                   <option key={t.id} value={String(t.id)}>
                     {t.label ?? t.talkgroupId} ({t.talkgroupId})
@@ -533,7 +530,7 @@ function FolderBrowser({ start, onPick, onBack, onClose }: FolderBrowserProps) {
         </button>
       </form>
       {problem && (
-        <div role="alert" className="alert alert-error text-sm">
+        <div role="alert" className="alert alert-error">
           {problem}
         </div>
       )}

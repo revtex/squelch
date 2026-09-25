@@ -91,9 +91,9 @@ export function stateBadge(m: AdminDirMonitor): StateBadge {
     case "stopped":
       return { id: "stopped", label: "stopped", badge: "badge-error" };
     case "disabled":
-      return { id: "disabled", label: "disabled", badge: "badge-ghost" };
+      return { id: "disabled", label: "disabled", badge: "badge-neutral" };
     default:
-      return { id: "unknown", label: "unknown", badge: "badge-ghost" };
+      return { id: "unknown", label: "unknown", badge: "badge-neutral" };
   }
 }
 
@@ -111,19 +111,19 @@ export function matchesFilter(m: AdminDirMonitor, f: StatusFilter): boolean {
   }
 }
 
-/** Where a monitor's calls end up: fixed overrides, or read from the files. */
+/** Where a monitor's calls end up: fixed overrides, or from the file names. */
 export function destinationLabel(
   m: AdminDirMonitor,
   systems: AdminSystem[],
   talkgroups: AdminTalkgroup[],
 ): string {
-  if (m.systemId === null) return "Read from the files";
+  if (m.systemId === null) return "From filename";
   const sys = systems.find((s) => s.id === m.systemId);
   const sysName = sys ? sys.label : `system #${m.systemId}`;
   if (m.talkgroupId === null) return sysName;
   const tg = talkgroups.find((t) => t.id === m.talkgroupId);
-  const tgName = tg ? (tg.label ?? String(tg.talkgroupId)) : `talkgroup #${m.talkgroupId}`;
-  return `${sysName} › ${tgName}`;
+  const tgName = tg ? `TG ${tg.talkgroupId}${tg.label ? ` (${tg.label})` : ""}` : `talkgroup #${m.talkgroupId}`;
+  return `${sysName} · ${tgName}`;
 }
 
 export function matchesSearch(
@@ -150,4 +150,14 @@ export function waitLabel(m: AdminDirMonitor): string {
   const secs = m.delay / 1000;
   const shown = Number.isInteger(secs) ? String(secs) : secs.toFixed(1);
   return m.usePolling === 1 ? `every ${shown} s` : `${shown} s after the last write`;
+}
+
+/** The row's second line: which files, and how they are picked up. */
+export function monitorSummary(m: AdminDirMonitor): string {
+  const parts: string[] = [];
+  if (m.extension) parts.push(`*.${m.extension.replace(/^\./, "")}`);
+  if (m.deleteAfter === 1) parts.push("deletes after import");
+  if (m.usePolling === 1) parts.push("polling");
+  if (m.talkgroupId !== null) parts.push("fixed talkgroup");
+  return parts.join(" · ");
 }

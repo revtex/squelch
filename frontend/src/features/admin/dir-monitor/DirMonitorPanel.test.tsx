@@ -127,13 +127,15 @@ describe("DirMonitorPanel", () => {
     const table = screen.getByRole("table", { name: "Folder monitors" });
     const tr = within(table).getByText("/recordings/tr").closest("tr")!;
     expect(within(tr).getByText("watching")).toBeInTheDocument();
-    expect(within(tr).getByText("Read from the files")).toBeInTheDocument();
-    expect(within(tr).getByText("5200-1700000000.json")).toBeInTheDocument();
+    expect(within(tr).getByText("From filename")).toBeInTheDocument();
+    expect(within(tr).getByText("Trunk Recorder")).toBeInTheDocument();
+    expect(within(tr).getByTitle(/5200-1700000000\.json$/)).toBeInTheDocument();
     expect(within(tr).getByText("312")).toBeInTheDocument();
     const nas = within(table).getByText("/mnt/nas/proscan").closest("tr")!;
     expect(within(nas).getByText("stopped")).toBeInTheDocument();
     expect(within(nas).getByText(/no such file or directory/)).toBeInTheDocument();
-    expect(within(nas).getByText("County › FD Disp")).toBeInTheDocument();
+    expect(within(nas).getByText(/^County · TG \d+ \(FD Disp\)$/)).toBeInTheDocument();
+    expect(within(nas).getByText(/polling/)).toBeInTheDocument();
   });
 
   it("filters to stopped monitors and restarts one from its details", async () => {
@@ -143,7 +145,7 @@ describe("DirMonitorPanel", () => {
     expect(screen.queryByText("/recordings/tr")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Details for /mnt/nas/proscan" }));
     const details = within(screen.getByRole("dialog", { name: "/mnt/nas/proscan" }));
-    expect(details.getByText(/The monitor stopped: cannot watch the folder/)).toBeInTheDocument();
+    expect(details.getByText(/^Stopped/).closest(".alert")).toHaveTextContent(/Last error: cannot watch the folder/);
     expect(details.getByText("every 5 s")).toBeInTheDocument();
     await user.click(details.getByRole("button", { name: "Restart" }));
     expect(restartOp).toHaveBeenCalledWith(2);
@@ -161,7 +163,8 @@ describe("DirMonitorPanel", () => {
     const form = within(screen.getByRole("dialog", { name: "New folder monitor" }));
     expect(form.queryByLabelText("Filename mask")).toBeNull();
     expect(form.queryByLabelText("Send every call to system")).toBeNull();
-    await user.selectOptions(form.getByLabelText("Recorder"), "default");
+    expect(form.getByRole("radio", { name: "Trunk Recorder" })).toHaveAttribute("aria-checked", "true");
+    await user.click(form.getByRole("radio", { name: "Other (filename mask)" }));
     expect(form.getByLabelText("Send every call to system")).toBeInTheDocument();
     await user.type(form.getByLabelText("Filename mask"), "#TG_#DATE");
     await user.type(form.getByLabelText("Try it on a filename"), "5200_2025-01-15.wav");

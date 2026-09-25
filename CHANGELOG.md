@@ -252,6 +252,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Folder monitors and Forwarding match the redesign.** A monitor's row
+  shows its folder with the file type and options under it, then its
+  recorder, where calls go ("From filename"), its state, last file and
+  calls in 24 hours. Forwarding's first tab is Downstream servers. Each
+  tab opens with a line on what it does and its Add button. Rows read
+  Server, Systems, Status ("delivering", "sending" or "failing"), Last
+  delivery with its time or response code, and Failed 24 h with the last
+  error. A stopped monitor or a failing target opens with a red notice.
 - **Systems & talkgroups, Groups & tags and Transcription match the
   redesign.** A system's header gives its number, counts and last call.
   The talkgroup filters sit in one row with Add talkgroup, and unlabeled

@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import {
   DataTable,
+  COUNT,
   FilterChips,
   PageHeader,
   SearchBox,
@@ -124,31 +125,22 @@ export default function ForwardingPanel() {
   const columns: Column<ForwardingTarget>[] = [
     {
       id: "label",
-      header: kindLabel,
+      header: tab === "downstreams" ? "Server" : "Webhook",
       phone: "title",
       sortValue: targetName,
+      className: "min-w-0",
       cell: (t) => (
-        <span className="flex flex-col">
+        <span className="flex min-w-0 flex-col">
           <span className="font-medium">{targetName(t)}</span>
           <span className="truncate font-mono text-xs text-base-content-dim">{t.url}</span>
         </span>
       ),
     },
     {
-      id: "status",
-      header: "Status",
-      sortValue: (t) => deliveryState(t).id,
-      cell: (t) => {
-        const s = deliveryState(t);
-        return (
-          <span className="flex flex-col gap-0.5">
-            <span className={`badge badge-sm ${s.badge}`}>{s.label}</span>
-            {s.id === "failing" && t.last && (
-              <span className="text-xs text-error">{t.last.error || `status ${t.last.status}`}</span>
-            )}
-          </span>
-        );
-      },
+      id: "systems",
+      header: "Systems",
+      phone: "hide",
+      cell: (t) => systemsLabel(t, systemList),
     },
     ...(tab === "webhooks"
       ? [
@@ -163,33 +155,46 @@ export default function ForwardingPanel() {
         ]
       : []),
     {
-      id: "systems",
-      header: "Systems",
-      phone: "hide",
-      cell: (t) => systemsLabel(t, systemList),
+      id: "status",
+      header: "Status",
+      phone: "show",
+      sortValue: (t) => deliveryState(t).id,
+      cell: (t) => {
+        const s = deliveryState(t);
+        return <span className={`badge ${s.badge}`}>{s.label}</span>;
+      },
     },
     {
       id: "last",
-      header: "Last delivery",
+      header: tab === "downstreams" ? "Last delivery" : "Last sent",
+      phone: "show",
       sortValue: (t) => t.last?.at ?? 0,
       cell: (t) =>
         t.last ? (
-          formatAgo(t.last.at)
+          <>
+            {formatAgo(t.last.at)}
+            {t.last.ok &&
+              (tab === "downstreams"
+                ? t.last.millis > 0 && ` · ${t.last.millis.toLocaleString()} ms`
+                : t.last.status > 0 && ` · ${t.last.status}`)}
+          </>
         ) : (
           <span className="text-base-content-dim">never</span>
         ),
     },
     {
       id: "failed",
-      header: "Failed, 24 h",
-      align: "right",
+      header: "Failed 24 h",
+      phone: "show",
       sortValue: (t) => t.failed24h,
-      cell: (t) =>
-        t.failed24h > 0 ? (
-          <span className="text-error">{t.failed24h.toLocaleString()}</span>
-        ) : (
-          "—"
-        ),
+      cell: (t) => (
+        <span>
+          {t.failed24h.toLocaleString()}
+          {t.last && !t.last.ok && (
+            <span className="text-base-content-dim"> · {t.last.error || `status ${t.last.status}`}</span>
+          )}
+        </span>
+      ),
     },
   ];
 
@@ -294,17 +299,7 @@ export default function ForwardingPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="Forwarding"
-        subtitle="Where a copy of each new call goes: other Squelch servers, and webhooks that notify a service or a Discord channel."
-        actions={
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => panel.open({ key: `${tab}:create`, kind: "create" })}
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {tab === "downstreams" ? "Add downstream" : "Add webhook"}
-          </button>
-        }
+        subtitle="Send calls on to other Squelch servers, or notify other services when a call arrives."
       />
 
       <div role="tablist" aria-label="Forwarding kind" className="tabs tabs-border">
@@ -321,19 +316,35 @@ export default function ForwardingPanel() {
             >
               {t.label}
               {count !== undefined && (
-                <span className="badge badge-ghost badge-sm ml-2">{count}</span>
+                <span className={`${COUNT} ml-2`}>{count}</span>
               )}
             </button>
           );
         })}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="min-w-0 flex-1 text-base-content-dim">
+          {tab === "downstreams"
+            ? "Each downstream gets a copy of every call from the systems you pick, using that server's API key."
+            : "An HTTP POST per new call. Discord webhooks get a ready-made message; generic ones get JSON signed with your secret."}
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => panel.open({ key: `${tab}:create`, kind: "create" })}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {tab === "downstreams" ? "Add downstream" : "Add webhook"}
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox
           value={query}
           onChange={setQuery}
-          label="Search by label, address or system"
-          className="w-full sm:w-80"
+          label="Filter by label, address or system"
+          className="w-full md:max-w-[340px] md:min-w-[200px] md:flex-[1_1_240px]"
         />
         <FilterChips
           label="Show"

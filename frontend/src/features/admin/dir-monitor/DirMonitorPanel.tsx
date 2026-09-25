@@ -23,9 +23,9 @@ import DirMonitorDetails, { type MonitorAction } from "./DirMonitorDetails";
 import DirMonitorForm, { type DirMonitorFormValues } from "./DirMonitorForm";
 import {
   destinationLabel,
-  fileName,
   matchesFilter,
   matchesSearch,
+  monitorSummary,
   recorderType,
   stateBadge,
   type StatusFilter,
@@ -91,57 +91,62 @@ export default function DirMonitorPanel() {
       header: "Folder",
       phone: "title",
       sortValue: (m) => m.directory,
-      cell: (m) => (
-        <span className="flex flex-col">
-          <span className="font-mono text-sm break-all">{m.directory}</span>
-          <span className="text-xs text-base-content-dim">{recorderType(m.type).label}</span>
-        </span>
-      ),
-    },
-    {
-      id: "status",
-      header: "Status",
-      sortValue: (m) => stateBadge(m).id,
       cell: (m) => {
-        const b = stateBadge(m);
+        const summary = monitorSummary(m);
         return (
-          <span className="flex flex-col gap-0.5">
-            <span className={`badge badge-sm ${b.badge}`}>{b.label}</span>
-            {m.status.error && (
-              <span className="text-xs text-error">{m.status.error}</span>
-            )}
+          <span className="flex min-w-0 flex-col">
+            <span className="font-mono font-medium break-all">{m.directory}</span>
+            {summary && <span className="text-xs text-base-content-dim">{summary}</span>}
           </span>
         );
       },
     },
     {
+      id: "recorder",
+      header: "Recorder",
+      phone: "show",
+      sortValue: (m) => recorderType(m.type).label,
+      cell: (m) => recorderType(m.type).label,
+    },
+    {
       id: "destination",
-      header: "Calls go to",
+      header: "Sends to",
       phone: "hide",
       cell: (m) => destinationLabel(m, systemList, talkgroupList),
     },
     {
+      id: "status",
+      header: "Status",
+      phone: "show",
+      sortValue: (m) => stateBadge(m).id,
+      cell: (m) => {
+        const b = stateBadge(m);
+        return (
+          <span className="flex flex-col items-start gap-0.5">
+            <span className={`badge ${b.badge}`}>{b.label}</span>
+            {m.status.error && <span className="text-xs text-error">{m.status.error}</span>}
+          </span>
+        );
+      },
+    },
+    {
       id: "lastFile",
       header: "Last file",
+      phone: "show",
       sortValue: (m) => m.status.lastFileAt ?? 0,
       cell: (m) =>
         m.status.lastFileAt ? (
-          <span className="flex flex-col">
-            <span>{formatAgo(m.status.lastFileAt)}</span>
-            <span className="truncate font-mono text-xs text-base-content-dim" title={m.status.lastFile}>
-              {fileName(m.status.lastFile)}
-            </span>
-          </span>
+          <span title={m.status.lastFile}>{formatAgo(m.status.lastFileAt)}</span>
         ) : (
           <span className="text-base-content-dim">none yet</span>
         ),
     },
     {
       id: "calls",
-      header: "Calls, 24 h",
-      align: "right",
+      header: "Calls 24 h",
+      phone: "hide",
       sortValue: (m) => m.status.ingested24h,
-      cell: (m) => (m.status.ingested24h > 0 ? m.status.ingested24h.toLocaleString() : "—"),
+      cell: (m) => m.status.ingested24h.toLocaleString(),
     },
   ];
 
@@ -205,7 +210,7 @@ export default function DirMonitorPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="Folder monitors"
-        subtitle="Folders on this server that a recorder writes into. New recordings become calls without an upload."
+        subtitle="Watch a folder on the server and ingest new recordings as calls. Each monitor knows its recorder's file naming."
         actions={
           <button
             type="button"
@@ -222,8 +227,8 @@ export default function DirMonitorPanel() {
         <SearchBox
           value={query}
           onChange={setQuery}
-          label="Search by folder, recorder or destination"
-          className="w-full sm:w-80"
+          label="Filter by folder, recorder or destination"
+          className="w-full md:max-w-[340px] md:min-w-[200px] md:flex-[1_1_240px]"
         />
         <FilterChips
           label="Show"

@@ -4,7 +4,7 @@ export type Tab = "downstreams" | "webhooks";
 export type StatusFilter = "all" | "active" | "failing" | "disabled";
 
 export const TABS: readonly { id: Tab; label: string }[] = [
-  { id: "downstreams", label: "Downstreams" },
+  { id: "downstreams", label: "Downstream servers" },
   { id: "webhooks", label: "Webhooks" },
 ];
 
@@ -49,9 +49,10 @@ export interface DeliveryState {
 
 /** What one target's status badge says. */
 export function deliveryState(t: ForwardingTarget): DeliveryState {
-  if (t.disabled === 1) return { id: "disabled", label: "disabled", badge: "badge-ghost" };
-  if (t.last === null) return { id: "idle", label: "nothing sent yet", badge: "badge-ghost" };
-  if (t.last.ok) return { id: "ok", label: "ok", badge: "badge-success" };
+  if (t.disabled === 1) return { id: "disabled", label: "disabled", badge: "badge-neutral" };
+  if (t.last === null) return { id: "idle", label: "nothing sent yet", badge: "badge-neutral" };
+  // A webhook sends a notice; a downstream delivers the call itself.
+  if (t.last.ok) return { id: "ok", label: "type" in t ? "sending" : "delivering", badge: "badge-success" };
   return { id: "failing", label: "failing", badge: "badge-error" };
 }
 

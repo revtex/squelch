@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Ban, CheckCircle2, Pencil, Send, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, Pencil, Send, Trash2, TriangleAlert } from "lucide-react";
 import {
   ActionButton,
   DetailsPanel,
   FactList,
   InlineConfirm,
+  Notice,
   PanelSection,
   formatAgo,
   formatDateTime,
@@ -101,7 +102,6 @@ export default function TargetDetails({
   };
 
   const facts: Fact[] = [
-    { label: "Address", value: <span className="font-mono break-all">{t.url}</span> },
     ...extraFacts,
     { label: "Systems", value: systemsLabel(t, systems) },
     {
@@ -113,8 +113,8 @@ export default function TargetDetails({
         : "Nothing sent yet",
     },
     { label: "Last success", value: t.lastOkAt ? formatDateTime(t.lastOkAt) : "Never" },
-    { label: "Sent, 24 h", value: t.sent24h.toLocaleString() },
-    { label: "Failed, 24 h", value: t.failed24h.toLocaleString() },
+    { label: "Sent 24 h", value: t.sent24h.toLocaleString() },
+    { label: "Failed 24 h", value: t.failed24h.toLocaleString() },
   ];
 
   const ask = pending ? question(pending, name, kindLabel) : null;
@@ -122,23 +122,21 @@ export default function TargetDetails({
   return (
     <DetailsPanel
       title={name}
-      subtitle={kindLabel}
-      badges={<span className={`badge badge-sm ${state.badge}`}>{state.label}</span>}
+      subtitle={<span className="font-mono break-all">{t.url}</span>}
+      badges={<span className={`badge ${state.badge}`}>{state.label}</span>}
       onClose={onClose}
     >
-      <FactList facts={facts} />
-
       {state.id === "failing" && t.last && (
-        <div className="alert alert-error text-sm">
-          <span>
-            The last delivery failed: {t.last.error || `status ${t.last.status}`}. Calls
-            are retried three times and then dropped for this {kindLabel.toLowerCase()}.
-          </span>
-        </div>
+        <Notice tone="bad" icon={<TriangleAlert />}>
+          <b>The last delivery failed: {t.last.error || `status ${t.last.status}`}.</b> Calls are retried
+          three times and then dropped for this {kindLabel.toLowerCase()}.
+        </Notice>
       )}
+
+      <FactList facts={facts} />
       {children}
       {error && (
-        <div role="alert" className="alert alert-error text-sm">
+        <div role="alert" className="alert alert-error">
           {error}
         </div>
       )}
@@ -164,14 +162,14 @@ export default function TargetDetails({
               onClick={() => void sendTest()}
             />
             {test && "refused" in test && (
-              <div role="alert" className="alert alert-error text-sm">
+              <div role="alert" className="alert alert-error">
                 {test.refused}
               </div>
             )}
             {test && "ok" in test && (
               <div
                 role={test.ok ? "status" : "alert"}
-                className={`alert text-sm ${test.ok ? "alert-success" : "alert-error"}`}
+                className={`alert ${test.ok ? "alert-success" : "alert-error"}`}
               >
                 {test.ok ? "Test passed. " : "Test failed. "}
                 {resultLine(test)}

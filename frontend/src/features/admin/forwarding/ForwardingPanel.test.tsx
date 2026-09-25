@@ -130,15 +130,14 @@ describe("ForwardingPanel", () => {
 
   it("lists downstreams with delivery status and explains a failing one", () => {
     renderPanel();
-    expect(screen.getByRole("tab", { name: /Downstreams/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Downstream servers/ })).toHaveAttribute("aria-selected", "true");
     const table = screen.getByRole("table", { name: "Downstreams" });
     const ok = within(table).getByText("Public mirror").closest("tr")!;
-    expect(within(ok).getByText("ok")).toBeInTheDocument();
+    expect(within(ok).getByText("delivering")).toBeInTheDocument();
     expect(within(ok).getByText("County")).toBeInTheDocument();
     const failing = within(table).getByText("old.example.org").closest("tr")!;
     expect(within(failing).getByText("failing")).toBeInTheDocument();
-    expect(within(failing).getByText("the server refused the API key")).toBeInTheDocument();
-    expect(within(failing).getByText("12")).toBeInTheDocument();
+    expect(within(failing).getByText(/^12/)).toHaveTextContent("12 · the server refused the API key");
   });
 
   it("opens the webhooks tab from the address and filters to disabled", async () => {

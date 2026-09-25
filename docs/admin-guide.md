@@ -288,9 +288,9 @@ See the [Recorder Guide](recorder-guide.md) for how to configure your recorder w
 
 Folder monitors watch a folder on the server and import the recordings a recorder writes into it, so a recorder on the same machine (or a mounted share) needs no upload at all.
 
-The list shows each monitor's folder and recorder type, its **runtime state**, where its calls go, the last file it saw and how many calls it made in the last 24 hours. The state is one of **watching** (kernel file events), **polling** (scanning on a timer), **stopped** (with the reason on the row, e.g. the folder is gone or cannot be read) or **disabled**. A running monitor that hit a read error keeps its state and shows the error beside it. Search by folder, recorder or destination, and filter to **Running**, **Stopped** or **Disabled**.
+The list shows each monitor's folder, with its file type and options under it ("*.wav · deletes after import · polling"), its recorder, where it sends calls (**From filename**, or a fixed system and talkgroup), its **runtime state**, when it last saw a file and how many calls it made in the last 24 hours. The state is one of **watching** (kernel file events), **polling** (scanning on a timer), **stopped** (with the reason on the row, e.g. the folder is gone or cannot be read) or **disabled**. A running monitor that hit a read error keeps its state and shows the error beside it. Search by folder, recorder or destination, and filter to **Running**, **Stopped** or **Disabled**.
 
-The **›** button opens the monitor's details: its settings in plain words, when the current state began, the last file and what came of it ("became call 44 on system 101, talkgroup 5200", "skipped: the audio file is too small to be a call", "could not be read: …"), a **Restart** button for a stopped monitor whose folder has come back, a link to that monitor's log lines, **Edit**, **Disable** or **Enable**, and **Delete**. Every change is written to the audit log.
+The **›** button opens the monitor's details. A stopped monitor leads with a red notice giving the last error. Then come its settings in plain words, when the current state began, the last file and what came of it ("became call 44 on system 101, talkgroup 5200", "skipped: the audio file is too small to be a call", "could not be read: …"), a **Restart** button for a stopped monitor whose folder has come back, a link to that monitor's log lines, **Edit**, **Disable** or **Enable**, and **Delete**. Every change is written to the audit log.
 
 ### Adding a monitor
 
@@ -309,7 +309,7 @@ Every monitor has a **folder** (an absolute path on the server; **Browse** walks
 
 The wait means two things: when watching, how long a file must sit unchanged before it is read, so the recorder can finish writing (at least 2 seconds); when polling, how often the folder is scanned (at least half a second).
 
-Recorders that do not name the system in their files can **send every call to** a fixed system and, optionally, talkgroup. Others read it from the files.
+Recorders that do not name the system in their files can **send every call to** a fixed system and, optionally, talkgroup. Others take it **from the filename** or the files.
 
 ### Filename masks
 
@@ -331,9 +331,9 @@ Example: `2025-01-15_143022_101_5200.wav` with the mask `#DATE_#TIME_#SYS_#TG` g
 
 ## Forwarding
 
-**Forwarding** is where a copy of each new call goes once Squelch has accepted it. It has two tabs: **Downstreams**, other Squelch servers that receive the call and its audio, and **Webhooks**, URLs that receive a message about the call. Both are listed the same way: a label, the address, a status badge (**ok**, **failing** with the reason, **nothing sent yet** or **disabled**), the systems they get, when the last delivery happened and how many failed in the last 24 hours. Search by label, address or system, and filter to **Active**, **Failing** or **Disabled**.
+**Forwarding** is where a copy of each new call goes once Squelch has accepted it. It has two tabs: **Downstream servers**, other Squelch servers that receive the call and its audio, and **Webhooks**, URLs that receive a message about the call. Each tab opens with a line on what it does and its **Add** button. Both are listed the same way: a label with the address under it, the systems they get, a status badge (**delivering** or **sending**, **failing**, **nothing sent yet** or **disabled**), when the last delivery happened, with its time or response code, and how many failed in the last 24 hours, followed by the last error. Search by label, address or system, and filter to **Active**, **Failing** or **Disabled**.
 
-The **›** button opens a target's details: the delivery facts, a **Send a test** button that posts a test message and shows what the other end answered right there, **Edit**, **Disable** or **Enable**, and **Delete**. Every change and every test is written to the audit log with the target's label.
+The **›** button opens a target's details. A failing target leads with a red notice giving the last error. Then come the delivery facts, a **Send a test** button that posts a test message and shows what the other end answered right there, **Edit**, **Disable** or **Enable**, and **Delete**. Every change and every test is written to the audit log with the target's label.
 
 ### Downstreams
 
