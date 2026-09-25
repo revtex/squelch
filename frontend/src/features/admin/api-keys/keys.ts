@@ -67,13 +67,29 @@ export function matchesSearch(k: AdminApiKey, systems: AdminSystem[], q: string)
     .includes(needle);
 }
 
-/** A curl that checks the key against this server without uploading a call. */
+/**
+ * A curl that checks the key against this server without uploading a call.
+ * The endpoint answers 204 with no body, so the command prints the status.
+ */
 export function testCommand(secret: string, origin: string): string {
-  return `curl -sS -X POST -H "Authorization: Bearer ${secret}" ${origin}/api/v1/calls/test`;
+  return `curl -sS -o /dev/null -w "%{http_code}\\n" -X POST -H "Authorization: Bearer ${secret}" ${origin}/api/v1/calls/test`;
 }
 
-/** The Trunk-Recorder plugin entry for this server, ready to paste. */
+/** Which Trunk-Recorder plugin the snippet is written for. */
+export type RecorderPlugin = "squelch" | "rdioscanner";
+
+/** Where the Squelch uploader plugin's source and build steps live. */
+export const SQUELCH_PLUGIN_URL = "https://github.com/revtex/squelch-tr-uploader";
+
+/**
+ * The Trunk-Recorder plugin entry for this server, ready to paste.
+ *
+ * The Squelch uploader posts to /api/v1/calls and takes one key for the whole
+ * plugin. The rdio-scanner uploader ships with Trunk-Recorder but posts to
+ * the deprecated /api/call-upload and wants the key on every system.
+ */
 export function trunkRecorderSnippet(
+  plugin: RecorderPlugin,
   secret: string,
   origin: string,
   systems: AdminSystem[],
@@ -81,21 +97,24 @@ export function trunkRecorderSnippet(
 ): string {
   const chosen =
     allowed.length > 0 ? systems.filter((s) => allowed.includes(s.id)) : systems;
-  const entries = (chosen.length > 0 ? chosen : [{ label: "your_system", systemId: 1 }]).map(
-    (s) => ({
-      shortName: s.label.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
-      apiKey: secret,
-      systemId: s.systemId,
-    }),
-  );
-  return JSON.stringify(
-    {
-      name: "Squelch",
-      library: "librdioscanner_uploader.so",
-      server: origin,
-      systems: entries,
-    },
-    null,
-    2,
-  );
+  const targets = (chosen.length > 0 ? chosen : [{ label: "your_system", systemId: 1 }]).map((s) => ({
+    shortName: s.label.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+    systemId: s.systemId,
+  }));
+  const entry =
+    plugin === "squelch"
+      ? {
+          name: "Squelch",
+          library: "libsquelch_uploader.so",
+          server: origin,
+          apiKey: secret,
+          systems: targets,
+        }
+      : {
+          name: "Squelch",
+          library: "librdioscanner_uploader.so",
+          server: origin,
+          systems: targets.map((t) => ({ shortName: t.shortName, apiKey: secret, systemId: t.systemId })),
+        };
+  return JSON.stringify(entry, null, 2);
 }

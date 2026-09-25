@@ -130,7 +130,16 @@ describe("ApiKeysPanel", () => {
     const secret = within(await screen.findByRole("dialog", { name: "Site B created" }));
     expect(secret.getByLabelText("Secret")).toHaveValue("new-secret-123");
     expect(secret.getByText(/Bearer new-secret-123/)).toBeInTheDocument();
-    expect(secret.getByText(/librdioscanner_uploader\.so/)).toBeInTheDocument();
+    // The Squelch uploader is the default: one key for the plugin, native endpoint.
+    const entry = () => secret.getByText(/"library"/).textContent ?? "";
+    expect(entry()).toMatch(/libsquelch_uploader\.so/);
+    expect(JSON.parse(entry())).toMatchObject({ apiKey: "new-secret-123", systems: [{ systemId: expect.any(Number) }] });
+    expect(secret.getByText(/squelch-tr-uploader/)).toHaveAttribute("href", "https://github.com/revtex/squelch-tr-uploader");
+    // The built-in rdio-scanner uploader stays one click away, with the key on each system.
+    await user.click(secret.getByRole("radio", { name: "Built-in rdio-scanner" }));
+    expect(entry()).toMatch(/librdioscanner_uploader\.so/);
+    expect(JSON.parse(entry()).systems[0]).toMatchObject({ apiKey: "new-secret-123" });
+    expect(secret.getByText(/deprecated/)).toBeInTheDocument();
   });
 
   it("rotates a secret from the details panel and shows the new one", async () => {

@@ -1,7 +1,20 @@
-import { DetailsPanel, formatDateTime } from "@/features/admin/_shell";
+import { useState } from "react";
+import { DetailsPanel, FilterChips, formatDateTime } from "@/features/admin/_shell";
 import type { AdminApiKey, AdminSystem } from "@/types";
 import CopyField from "./CopyField";
-import { allowedSystemIds, keyName, testCommand, trunkRecorderSnippet } from "./keys";
+import {
+  allowedSystemIds,
+  keyName,
+  SQUELCH_PLUGIN_URL,
+  testCommand,
+  trunkRecorderSnippet,
+  type RecorderPlugin,
+} from "./keys";
+
+const PLUGINS = [
+  { id: "squelch", label: "Squelch uploader" },
+  { id: "rdioscanner", label: "Built-in rdio-scanner" },
+] as const;
 
 export interface NewSecretPanelProps {
   apiKey: AdminApiKey;
@@ -25,6 +38,7 @@ export default function NewSecretPanel({
   onClose,
 }: NewSecretPanelProps) {
   const origin = window.location.origin;
+  const [plugin, setPlugin] = useState<RecorderPlugin>("squelch");
   return (
     <DetailsPanel
       title={previousUntil ? `New secret for ${keyName(apiKey)}` : `${keyName(apiKey)} created`}
@@ -48,13 +62,34 @@ export default function NewSecretPanel({
         label="Test command"
         value={testCommand(secret, origin)}
         multiline
-        hint="Run it on the recorder's machine. A 200 means the key and the address are right."
+        hint="Run it on the recorder's machine. It prints 204 when the key and the address are right, and 401 when the key is refused."
       />
+      <div className="fieldset">
+        <span className="fieldset-legend">Trunk-Recorder plugin</span>
+        <FilterChips label="Trunk-Recorder plugin" options={PLUGINS} value={plugin} onChange={setPlugin} />
+      </div>
       <CopyField
         label="Trunk-Recorder plugin entry"
-        value={trunkRecorderSnippet(secret, origin, systems, allowedSystemIds(apiKey))}
+        value={trunkRecorderSnippet(plugin, secret, origin, systems, allowedSystemIds(apiKey))}
         multiline
-        hint='Add it to the "plugins" list in config.json and set each shortName to match your Trunk-Recorder system.'
+        hint={
+          plugin === "squelch" ? (
+            <>
+              Needs the Squelch uploader built into Trunk-Recorder: clone{" "}
+              <a className="link" href={SQUELCH_PLUGIN_URL} target="_blank" rel="noreferrer">
+                squelch-tr-uploader
+              </a>{" "}
+              into its <code>user_plugins/</code> folder and rebuild. Add this entry to the &quot;plugins&quot; list in
+              config.json and set each shortName to match a Trunk-Recorder system.
+            </>
+          ) : (
+            <>
+              Ships with Trunk-Recorder, so there is nothing to build. It posts to the older{" "}
+              <code>/api/call-upload</code>, which is deprecated: Overview lists these uploads until the recorder
+              moves to the Squelch uploader.
+            </>
+          )
+        }
       />
     </DetailsPanel>
   );

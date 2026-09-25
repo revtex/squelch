@@ -35,14 +35,46 @@ Before connecting a recorder, make sure:
 
 ## Trunk-Recorder
 
-Trunk-Recorder is the most common recorder used with Squelch. You can connect it two ways.
+Trunk-Recorder is the most common recorder used with Squelch. You can connect it three ways. The quickest start is to create an API key in **Admin → API keys**: the panel that shows the secret also gives a test command and a plugin entry for either uploader, filled in with your server and systems.
 
-### Option A: HTTP Upload (Recommended)
+### Option A: Squelch uploader (recommended)
 
-This uses Trunk-Recorder's built-in `rdioscanner_uploader` plugin to send calls directly to Squelch over the network.
+The [Squelch uploader](https://github.com/revtex/squelch-tr-uploader) is a Trunk-Recorder plugin written for Squelch. It posts calls to the native `/api/v1/calls` endpoint, retries failed uploads, and needs Trunk-Recorder 5.0 or later. It is built from source together with Trunk-Recorder.
 
-1. Open your Trunk-Recorder `config.json`.
-2. In the `"plugins"` array, add an entry using the `librdioscanner_uploader.so` library:
+1. Clone the plugin into the `user_plugins/` folder of your Trunk-Recorder source tree, then build and install Trunk-Recorder as usual:
+   ```bash
+   cd /path/to/trunk-recorder
+   mkdir -p user_plugins
+   git clone https://github.com/revtex/squelch-tr-uploader.git user_plugins/squelch_uploader
+   mkdir -p build && cd build
+   cmake .. && make -j"$(nproc)" && sudo make install
+   ```
+   The library installs as `libsquelch_uploader.so` beside Trunk-Recorder's own plugins.
+2. In the `"plugins"` array of your Trunk-Recorder `config.json`, add:
+   ```json
+   {
+     "name": "Squelch",
+     "library": "libsquelch_uploader.so",
+     "server": "http://<your-squelch-address>:3022",
+     "apiKey": "your-api-key-here",
+     "systems": [
+       { "shortName": "your_system", "systemId": 1 }
+     ]
+   }
+   ```
+3. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
+4. `apiKey` is the key you created in **Admin → API keys**. This plugin takes one key for every system it uploads. Unit names come from Trunk-Recorder's own unit tags, so set `unitTagsFile` on the system in Trunk-Recorder as usual.
+5. Each entry in `"systems"` maps a Trunk-Recorder system to a Squelch system:
+   - `shortName` — must match the `"shortName"` of a system in your Trunk-Recorder config.
+   - `systemId` — must match the **System ID** of a system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch creates the system on the first upload.
+6. Optionally set `"maxRetries"` for how many times a failed upload is tried again.
+7. Restart Trunk-Recorder. Calls should start appearing in Squelch within seconds.
+
+### Option B: Built-in rdio-scanner uploader
+
+Trunk-Recorder ships an `rdioscanner_uploader` plugin, so this option needs no build. It posts to Squelch's rdio-scanner compatible `/api/call-upload`, which is **deprecated**: it still works, but Overview lists these uploads under **Needs attention** until the recorder moves to the Squelch uploader.
+
+1. In the `"plugins"` array of your Trunk-Recorder `config.json`, add an entry using the `librdioscanner_uploader.so` library:
    ```json
    {
      "name": "Squelch",
@@ -57,16 +89,11 @@ This uses Trunk-Recorder's built-in `rdioscanner_uploader` plugin to send calls 
      ]
    }
    ```
-3. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
-4. The `"name"` field can be anything — it's just a label.
-5. Each entry in `"systems"` maps a Trunk-Recorder system (by `shortName`) to a Squelch system:
-   - `shortName` — must match the `"shortName"` of a system in your Trunk-Recorder config.
-   - `apiKey` — the API key you created in **Admin → API keys**. Multiple systems can share the same key.
-   - `systemId` — the radio system ID that identifies this system. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch will create the system automatically on the first upload.
-6. If you have multiple Trunk-Recorder systems (e.g. multi-site), add an entry for each one. They can all use the same API key and even the same `systemId` if they belong to the same logical system.
-7. Restart Trunk-Recorder. Calls should start appearing in Squelch within seconds.
+2. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
+3. Each entry in `"systems"` maps a Trunk-Recorder system (by `shortName`) to a Squelch system, as in Option A, but this plugin wants the `apiKey` on every system entry. Multiple systems can share the same key.
+4. Restart Trunk-Recorder.
 
-### Option B: Directory Monitor
+### Option C: Directory Monitor
 
 If Trunk-Recorder runs on the same machine as Squelch (or writes to a shared filesystem), you can have Squelch watch the output directory instead.
 

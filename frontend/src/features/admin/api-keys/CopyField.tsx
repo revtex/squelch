@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
 import { useToast } from "@/features/admin/_shell";
 
@@ -7,7 +7,7 @@ export interface CopyFieldProps {
   value: string;
   /** Show the value in a multi-line block rather than a one-line field. */
   multiline?: boolean;
-  hint?: string;
+  hint?: ReactNode;
 }
 
 /** A read-only value with a Copy button, for secrets and commands. */
@@ -57,7 +57,8 @@ export default function CopyField({ label, value, multiline = false, hint }: Cop
           onFocus={(e) => e.currentTarget.select()}
         />
       )}
-      {hint && <p className="label whitespace-normal">{hint}</p>}
+      {/* block: the label style is a flex row, which would split a hint with a link into columns */}
+      {hint && <p className="label block whitespace-normal">{hint}</p>}
     </div>
   );
 }

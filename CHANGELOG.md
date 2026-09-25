@@ -252,6 +252,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A new API key comes with a Squelch uploader entry.** The plugin entry
+  shown with the secret is now written for the Squelch uploader
+  (`libsquelch_uploader.so`, one key for the plugin), which posts to
+  `/api/v1/calls`. **Built-in rdio-scanner** switches it back to the uploader
+  that ships with Trunk-Recorder, marked as posting to the deprecated
+  `/api/call-upload`. The test command now prints the status code, since a
+  good key gets an empty 204, and the hint no longer says to expect 200. The
+  recorder guide covers both uploaders.
 - **Squelch classic is calmer.** The default theme kept Material's bright
   green, sky blue and signal red; its accents are now muted to sit with the
   other six themes: green `#6a9a6c`, blue `#6fa3c4` and red `#d9675e`. The

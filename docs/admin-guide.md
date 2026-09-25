@@ -285,7 +285,7 @@ API keys authenticate recorders that upload calls to Squelch over HTTP. **Admin 
 | Rate limit | Calls a minute this key may upload. Blank uses the server default. |
 | Enabled    | Turn off to prepare a key you will switch on later.                |
 
-After you save, the **secret is shown once**, with a copy button, a `curl` test command and a ready-made Trunk-Recorder plugin entry. It cannot be looked up later; rotate the key if it is lost.
+After you save, the **secret is shown once**, with a copy button, a `curl` test command and a ready-made Trunk-Recorder plugin entry. The test command prints `204` when the key and the address are right and `401` when the key is refused. The plugin entry is written for the **Squelch uploader** ([squelch-tr-uploader](https://github.com/revtex/squelch-tr-uploader), built into Trunk-Recorder from source), which posts to `/api/v1/calls`; **Built-in rdio-scanner** switches it to the uploader that ships with Trunk-Recorder, which posts to the deprecated `/api/call-upload` and shows under **Needs attention** on Overview. The secret cannot be looked up later; rotate the key if it is lost.
 
 The **›** button opens a key's details. The header shows its fingerprint (a short, stable handle that never reveals the secret). The details show where and when it was last used, and its label, systems and rate limit can be changed there and saved with **Save**. The actions are:
 
