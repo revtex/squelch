@@ -78,7 +78,9 @@ type Querier interface {
 	// The account a signed-in device belongs to, if the device can still mint
 	// an access token. Backed by idx_refresh_tokens_family_id.
 	GetActiveSessionOwner(ctx context.Context, arg GetActiveSessionOwnerParams) (GetActiveSessionOwnerRow, error)
-	// Returns aggregate stats: today's calls, this week's calls, total calls.
+	// Returns aggregate stats: today's calls, yesterday's calls up to the same
+	// time of day (a fair comparison while today is still running), this
+	// week's calls, total calls and when the newest call was made.
 	GetActivityStats(ctx context.Context, arg GetActivityStatsParams) (GetActivityStatsRow, error)
 	GetAppState(ctx context.Context) (AppState, error)
 	GetBookmarkByCallAndUser(ctx context.Context, arg GetBookmarkByCallAndUserParams) (Bookmark, error)

@@ -676,10 +676,48 @@ func (c *Client) dispatchV1(ctx context.Context, data []byte) {
 	}
 }
 
+// activityRanges are the Overview's time ranges; anything else is refused.
+var activityRanges = map[string]time.Duration{
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
+// activityCutoff reads the optional {"range": "24h"|"7d"|"30d"} parameter
+// and returns the unix time the range starts at. No range means 24 h.
+func activityCutoff(params json.RawMessage, now time.Time) (int64, error) {
+	var p struct {
+		Range string `json:"range"`
+	}
+	if len(params) > 0 && string(params) != "null" {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return 0, admin.UserError("range must be 24h, 7d or 30d")
+		}
+	}
+	if p.Range == "" {
+		p.Range = "24h"
+	}
+	d, ok := activityRanges[p.Range]
+	if !ok {
+		return 0, admin.UserError("range must be 24h, 7d or 30d")
+	}
+	return now.Add(-d).Unix(), nil
+}
+
+// sameTimeYesterday is the start of yesterday and this moment's time of
+// day yesterday, so today's running count compares like with like.
+func sameTimeYesterday(now time.Time) (start, until int64) {
+	y, m, d := now.Date()
+	start = time.Date(y, m, d-1, 0, 0, 0, 0, now.Location()).Unix()
+	until = time.Date(y, m, d-1, now.Hour(), now.Minute(), now.Second(), 0, now.Location()).Unix()
+	return start, until
+}
+
 func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, error) {
 	now := time.Now()
 	y, m, d := now.Date()
 	todayStart := time.Date(y, m, d, 0, 0, 0, 0, now.Location()).Unix()
+	yesterdayStart, yesterdayUntil := sameTimeYesterday(now)
 
 	weekday := now.Weekday()
 	if weekday == time.Sunday {
@@ -688,8 +726,10 @@ func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, e
 	weekStart := time.Date(y, m, d-int(weekday-time.Monday), 0, 0, 0, 0, now.Location()).Unix()
 
 	stats, err := c.hub.queries.GetActivityStats(ctx, db.GetActivityStatsParams{
-		TodayStart: todayStart,
-		WeekStart:  weekStart,
+		TodayStart:     todayStart,
+		YesterdayStart: yesterdayStart,
+		YesterdayUntil: yesterdayUntil,
+		WeekStart:      weekStart,
 	})
 	if err != nil {
 		return nil, err
@@ -697,15 +737,22 @@ func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, e
 
 	return map[string]any{
 		"callsToday":      stats.CallsToday,
+		"callsYesterday":  stats.CallsYesterday,
 		"callsThisWeek":   stats.CallsThisWeek,
 		"callsTotal":      stats.CallsTotal,
+		"lastCallAt":      stats.LastCallAt,
 		"activeListeners": c.hub.ClientCount(),
 		"uptime":          int64(time.Since(StartTime).Seconds()),
+		"startedAt":       StartTime.Unix(),
+		"version":         c.hub.version,
 	}, nil
 }
 
-func (c *Client) opActivityChart(ctx context.Context, _ json.RawMessage) (any, error) {
-	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+func (c *Client) opActivityChart(ctx context.Context, params json.RawMessage) (any, error) {
+	cutoff, err := activityCutoff(params, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := c.hub.queries.GetCallsPerHour(ctx, cutoff)
 	if err != nil {
 		return nil, err
@@ -718,8 +765,11 @@ func (c *Client) opActivityChart(ctx context.Context, _ json.RawMessage) (any, e
 	return map[string]any{"buckets": buckets}, nil
 }
 
-func (c *Client) opTopTalkgroups(ctx context.Context, _ json.RawMessage) (any, error) {
-	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+func (c *Client) opTopTalkgroups(ctx context.Context, params json.RawMessage) (any, error) {
+	cutoff, err := activityCutoff(params, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := c.hub.queries.GetTopTalkgroups(ctx, db.GetTopTalkgroupsParams{
 		DateTime: cutoff,
 		Limit:    10,
@@ -731,11 +781,13 @@ func (c *Client) opTopTalkgroups(ctx context.Context, _ json.RawMessage) (any, e
 	tgs := make([]map[string]any, len(rows))
 	for i, r := range rows {
 		tgs[i] = map[string]any{
-			"talkgroupId":    r.TalkgroupID.Int64,
-			"talkgroupLabel": r.TalkgroupLabel.String,
-			"talkgroupName":  r.TalkgroupName.String,
-			"systemLabel":    r.SystemLabel.String,
-			"callCount":      r.CallCount,
+			"talkgroupId":     r.TalkgroupID.Int64,
+			"systemId":        r.SystemID,
+			"talkgroupNumber": r.TalkgroupNumber.Int64,
+			"talkgroupLabel":  r.TalkgroupLabel.String,
+			"talkgroupName":   r.TalkgroupName.String,
+			"systemLabel":     r.SystemLabel.String,
+			"callCount":       r.CallCount,
 		}
 	}
 	return map[string]any{"talkgroups": tgs}, nil
