@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Shared links, rebuilt.** The list shows how many times each shared
+  call has been opened and when it expires (expired links are dimmed and can
+  be filtered or revoked in one go), with search by talkgroup, system or
+  user. A link's details offer **Copy link**, **Open shared page** and
+  **Revoke** with a ten-second **Undo** that keeps the same address. Errors
+  while revoking are now shown instead of ignored.
 - **API keys, rebuilt.** Keys are listed by label with their status, the
   systems they may upload to by name, calls uploaded in the last 24 hours and
   when and from where they were last used, with search and filters for

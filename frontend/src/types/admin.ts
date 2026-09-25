@@ -277,6 +277,7 @@ export interface RRApplyResponse {
 export interface SharedLinkAdmin {
   id: number;
   callId: number;
+  userId: number;
   token: string;
   createdAt: number;
   sharedBy: string;
@@ -285,6 +286,22 @@ export interface SharedLinkAdmin {
   systemLabel: string;
   talkgroupLabel: string;
   talkgroupName: string;
+  /** The link's own expiry, if it has one. */
+  expiresAt: number | null;
+  /** When the link stops working, its own expiry or the server-wide one; null means never. */
+  effectiveExpiresAt: number | null;
+  expired: boolean;
+  /** Times the public page fetched the call. */
+  opens: number;
+  lastOpenedAt: number | null;
+}
+
+/** Enough to put a revoked link back with the same URL. */
+export interface RestoreSharedLinkPayload {
+  callId: number;
+  userId: number;
+  token: string;
+  createdAt: number;
   expiresAt: number | null;
 }
 

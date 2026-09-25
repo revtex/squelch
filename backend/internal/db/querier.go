@@ -149,6 +149,7 @@ type Querier interface {
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error
 	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
+	RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error
@@ -156,6 +157,7 @@ type Querier interface {
 	SetSetupComplete(ctx context.Context, setupComplete int64) error
 	SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error
 	TouchAPIKeyUsed(ctx context.Context, arg TouchAPIKeyUsedParams) error
+	TouchSharedLinkOpened(ctx context.Context, arg TouchSharedLinkOpenedParams) error
 	TouchTRInstanceLastSeen(ctx context.Context, arg TouchTRInstanceLastSeenParams) error
 	TranscriptionStats(ctx context.Context, since int64) (TranscriptionStatsRow, error)
 	TranscriptionsByLanguage(ctx context.Context) ([]TranscriptionsByLanguageRow, error)

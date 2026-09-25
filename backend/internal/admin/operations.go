@@ -507,8 +507,11 @@ func mapSharedLink(r db.ListSharedLinksRow) map[string]any {
 	m := map[string]any{
 		"id":             r.ID,
 		"callId":         r.CallID,
+		"userId":         r.UserID,
 		"token":          r.Token,
 		"createdAt":      r.CreatedAt,
+		"opens":          r.Opens,
+		"lastOpenedAt":   nullInt(r.LastOpenedAt),
 		"sharedBy":       r.SharedBy,
 		"dateTime":       r.DateTime,
 		"duration":       r.Duration.Int64,

@@ -112,8 +112,10 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"webhooks.delete": o.WebhooksDelete,
 
 		// Shared Links
-		"shared-links.list":   o.SharedLinksList,
-		"shared-links.delete": o.SharedLinksDelete,
+		"shared-links.list":           o.SharedLinksList,
+		"shared-links.delete":         o.SharedLinksDelete,
+		"shared-links.restore":        o.SharedLinksRestore,
+		"shared-links.revoke-expired": o.SharedLinksRevokeExpired,
 
 		// Config
 		"config.get":    o.ConfigGet,

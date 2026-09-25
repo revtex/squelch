@@ -20,6 +20,7 @@ import type {
   CreateUserPayload,
   UpdateUserPayload,
   SharedLinkAdmin,
+  RestoreSharedLinkPayload,
   ServerDirectoryListResponse,
   RRApplyRequest,
   RRApplyResponse,
@@ -422,6 +423,19 @@ export function useGetSharedLinksQuery() {
 export function useDeleteSharedLinkMutation() {
   return useWsMutation<void, number>("shared-links.delete", {
     transformArg: (id) => ({ id }),
+  });
+}
+
+/** Puts a just-revoked link back, same token, for an undo. */
+export function useRestoreSharedLinkMutation() {
+  return useWsMutation<{ restored: boolean }, RestoreSharedLinkPayload>(
+    "shared-links.restore",
+  );
+}
+
+export function useRevokeExpiredSharedLinksMutation() {
+  return useWsMutation<{ revoked: number }, void>("shared-links.revoke-expired", {
+    transformArg: () => ({}),
   });
 }
 

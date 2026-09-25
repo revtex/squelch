@@ -51,6 +51,7 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 		"lockouts.clear", "lockouts.list",
 		"sessions.list", "sessions.revoke",
 		"shared-links.delete", "shared-links.list",
+		"shared-links.restore", "shared-links.revoke-expired",
 		"systems.create", "systems.delete", "systems.list", "systems.update",
 		"tags.create", "tags.delete", "tags.list", "tags.update",
 		"talkgroups.create", "talkgroups.delete", "talkgroups.list", "talkgroups.update",

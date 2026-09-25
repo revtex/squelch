@@ -343,6 +343,12 @@ func (h *Handler) GetSharedCallByToken(c *gin.Context) {
 		c.JSON(http.StatusGone, gin.H{"error": "shared link has expired"})
 		return
 	}
+	if err := h.queries.TouchSharedLinkOpened(ctx, db.TouchSharedLinkOpenedParams{
+		Now: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		ID:  sl.ID,
+	}); err != nil {
+		slog.Warn("failed to count a shared link open", "token", token, "error", err)
+	}
 
 	resp := ShareResponse{
 		Token:          sl.Token,

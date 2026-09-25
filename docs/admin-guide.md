@@ -307,16 +307,11 @@ Downstream API keys are encrypted at rest in the database when an [encryption ke
 
 ## Shared Links
 
-Lists all shared call links created by users. Each entry shows:
+Lists every call a listener has shared by link, newest first: the talkgroup and system, when the call was recorded and how long it is, who shared it and when, how many times the public page has been opened, and when the link expires. Expired links are dimmed and labelled. Search by talkgroup, system or user, and filter to **Active** or **Expired**.
 
-- System and talkgroup
-- Call date and duration
-- Who shared it and when
-- Expiration date (or "Never")
+The **›** button opens a link's details with **Copy link**, **Open shared page** (plays the call the way a visitor sees it) and **Revoke**. Revoking asks first and offers a ten-second **Undo** that puts the link back with the same address. Tick rows to revoke several at once, or use **Revoke N expired links** in the header to clear the ones that no longer work.
 
-You can delete shared links from here. Deleting a link makes the call eligible for normal pruning.
-
-Shared link creation and expiry are controlled in **Settings → Sharing & Notifications**.
+Revoking a link makes the call eligible for normal pruning again. Whether links can be created and how long they last are set in **Settings → Sharing**.
 
 ---
 
