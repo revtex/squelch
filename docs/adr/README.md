@@ -43,6 +43,7 @@ than invent it: a reconstructed alternative is worse than none.
 | [0008](0008-ip-blocks-are-global-with-a-server-side-trusted-list.md) | IP blocks are global, with a trusted list only the host can change | Accepted |
 | [0009](0009-country-from-a-local-database-only.md) | Country comes from a local database file only | Accepted |
 | [0010](0010-admin-has-its-own-type-and-component-styling.md) | The admin has its own type and component styling, derived from the scanner theme | Accepted |
+| [0011](0011-the-wordmark-is-fixed-identity.md) | The SQUELCH wordmark is fixed identity, outside any redesign | Accepted |
 
 ## Not yet written
 

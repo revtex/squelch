@@ -134,6 +134,13 @@ describe("TranscriptionPanel", () => {
     expect(screen.getByRole("tab", { name: /Models/ })).toHaveTextContent("2");
   });
 
+  it("does not claim more than 100% of calls after a catch-up", () => {
+    stats = { ...stats, recent24h: 400, calls24h: 180 };
+    renderPanel();
+    expect(screen.getByText("Transcribed 24 h").parentElement).toHaveTextContent("includes older calls");
+    expect(screen.queryByText(/% of calls/)).toBeNull();
+  });
+
   it("says why the sidecar is not connected and reports a test", async () => {
     const user = userEvent.setup();
     status = { ...status, connected: false, version: "", error: "nothing is listening at that address", poolEnabled: false, workers: 0 };

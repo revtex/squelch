@@ -188,7 +188,7 @@ export default function SettingsPanel() {
       <div
         role="region"
         aria-label="Unsaved changes"
-        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
+        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-19 lg:left-58"
       >
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
           <p className="min-w-0 text-sm">

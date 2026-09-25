@@ -75,6 +75,15 @@ function ConnectionBanner({ status, onTest, testing }: { status: TranscriptionSt
   );
 }
 
+/**
+ * Transcriptions count by when they finished and calls by when they were
+ * made, so a catch-up after downtime or a retry can pass 100%.
+ */
+function shareText(share: number | null): string {
+  if (share == null) return "no calls yet";
+  return share > 100 ? "includes older calls" : `${share}% of calls`;
+}
+
 /** The sidecar's state, the numbers, and the settings, models and jobs. */
 export default function TranscriptionPanel() {
   const [search, setSearch] = useSearchParams();
@@ -173,7 +182,7 @@ export default function TranscriptionPanel() {
               : "turn on under Settings"
           }
         />
-        <StatTile label="Transcribed 24 h" value={(stats?.recent24h ?? 0).toLocaleString()} detail={share != null ? `${share}% of calls` : "no calls yet"} />
+        <StatTile label="Transcribed 24 h" value={(stats?.recent24h ?? 0).toLocaleString()} detail={shareText(share)} />
         <StatTile
           label="Avg time per call"
           value={formatSecs(stats?.avgDurationMs ?? 0)}

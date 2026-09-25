@@ -328,6 +328,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Transcription no longer claims more than 100% of calls.** The
+  transcribed count goes by when a call finished transcribing, so a
+  catch-up or a retry could pass the day's calls. The tile now says it
+  includes older calls instead.
 - **A mistyped admin address opens Overview instead of freezing the tab.**
   An address such as `/admin/groups-tags` redirected to a relative path
   under itself, again and again, until the browser tab hung.
