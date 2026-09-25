@@ -252,6 +252,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Squelch classic is calmer.** The default theme kept Material's bright
+  green, sky blue and signal red; its accents are now muted to sit with the
+  other six themes: green `#6a9a6c`, blue `#6fa3c4` and red `#d9675e`. The
+  greys, the pale display panel and the LIVE and paused lights keep their
+  colours. Dark text on the red fill now reads at 5.4:1, up from 4.9:1.
 - **Overview matches the redesign.** A Needs attention card lists what
   wants you now, worst first, each with a button that opens the place to
   fix it: a stopped folder monitor, a disk under 10% free, a failing
