@@ -1,17 +1,24 @@
 // The decode-rate chart for the last five minutes and one row per system.
-import { Fragment, useMemo } from "react";
-import { Card, DataTable, type Column } from "@/features/admin/_shell";
-import { fmtFreqMHz } from "./format";
+import { useMemo } from "react";
+import { Card, DataTable, useElementWidth, type Column } from "@/features/admin/_shell";
+import { fmtFreqMHz, fmtHexId } from "./format";
 import { systemHealth, systemRows, type SystemRow } from "./trunk";
 import type { RateSample, SystemRateInfo } from "./types";
 
 function RateChart({ samples }: { samples: RateSample[] }) {
-  const W = 600;
+  // Drawn at the card's real width so the labels stay 11 px whether the
+  // card is half the page or all of it.
+  const [ref, measured] = useElementWidth<HTMLElement>();
+  const W = measured > 0 ? measured : 600;
   const H = 150;
   const L = 36;
   const PAD = 6;
   if (samples.length < 2) {
-    return <p className="text-sm text-base-content-dim">The chart fills in as rate frames arrive, one a second.</p>;
+    return (
+      <figure ref={ref} className="m-0">
+        <p className="text-sm text-base-content-dim">The chart fills in as rate frames arrive, one a second.</p>
+      </figure>
+    );
   }
   const max = Math.max(1, ...samples.map((s) => s.rate));
   const top = Math.ceil(max / 10) * 10 || 10;
@@ -24,8 +31,15 @@ function RateChart({ samples }: { samples: RateSample[] }) {
   const spanSec = Math.round((samples[n - 1].at - samples[0].at) / 1000);
   const summary = `Decode rate over the last ${spanSec} seconds: now ${last.toFixed(1)} messages a second, peak ${max.toFixed(1)}.`;
   return (
-    <figure>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-40 w-full" role="img" aria-label={summary}>
+    <figure ref={ref} className="m-0">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width={W}
+        height={H}
+        className="block max-w-full"
+        role="img"
+        aria-label={summary}
+      >
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W} y1={y(t)} y2={y(t)} stroke="currentColor" strokeOpacity={0.15} />
@@ -66,24 +80,19 @@ export default function DashboardTab({ samples, systemRates, systems, config, co
       phone: "title",
       sortValue: (r) => r.name,
       cell: (r) => {
+        // One line of identifiers that never wraps, so each row stays two
+        // lines and the other columns keep their width.
         const ids = [
-          r.type,
-          r.sysid && `sysid ${r.sysid}`,
-          r.wacn && `wacn ${r.wacn}`,
-          r.nac && `nac ${r.nac}`,
+          r.type?.toUpperCase(),
+          r.sysid && `sysid ${fmtHexId(r.sysid)}`,
+          r.wacn && `wacn ${fmtHexId(r.wacn)}`,
+          r.nac && `nac ${fmtHexId(r.nac)}`,
         ].filter(Boolean);
         return (
-          <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 flex-col gap-0.5">
             <span className="font-medium">{r.name}</span>
             {ids.length > 0 && (
-              <span className="font-mono text-xs text-base-content-dim">
-                {ids.map((id, i) => (
-                  <Fragment key={i}>
-                    {i > 0 && " · "}
-                    <span className="whitespace-nowrap">{id}</span>
-                  </Fragment>
-                ))}
-              </span>
+              <span className="whitespace-nowrap font-mono text-xs text-base-content-dim">{ids.join(" · ")}</span>
             )}
           </span>
         );
@@ -94,14 +103,14 @@ export default function DashboardTab({ samples, systemRates, systems, config, co
       header: "Rate",
       phone: "show",
       sortValue: (r) => r.rate,
-      cell: (r) => (r.rate != null ? <span className="tabular-nums">{r.rate.toFixed(1)} /s</span> : "—"),
+      cell: (r) => (r.rate != null ? <span className="whitespace-nowrap tabular-nums">{r.rate.toFixed(1)} /s</span> : "—"),
     },
     {
       id: "cc",
       header: "Control channel",
       phone: "show",
       sortValue: (r) => r.controlChannel,
-      cell: (r) => <span className="font-mono text-[13px]">{fmtFreqMHz(r.controlChannel)}</span>,
+      cell: (r) => <span className="whitespace-nowrap font-mono text-[13px]">{fmtFreqMHz(r.controlChannel)}</span>,
     },
     {
       id: "health",
@@ -114,22 +123,26 @@ export default function DashboardTab({ samples, systemRates, systems, config, co
       },
     },
   ];
+  // Side by side only when the Per system table fits its half without
+  // scrolling; a narrower page stacks the two cards.
   return (
-    <div className="grid items-start gap-[18px] xl:grid-cols-2">
-      <Card title="Decode rate · last 5 min" meta={<span className="text-xs text-base-content-dim">msgs / s</span>}>
-        <RateChart samples={samples} />
-      </Card>
-      <Card title="Per system" bodyClassName="">
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(r) => r.key}
-          caption="Systems"
-          defaultSort={{ id: "name", dir: "asc" }}
-          empty="No systems yet. The recorder lists them when it connects."
-          bare
-        />
-      </Card>
+    <div className="@container">
+      <div className="grid items-start gap-[18px] @min-[1200px]:grid-cols-2">
+        <Card title="Decode rate · last 5 min" meta={<span className="text-xs text-base-content-dim">msgs / s</span>}>
+          <RateChart samples={samples} />
+        </Card>
+        <Card title="Per system" bodyClassName="[&_:is(th,td)]:px-2.5">
+          <DataTable
+            columns={columns}
+            rows={rows}
+            rowKey={(r) => r.key}
+            caption="Systems"
+            defaultSort={{ id: "name", dir: "asc" }}
+            empty="No systems yet. The recorder lists them when it connects."
+            bare
+          />
+        </Card>
+      </div>
     </div>
   );
 }

@@ -180,7 +180,8 @@ frontend/
                            DetailsPanel, Card, StatTile, Notice, FilterChips,
                            SearchBox, Field/SettingRow/SwitchRow, SystemPicker,
                            InlineConfirm, ActionButton, useToast,
-                           useDetails, useOpenParam, useHour12, useNow, and
+                           useDetails, useOpenParam, useHour12, useNow,
+                           useElementWidth, and
                            format.ts (dates, durations, counts)
                            — underscore prefix marks "not a feature"
         users/             one folder per admin tab; each has <Panel>.tsx,

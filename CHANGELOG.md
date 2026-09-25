@@ -278,7 +278,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the level as a coloured dot, and the level chips carry the same
   dots. Refresh is gone from Logs because Following already reloads.
   Trunk Recorder's dashboard puts the decode-rate chart and a Per system
-  table side by side, and the table has a Health column. Backup & import
+  table side by side on a wide window and stacks them on a narrower one,
+  so the table never scrolls; the table has a Health column, and each
+  system's P25 identifiers sit on one line as RadioReference writes them
+  (sysid 2EE). Backup & import
   puts the configuration backup beside the Radio data table. One picker
   in that table's header now chooses the system for talkgroup and unit
   exports.

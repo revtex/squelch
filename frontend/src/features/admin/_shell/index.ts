@@ -30,3 +30,4 @@ export * from "./nav";
 export * from "./CommandPalette";
 export * from "./format";
 export { useNow } from "./useNow";
+export { useElementWidth } from "./useElementWidth";

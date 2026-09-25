@@ -25,6 +25,11 @@ export function fmtFreqMHz(hz: number | undefined): string {
   return `${(hz / 1_000_000).toFixed(4)} MHz`;
 }
 
+/** P25 identifiers as RadioReference writes them: "0x2ee" becomes "2EE". */
+export function fmtHexId(v: string): string {
+  return /^0x[0-9a-f]+$/i.test(v) ? v.slice(2).toUpperCase() : v;
+}
+
 export function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
 }
