@@ -51,13 +51,13 @@ function makeStore(preloadedState?: Partial<RootState>) {
   });
 }
 
-function renderAdmin(preloadedState?: Partial<RootState>) {
+function renderAdmin(preloadedState?: Partial<RootState>, url = "/admin/users") {
   const store = makeStore(preloadedState);
   return {
     store,
     ...render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/admin/users"]}>
+        <MemoryRouter initialEntries={[url]}>
           <Admin />
         </MemoryRouter>
       </Provider>,
@@ -188,6 +188,23 @@ describe("Admin", () => {
 
     await user.click(screen.getByRole("button", { name: /Search users, talkgroups, settings/ }));
     expect(screen.getByRole("combobox", { name: "Search" })).toHaveFocus();
+  });
+
+  it("sends an unknown admin address to Overview by its full path", () => {
+    renderAdmin(
+      {
+        auth: {
+          token: "test-token",
+          role: "admin",
+          username: "admin",
+          passwordNeedChange: false,
+          setupStatus: null,
+        },
+      } as Partial<RootState>,
+      "/admin/groups-tags",
+    );
+    const targets = screen.getAllByTestId("navigate").map((el) => el.getAttribute("data-to"));
+    expect(targets).toContain("/admin/overview");
   });
 
   it("shows the socket state in the top bar", () => {

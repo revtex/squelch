@@ -400,7 +400,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             <Route path="logs" element={<LogsPanel />} />
             <Route path="trunk-recorder" element={<TrunkRecorderPanel />} />
             <Route path="tools" element={<ToolsPanel />} />
-            <Route path="*" element={<Navigate to="overview" replace />} />
+            <Route path="*" element={<Navigate to="/admin/overview" replace />} />
           </Routes>
         </main>
       </div>
