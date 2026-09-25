@@ -460,7 +460,9 @@
       padding: 11px 12px;
       border-bottom: 1px solid var(--admin-line2);
       vertical-align: middle;
-      overflow-wrap: anywhere;
+      /* break-word, not the design's anywhere: a narrow window scrolls the
+         table instead of splitting names mid-word. */
+      overflow-wrap: break-word;
     }
     .admin-ui .table tbody tr:last-child td {
       border-bottom: 0;

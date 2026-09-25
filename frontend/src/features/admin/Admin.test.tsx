@@ -107,7 +107,7 @@ describe("Admin", () => {
       "Overview",
       "Users",
       "Connections",
-      "Systems",
+      "Systems & talkgroups",
       "Groups & tags",
       "API keys",
       "Folder monitors",
@@ -136,10 +136,10 @@ describe("Admin", () => {
     } as Partial<RootState>);
 
     await user.keyboard("{Control>}k{/Control}");
-    const box = screen.getByRole("combobox", { name: "Go to a section" });
+    const box = screen.getByRole("combobox", { name: "Search" });
     expect(box).toHaveFocus();
     await user.type(box, "audit");
-    expect(screen.getByRole("option", { name: "Logs & audit" })).toHaveAttribute(
+    expect(screen.getByRole("option", { name: /^Logs & audit/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -166,6 +166,28 @@ describe("Admin", () => {
     await user.click(within(sheet).getByRole("link", { name: "Forwarding" }));
     expect(mockNavigate).toHaveBeenCalledWith("/admin/forwarding");
     expect(screen.queryByRole("dialog", { name: "All sections" })).toBeNull();
+  });
+
+  it("opens every section from the top bar's menu button and searches from its field", async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      auth: {
+        token: "test-token",
+        role: "admin",
+        username: "admin",
+        passwordNeedChange: false,
+        setupStatus: null,
+      },
+    } as Partial<RootState>);
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const sheet = screen.getByRole("dialog", { name: "All sections" });
+    expect(within(sheet).getByRole("link", { name: "Backup & import" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "All sections" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Search users, talkgroups, settings/ }));
+    expect(screen.getByRole("combobox", { name: "Search" })).toHaveFocus();
   });
 
   it("shows the socket state in the top bar", () => {

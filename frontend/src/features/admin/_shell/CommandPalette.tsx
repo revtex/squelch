@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search } from "lucide-react";
 import { NAV_ITEMS } from "./nav";
 import { useNavigationGuard } from "./useNavigationGuard";
 
@@ -43,8 +42,8 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   return (
     <dialog
       open
-      className="modal modal-open items-start pt-[10vh]"
-      aria-label="Go to"
+      className="modal modal-open items-start px-4 pt-[60px]"
+      aria-label="Search"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();
@@ -63,46 +62,47 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
       }}
     >
       <div className="modal-box w-full max-w-[560px] overflow-hidden rounded-[10px] p-0 shadow-none">
-        <label className="input flex h-auto w-full items-center gap-3 rounded-none border-0 border-b border-admin-line px-4 py-3.5 text-[15px] focus-within:outline-none">
-          <Search className="h-5 w-5 opacity-60" aria-hidden="true" />
-          <input
-            ref={input}
-            type="text"
-            className="grow"
-            placeholder="Go to a section"
-            aria-label="Go to a section"
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="cmdk-list"
-            aria-activedescendant={
-              matches[index] ? `cmdk-${matches[index].to}` : undefined
-            }
-            aria-autocomplete="list"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <kbd className="kbd kbd-sm">Esc</kbd>
-        </label>
+        <input
+          ref={input}
+          type="text"
+          className="w-full border-0 border-b border-admin-line bg-base-100 px-4 py-3.5 text-[15px] outline-none"
+          placeholder="Jump to a page, user, talkgroup or setting…"
+          aria-label="Search"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="cmdk-list"
+          aria-activedescendant={
+            matches[index] ? `cmdk-${matches[index].to}` : undefined
+          }
+          aria-autocomplete="list"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         <ul
           id="cmdk-list"
           role="listbox"
-          className="menu max-h-[60vh] w-full flex-nowrap overflow-y-auto p-2"
+          aria-label="Results"
+          className="max-h-[360px] overflow-y-auto"
         >
           {matches.length === 0 && (
-            <li className="px-3 py-4 text-sm text-base-content-dim">
-              No section matches “{query}”.
+            <li className="px-4 py-3 text-base-content-dim">
+              Nothing matches “{query}”.
             </li>
           )}
           {matches.map((m, i) => (
             <li key={m.to} id={`cmdk-${m.to}`} role="option" aria-selected={i === index}>
               <button
                 type="button"
-                className={i === index ? "menu-active" : ""}
+                tabIndex={-1}
+                className={`flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left ${
+                  i === index ? "bg-base-300" : ""
+                }`}
                 onMouseEnter={() => setIndex(i)}
                 onClick={() => go(m.to)}
               >
-                <m.icon className="h-4 w-4" aria-hidden="true" />
+                <m.icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
                 {m.label}
+                <small className="ml-auto text-xs text-base-content-dim">Page</small>
               </button>
             </li>
           ))}

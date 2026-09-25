@@ -313,7 +313,7 @@ export default function SystemsPanel() {
   return (
     <div className="space-y-[18px]">
       <PageHeader
-        title="Systems"
+        title="Systems & talkgroups"
         subtitle={
           <>
             {plural(systems.length, "system")}. Unknown systems and talkgroups are created from uploads when{" "}

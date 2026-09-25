@@ -13,7 +13,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Trunk Recorder](#trunk-recorder)
 - [Users](#users)
 - [Connections](#connections)
-- [Systems](#systems)
+- [Systems & talkgroups](#systems--talkgroups)
 - [Groups & Tags](#groups--tags)
 - [API Keys](#api-keys)
 - [Folder monitors](#folder-monitors)
@@ -30,17 +30,17 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 
 The sidebar groups the admin into five areas:
 
-- **Overview** — stats and recent activity
-- **People & access** — **Users** and **Connections**
-- **Radio data** — **Systems**, **Groups & tags** and **API keys**
-- **Ingest & delivery** — **Folder monitors**, **Forwarding**, **Shared links** and **Transcription**
-- **Server** — **Settings**, **Logs & audit**, **Trunk Recorder** and **Backup & import**
+- **Overview** — **Overview**, **Trunk Recorder** and **Logs & audit**
+- **People & access** — **Users**, **Connections**, **API keys** and **Shared links**
+- **Radio data** — **Systems & talkgroups**, **Groups & tags** and **Transcription**
+- **Ingest & delivery** — **Folder monitors** and **Forwarding**
+- **Server** — **Settings** and **Backup & import**
 
-Press **Ctrl K** (or choose **Go to** in the top bar) and type a few letters to jump to any section. The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
+The search field in the top bar (or **Ctrl K**) opens a search box: type a few letters to jump to any page. The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
 
-On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users**, **Systems** and **Logs & audit**; **More** lists every section. On a narrow desktop window the sidebar shrinks to icons with short labels.
+On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users**, **Systems** and **Logs**; **More**, or the menu button at the top left, lists every section. On a narrow desktop window the sidebar shrinks to icons with short labels.
 
-The **Scanner** link in the sidebar and in the account menu returns you to the live scanner at `/`. **Sign out** clears your session. If you have unsaved changes in a panel, you'll be prompted before navigating away.
+**Open scanner** at the foot of the sidebar returns you to the live scanner at `/`. **Sign out**, beside your username, clears your session. If you have unsaved changes in a panel, you'll be prompted before navigating away.
 
 ---
 
@@ -188,7 +188,7 @@ A block is only as reliable as the client address Squelch sees. A device that Sq
 
 ---
 
-## Systems
+## Systems & talkgroups
 
 A system is one radio system: a county trunked system, a set of conventional channels, an SDRTrunk source. Each system owns its **talkgroups** and **units**. The page lists your systems on the left (on a phone, the list comes first and a system opens over it) with an LED swatch, whether talkgroups are created automatically (**auto**) or only by you (**manual**), how many talkgroups it has and its calls in the last 24 hours. Choosing a system shows its talkgroups, units and blocked list on the right.
 
@@ -416,7 +416,7 @@ Defaults for every listener. Each listener can override the ones marked **per us
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Create systems from uploads | An upload naming a system number that does not exist creates it, with talkgroup auto-create on. Off rejects such uploads. Each system's own talkgroup auto-create is under [Systems](#systems) | On |
+| Create systems from uploads | An upload naming a system number that does not exist creates it, with talkgroup auto-create on. Off rejects such uploads. Each system's own talkgroup auto-create is under [Systems & talkgroups](#systems--talkgroups) | On |
 
 ### Ingest & audio
 

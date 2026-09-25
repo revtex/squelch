@@ -1,12 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  ArchiveRestore,
-  AudioLines,
+  Activity,
   Cable,
+  Folder,
   FolderSearch,
-  FolderTree,
   Key,
-  LayoutDashboard,
+  Mic,
   Radio,
   RadioTower,
   ScrollText,
@@ -14,11 +13,14 @@ import {
   Settings,
   Share2,
   Users,
+  Wrench,
 } from "lucide-react";
 
 export interface NavItem {
   to: string;
   label: string;
+  /** The phone bar's label, where the full one is too long. */
+  short?: string;
   icon: LucideIcon;
   /** Words the command palette also matches on. */
   keywords?: string;
@@ -37,8 +39,20 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       {
         to: "/admin/overview",
         label: "Overview",
-        icon: LayoutDashboard,
+        icon: Activity,
         keywords: "dashboard activity stats home",
+      },
+      {
+        to: "/admin/trunk-recorder",
+        label: "Trunk Recorder",
+        icon: RadioTower,
+        keywords: "mqtt instances recorders",
+      },
+      {
+        to: "/admin/logs",
+        label: "Logs & audit",
+        short: "Logs",
+        icon: ScrollText,
       },
     ],
   },
@@ -57,6 +71,17 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Cable,
         keywords: "sessions devices history blocked addresses",
       },
+      {
+        to: "/admin/apikeys",
+        label: "API keys",
+        icon: Key,
+        keywords: "upload recorder",
+      },
+      {
+        to: "/admin/shared-links",
+        label: "Shared links",
+        icon: Share2,
+      },
     ],
   },
   {
@@ -64,20 +89,21 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       {
         to: "/admin/systems",
-        label: "Systems",
+        label: "Systems & talkgroups",
+        short: "Systems",
         icon: Radio,
         keywords: "talkgroups units blacklist",
       },
       {
         to: "/admin/groups",
         label: "Groups & tags",
-        icon: FolderTree,
+        icon: Folder,
       },
       {
-        to: "/admin/apikeys",
-        label: "API keys",
-        icon: Key,
-        keywords: "upload recorder",
+        to: "/admin/transcription",
+        label: "Transcription",
+        icon: Mic,
+        keywords: "whisper models speech",
       },
     ],
   },
@@ -96,17 +122,6 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Send,
         keywords: "downstreams webhooks discord forward notify",
       },
-      {
-        to: "/admin/shared-links",
-        label: "Shared links",
-        icon: Share2,
-      },
-      {
-        to: "/admin/transcription",
-        label: "Transcription",
-        icon: AudioLines,
-        keywords: "whisper models speech",
-      },
     ],
   },
   {
@@ -119,20 +134,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         keywords: "options config preferences branding email prune storage lockout log level audio conversion",
       },
       {
-        to: "/admin/logs",
-        label: "Logs & audit",
-        icon: ScrollText,
-      },
-      {
-        to: "/admin/trunk-recorder",
-        label: "Trunk Recorder",
-        icon: RadioTower,
-        keywords: "mqtt instances recorders",
-      },
-      {
         to: "/admin/tools",
         label: "Backup & import",
-        icon: ArchiveRestore,
+        icon: Wrench,
         keywords: "tools export restore backup csv radioreference import",
       },
     ],
