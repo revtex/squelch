@@ -190,7 +190,7 @@ A block is only as reliable as the client address Squelch sees. A device that Sq
 
 ## Systems & talkgroups
 
-A system is one radio system: a county trunked system, a set of conventional channels, an SDRTrunk source. Each system owns its **talkgroups** and **units**. The page lists your systems on the left (on a phone, the list comes first and a system opens over it) with an LED swatch, whether talkgroups are created automatically (**auto**) or only by you (**manual**), how many talkgroups it has and its calls in the last 24 hours. Choosing a system shows its talkgroups, units and blocked list on the right.
+A system is one radio system: a county trunked system, a set of conventional channels, an SDRTrunk source. Each system owns its **talkgroups** and **units**. The page lists your systems on the left (on a phone, the list comes first and a system opens over it) with an LED swatch, whether talkgroups are created automatically (**auto**) or only by you (**manual**), how many talkgroups it has and its calls in the last 24 hours. Choosing a system shows its number, how many talkgroups and units it has, its last call and its calls in 24 hours, then its talkgroups, units and blocked talkgroups on the right. A notice above the list says whether new systems are created from uploads, with a link to change it.
 
 Most systems appear on their own the first time a recorder uploads to them, when **Settings → Radio data → Create systems from uploads** allows it. **Add system** is for setting one up before the first call arrives. **Reorder** moves systems up and down the scanner's display order.
 
@@ -204,9 +204,9 @@ Most systems appear on their own the first time a recorder uploads to them, when
 
 ### Talkgroups
 
-The table shows each talkgroup's number, label and name, group, tag, calls in the last 24 hours and when it was last heard. Search matches numbers, labels, names, groups and tags; the group and tag menus narrow the list, and the **N unlabeled** button shows only the talkgroups auto-populate created that nobody has named yet. A **blocked** marker means uploads for that number are dropped.
+The table shows each talkgroup's number, label and name, group, tag, calls in the last 24 hours and when it was last heard. Search matches numbers, labels, names, groups and tags; the group and tag menus narrow the list, and the **N unlabeled** chip shows only the talkgroups auto-populate created that nobody has named yet. An unlabeled talkgroup reads "TG" and its number, with an **unlabeled** badge. A talkgroup with its own LED colour shows it after its name. A **blocked** marker means uploads for that number are dropped.
 
-Opening a talkgroup shows its activity (calls in 24 hours, last heard, average call length) with the fields below it to edit in place:
+Opening a talkgroup shows its activity in three tiles (calls in 24 hours, last heard, average length), with the fields below them to edit in place. The LED colour is a row of colour chips, with **System default** first.
 
 | Field            | Description                                      |
 | ---------------- | ------------------------------------------------ |
@@ -230,9 +230,9 @@ Ticking rows shows a selection bar for bulk changes: set the group, tag or LED c
 
 Units name individual radios. Each has a **Unit number**, a **Label** and when it was last heard. Search by number or label; open one to rename or delete it.
 
-### Blocked
+### Blocked talkgroups
 
-Talkgroup numbers whose uploads are dropped before they are stored, for talkgroups auto-populate keeps creating that you never want. Add a number to block it; the ✕ on a chip unblocks it. Blocking keeps the talkgroup and its calls; delete them separately if you want them gone.
+Talkgroup numbers whose uploads are dropped before they are stored, for talkgroups auto-populate keeps creating that you never want. Type a number under the chips and press **Block**; the ✕ on a chip unblocks it. Blocking keeps the talkgroup and its calls; delete them separately if you want them gone.
 
 ---
 
@@ -243,12 +243,14 @@ Groups and tags organize your talkgroups into categories.
 - **Groups** sort talkgroups in the scanner's picker by function (e.g. Fire, Law, EMS, Public Works)
 - **Tags** say what kind of traffic a talkgroup carries (e.g. Law Dispatch, Law Tac, Fire Tac, Emergency Ops)
 
-Both lists are edited in place on **Admin → Groups & tags**:
+Both lists are tables edited in place on **Admin → Groups & tags**, each with its count in the header:
 
-- **Add** — type a name in the row at the top of the list and press **Add group** or **Add tag**. Names are trimmed and must be unique.
-- **Rename** — the pencil turns the row into a text field; **Enter** saves, **Esc** cancels.
-- **Usage** — each row shows how many talkgroups use it, or **unused**. Click the count to open **Systems** filtered to those talkgroups.
-- **Delete** — the trash asks in place. An unused label is removed at once, with a ten-second **Undo** in the toast. A label that talkgroups still use asks where they should go first (another group or tag, or none) and moves them before deleting.
+- **Add** — type a name in the row at the foot of the table and press **Add**. Names are trimmed and must be unique.
+- **Rename** — turns the row into a text field; **Enter** saves, **Esc** cancels.
+- **Talkgroups** — how many talkgroups use it; an unused one says **unused**. **Show** opens **Systems** filtered to those talkgroups.
+- **Delete** — asks in place. An unused label is removed at once, with a ten-second **Undo** in the toast. A label that talkgroups still use asks where they should go first (another group or tag, or none) and moves them before deleting.
+
+On a phone each row becomes a card, with its actions under it.
 
 Assign groups and tags to talkgroups in the **Systems** panel. Squelch ships with sensible defaults (Air, Common, EMS, Fire, Interop, Law, Public Works for groups; ~20 tags covering law, fire, EMS, corrections, and more).
 
@@ -368,7 +370,7 @@ The banner at the top says whether the sidecar answers, its version when it repo
 
 ### Settings
 
-Everything here is saved together with **Save**; toggles included. The bar at the bottom lists what changed, **Discard** puts it back, and leaving with unsaved changes asks first.
+Each setting has its name and help on the left and its control on the right. Everything here is saved together with **Save**; toggles included. The bar at the bottom lists what changed, **Discard** puts it back, and leaving with unsaved changes asks first.
 
 | Setting                         | What it does                                                                                              |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -381,11 +383,11 @@ Everything here is saved together with **Save**; toggles included. The bar at th
 
 ### Models
 
-Every whisper.cpp model, with its size, relative speed and whether it marks speaker turns, so you can choose before downloading. **Download** starts a download on the sidecar and shows a progress bar; it continues if you leave the page, and **Cancel** stops it. **Use** makes a downloaded model the active one. **Delete** removes a model from the sidecar after asking; the model in use cannot be deleted while transcription is on.
+Every whisper.cpp model, with its size, relative speed and whether it marks speaker turns, so you can choose before downloading. **Download** starts a download on the sidecar, and the row shows **downloading** with the percentage and a progress bar; it continues if you leave the page, and **Cancel** stops it. **Use** makes a downloaded model the active one. **Delete** removes a model from the sidecar after asking; the model in use cannot be deleted while transcription is on.
 
 ### Recent jobs
 
-What happened to each call handed to the transcriber: **done** with how long it took, **failed** with the reason in words (sidecar timed out, sidecar not reachable, audio file is missing), **skipped** when it was shorter than the minimum, or **queued**. Filter by status; **Retry** sends a failed or skipped call again, and **Retry N calls** does the same for every one in the list. Transcription must be on for a retry. Failed and queued counts cover the last 24 hours; the list keeps 30 days.
+What happened to each call handed to the transcriber, with the time of the call ("Today 18:52"): **done** with how long it took, **failed** with the reason in words (sidecar timed out, sidecar not reachable, audio file is missing), **skipped** when it was shorter than the minimum, or **queued**. Filter by status; **Retry** sends a failed or skipped call again, and **Retry N calls** does the same for every one in the list. Transcription must be on for a retry. Failed and queued counts cover the last 24 hours; the list keeps 30 days.
 
 ---
 

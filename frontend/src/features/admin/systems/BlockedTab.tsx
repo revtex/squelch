@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { X } from "lucide-react";
+import { CHIP, CHIP_OFF } from "@/features/admin/_shell";
 import type { AdminTalkgroup } from "@/types";
 
 export interface BlockedTabProps {
@@ -14,6 +15,7 @@ export interface BlockedTabProps {
 /** Talkgroup numbers whose uploads are dropped; add one, or remove with ✕. */
 export default function BlockedTab({ blocked, talkgroups, autoPopulate, busy, onBlock, onUnblock }: BlockedTabProps) {
   const [value, setValue] = useState("");
+  const inputId = useId();
   const labels = new Map(talkgroups.map((t) => [t.talkgroupId, t.label]));
 
   return (
@@ -24,38 +26,12 @@ export default function BlockedTab({ blocked, talkgroups, autoPopulate, busy, on
           ? " Use it for talkgroups auto-populate keeps creating that you never want."
           : " Auto-populate is off for this system, so unknown talkgroups are dropped already; blocking still stops known ones."}
       </p>
-      <form
-        className="flex flex-wrap items-end gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const n = Number(value);
-          if (!Number.isInteger(n) || n < 0) return;
-          void onBlock(n).then((ok) => {
-            if (ok) setValue("");
-          });
-        }}
-      >
-        <label className="form-control">
-          <span className="label-text text-xs">Talkgroup number</span>
-          <input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            className="input input-sm w-40"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-          />
-        </label>
-        <button type="submit" className="btn btn-sm" disabled={busy || value === ""}>
-          Block
-        </button>
-      </form>
       {blocked.length === 0 ? (
         <p className="text-sm text-base-content-dim">Nothing is blocked.</p>
       ) : (
         <ul aria-label="Blocked talkgroups" className="flex flex-wrap gap-2">
           {blocked.map((n) => (
-            <li key={n} className="badge badge-lg gap-1 pe-1">
+            <li key={n} className={`${CHIP} ${CHIP_OFF} cursor-default pe-1.5`}>
               <span className="font-mono">{n}</span>
               {labels.get(n) && <span className="text-base-content-dim">{labels.get(n)}</span>}
               <button
@@ -71,6 +47,34 @@ export default function BlockedTab({ blocked, talkgroups, autoPopulate, busy, on
           ))}
         </ul>
       )}
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = Number(value);
+          if (!Number.isInteger(n) || n < 0) return;
+          void onBlock(n).then((ok) => {
+            if (ok) setValue("");
+          });
+        }}
+      >
+        <label htmlFor={inputId} className="sr-only">
+          Talkgroup number
+        </label>
+        <input
+          id={inputId}
+          type="number"
+          min={0}
+          inputMode="numeric"
+          placeholder="TG ID"
+          className="input w-32 font-mono"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <button type="submit" className="btn" disabled={busy || value === ""}>
+          Block
+        </button>
+      </form>
     </div>
   );
 }

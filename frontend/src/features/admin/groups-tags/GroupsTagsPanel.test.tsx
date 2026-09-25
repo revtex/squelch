@@ -45,7 +45,7 @@ function renderPanel() {
   );
 }
 
-const groupList = () => within(screen.getByRole("list", { name: "Groups" }));
+const groupList = () => within(screen.getByRole("table", { name: "Groups" }));
 
 describe("GroupsTagsPanel", () => {
   beforeEach(() => {
@@ -56,11 +56,11 @@ describe("GroupsTagsPanel", () => {
 
   it("lists groups and tags with how many talkgroups use them", () => {
     renderPanel();
-    const fire = groupList().getByText("Fire").closest("li")!;
+    const fire = groupList().getByText("Fire").closest("tr")!;
     expect(
       within(fire).getByRole("link", { name: "Show 3 talkgroups in Fire" }),
     ).toHaveAttribute("href", "/admin/systems?group=1");
-    const law = groupList().getByText("Law").closest("li")!;
+    const law = groupList().getByText("Law").closest("tr")!;
     expect(within(law).getByText("unused")).toBeInTheDocument();
     expect(screen.getByText("Dispatch")).toBeInTheDocument();
   });
@@ -70,6 +70,7 @@ describe("GroupsTagsPanel", () => {
     renderPanel();
     await user.type(screen.getByLabelText("New group"), "  Public Works ");
     await user.click(screen.getByRole("button", { name: "Add group" }));
+    expect(screen.getByLabelText("New group")).toHaveAttribute("placeholder", "New group name");
     expect(createGroup).toHaveBeenCalledWith({ label: "Public Works" });
     expect(await screen.findByRole("status")).toHaveTextContent(
       'Added group "Public Works".',

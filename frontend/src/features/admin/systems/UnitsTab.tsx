@@ -50,8 +50,13 @@ export default function UnitsTab({ systemRowId, units, loading, openId, onOpen, 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={query} onChange={setQuery} label="Search units" className="w-full sm:w-64" />
-        <button type="button" className="btn btn-sm btn-primary ms-auto" onClick={onAdd}>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label="Filter by unit ID or label"
+          className="w-full md:max-w-[340px] md:min-w-[200px] md:flex-[1_1_240px]"
+        />
+        <button type="button" className="btn ms-auto" onClick={onAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add unit
         </button>

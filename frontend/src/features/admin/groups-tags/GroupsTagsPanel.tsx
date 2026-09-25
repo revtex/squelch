@@ -1,5 +1,6 @@
-import { Link } from "react-router-dom";
+import { TriangleAlert } from "lucide-react";
 import {
+  Notice,
   PageHeader,
   useCreateGroupMutation,
   useCreateTagMutation,
@@ -28,18 +29,9 @@ export default function GroupsTagsPanel() {
     <div className="space-y-[18px]">
       <PageHeader
         title="Groups & tags"
-        subtitle={
-          <>
-            Groups sort talkgroups in the scanner's picker; tags say what kind
-            of traffic they carry. Put talkgroups in them on{" "}
-            <Link to="/admin/systems" className="link">
-              Systems
-            </Link>
-            .
-          </>
-        }
+        subtitle="Groups sort talkgroups in the scanner's picker. Tags are a second label for filtering. Add and rename in place."
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-[18px] lg:grid-cols-2">
         <LabelCard
           kind="group"
           title="Groups"
@@ -61,6 +53,10 @@ export default function GroupsTagsPanel() {
           onDelete={(payload) => deleteTag(payload).unwrap()}
         />
       </div>
+      <Notice tone="warn" icon={<TriangleAlert />}>
+        Deleting a group or tag that is in use asks where its talkgroups should go (another one, or none)
+        instead of leaving them pointing at a missing ID.
+      </Notice>
     </div>
   );
 }

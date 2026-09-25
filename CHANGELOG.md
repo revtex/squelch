@@ -252,6 +252,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Systems & talkgroups, Groups & tags and Transcription match the
+  redesign.** A system's header gives its number, counts and last call.
+  The talkgroup filters sit in one row with Add talkgroup, and unlabeled
+  talkgroups read "TG" and the number with an unlabeled badge. A
+  talkgroup's details open with three tiles and pick its LED colour from
+  colour chips. Blocked talkgroups are chips with the number field below.
+  Groups and tags are tables with Rename, Show and Delete on each row and
+  the add field at the foot, and they stack as cards on a phone.
+  Transcription's connection line is a green notice when connected. Its
+  settings put each control on the right, and the save bar stays in the
+  page. Model downloads show their percentage in the status, and recent
+  jobs show the time of the call.
 - **Users, Connections, API keys and Shared links match the redesign.**
   Users shows each account's role, sessions and last sign-in in the table,
   with an Admins chip. A user's panel lists who is live now, with links to

@@ -1,8 +1,11 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Activity } from "lucide-react";
 import {
+  COUNT,
   PageHeader,
+  StatGrid,
+  StatTile,
   plural,
   useToast,
   useTranscriptionModelsQuery,
@@ -23,42 +26,51 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 function ConnectionBanner({ status, onTest, testing }: { status: TranscriptionStatus; onTest: () => void; testing: boolean }) {
-  const parts: string[] = [];
+  const extra: ReactNode[] = [];
+  let lead: ReactNode;
   if (status.connected) {
-    parts.push(`Connected to ${status.url}`);
-    if (status.version) parts.push(`go-whisper ${status.version}`);
-    if (status.model) parts.push(`model ${status.model}`);
-    if (status.poolEnabled) parts.push(plural(status.workers, "worker"));
-    else parts.push("not transcribing");
+    lead = (
+      <>
+        <b>Connected</b> to <span className="font-mono">{status.url}</span>
+      </>
+    );
+    if (status.version) extra.push(`go-whisper ${status.version}`);
+    if (status.model)
+      extra.push(
+        <>
+          model <span className="font-mono">{status.model}</span>
+        </>,
+      );
+    extra.push(status.poolEnabled ? plural(status.workers, "worker") : "not transcribing");
   } else if (!status.url) {
-    parts.push("No sidecar URL set");
+    lead = <b>No sidecar URL set</b>;
   } else {
-    parts.push(`Not connected to ${status.url}`);
-    if (status.error) parts.push(status.error);
+    lead = (
+      <>
+        <b>Not connected</b> to <span className="font-mono">{status.url}</span>
+      </>
+    );
+    if (status.error) extra.push(status.error);
   }
   return (
     <div
       role="status"
       aria-label="Sidecar connection"
-      className={`flex flex-wrap items-center gap-3 rounded-box border px-3 py-2 text-sm ${
-        status.connected ? "border-success/30 bg-success/10" : "border-warning/40 bg-warning/10"
-      }`}
+      className={`alert flex items-start ${status.connected ? "alert-success" : "alert-warning"}`}
     >
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${status.connected ? "bg-success" : "bg-warning"}`} aria-hidden="true" />
-      <span className="min-w-0 flex-1">{parts.join(" · ")}</span>
-      <button type="button" className="btn btn-xs" disabled={testing || !status.url} onClick={onTest}>
+      <span
+        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${status.connected ? "bg-success" : "bg-warning"}`}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1">
+        {lead}
+        {extra.map((part, i) => (
+          <Fragment key={i}> · {part}</Fragment>
+        ))}
+      </span>
+      <button type="button" className="btn btn-sm shrink-0 self-center" disabled={testing || !status.url} onClick={onTest}>
         {testing ? "Testing…" : "Test connection"}
       </button>
-    </div>
-  );
-}
-
-function Tile({ label, value, detail }: { label: string; value: string; detail?: React.ReactNode }) {
-  return (
-    <div className="rounded-box border border-admin-line bg-base-100 p-3">
-      <p className="text-xs text-base-content-dim">{label}</p>
-      <p className="text-xl font-semibold tabular-nums">{value}</p>
-      {detail && <p className="text-xs text-base-content-dim">{detail}</p>}
     </div>
   );
 }
@@ -149,8 +161,8 @@ export default function TranscriptionPanel() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Tile
+      <StatGrid className="grid-cols-2 md:grid-cols-4">
+        <StatTile
           label="Queue"
           value={status?.poolEnabled ? String(queue) : "off"}
           detail={
@@ -161,18 +173,18 @@ export default function TranscriptionPanel() {
               : "turn on under Settings"
           }
         />
-        <Tile label="Transcribed 24 h" value={(stats?.recent24h ?? 0).toLocaleString()} detail={share != null ? `${share}% of calls` : "no calls yet"} />
-        <Tile
+        <StatTile label="Transcribed 24 h" value={(stats?.recent24h ?? 0).toLocaleString()} detail={share != null ? `${share}% of calls` : "no calls yet"} />
+        <StatTile
           label="Avg time per call"
           value={formatSecs(stats?.avgDurationMs ?? 0)}
           detail={stats && stats.minDurationMs > 0 ? `${formatSecs(stats.minDurationMs)} to ${formatSecs(stats.maxDurationMs)}` : undefined}
         />
-        <Tile
+        <StatTile
           label="Failed 24 h"
           value={(stats?.failed24h ?? 0).toLocaleString()}
           detail={
             (stats?.failed24h ?? 0) > 0 ? (
-              <Link to="/admin/transcription?tab=jobs&status=failed" className="link">
+              <Link to="/admin/transcription?tab=jobs&status=failed" className="font-semibold text-base-content hover:underline">
                 Show failures
               </Link>
             ) : stats && stats.skipped24h > 0 ? (
@@ -182,7 +194,7 @@ export default function TranscriptionPanel() {
             )
           }
         />
-      </div>
+      </StatGrid>
 
       <div role="tablist" aria-label="Transcription sections" className="tabs tabs-border">
         {TABS.map((t) => (
@@ -195,7 +207,7 @@ export default function TranscriptionPanel() {
             onClick={() => selectTab(t.id)}
           >
             {t.label}
-            {t.id === "models" && models.data && <span className="badge badge-ghost badge-sm ml-2">{models.data.models.length}</span>}
+            {t.id === "models" && models.data && <span className={`${COUNT} ml-2`}>{models.data.models.length}</span>}
           </button>
         ))}
       </div>

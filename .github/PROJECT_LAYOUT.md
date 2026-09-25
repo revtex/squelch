@@ -177,8 +177,9 @@ frontend/
         _shell/            admin chrome shared by every sub-feature (adminSlice,
                            useAdminWebSocket, useNavigationGuard, useWsQuery, …)
                            and the page primitives: PageHeader, DataTable,
-                           DetailsPanel, Card, Notice, FilterChips, SearchBox,
-                           SystemPicker, InlineConfirm, ActionButton, useToast,
+                           DetailsPanel, Card, StatTile, Notice, FilterChips,
+                           SearchBox, Field/SettingRow/SwitchRow, SystemPicker,
+                           InlineConfirm, ActionButton, useToast,
                            useDetails, useOpenParam, useHour12, useNow, and
                            format.ts (dates, durations, counts)
                            — underscore prefix marks "not a feature"

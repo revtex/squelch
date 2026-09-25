@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { Field, SwitchRow, plural, useNavigationGuard, useToast, useUpdateConfigMutation } from "@/features/admin/_shell";
+import { SettingRow, SwitchRow, plural, useNavigationGuard, useToast, useUpdateConfigMutation } from "@/features/admin/_shell";
 import type { TranscriptionStatus } from "@/types";
 import { LANGUAGES, supportsSpeakerTurns } from "./transcription";
 
@@ -105,9 +105,9 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
   };
 
   return (
-    <div className="space-y-4 pb-20">
-      <div className="rounded-box border border-admin-line bg-base-100 divide-y divide-admin-line">
-        <div className="p-3">
+    <div className="space-y-4">
+      <div className="divide-y divide-admin-line rounded-lg border border-admin-line bg-base-200">
+        <div className="px-4 py-3.5">
           <SwitchRow
             id={`${id}-enabled`}
             label="Transcribe new calls"
@@ -116,7 +116,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
             onChange={(v) => set("enabled", v)}
           />
         </div>
-        <div className="p-3">
+        <div className="px-4 py-3.5">
           <SwitchRow
             id={`${id}-live`}
             label="Show transcripts in the scanner"
@@ -125,8 +125,9 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
             onChange={(v) => set("liveDisplay", v)}
           />
         </div>
-        <div className="p-3">
-          <Field
+        <div className="px-4 py-3.5">
+          <SettingRow
+            wide
             htmlFor={`${id}-url`}
             label="go-whisper URL"
             hint="The sidecar's base URL, reachable from the server."
@@ -136,7 +137,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
               <input
                 id={`${id}-url`}
                 type="url"
-                className="input w-full"
+                className="input w-full font-mono"
                 placeholder="http://whisper:8081"
                 value={draft.url}
                 onChange={(e) => set("url", e.target.value)}
@@ -145,20 +146,20 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
                 {testing ? "Testing…" : "Test"}
               </button>
             </div>
-          </Field>
+          </SettingRow>
         </div>
-        <div className="p-3">
-          <Field htmlFor={`${id}-lang`} label="Language" hint="Auto-detect costs a little time per call.">
-            <select id={`${id}-lang`} className="select w-full sm:w-64" value={draft.language} onChange={(e) => set("language", e.target.value)}>
+        <div className="px-4 py-3.5">
+          <SettingRow htmlFor={`${id}-lang`} label="Language" hint="Auto-detect costs a little time per call.">
+            <select id={`${id}-lang`} className="select w-full" value={draft.language} onChange={(e) => set("language", e.target.value)}>
               {LANGUAGES.map((l) => (
                 <option key={l.value} value={l.value}>
                   {l.label}
                 </option>
               ))}
             </select>
-          </Field>
+          </SettingRow>
         </div>
-        <div className="p-3">
+        <div className="px-4 py-3.5">
           <SwitchRow
             id={`${id}-diarize`}
             label="Speaker turns"
@@ -172,14 +173,14 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
             onChange={(v) => set("diarize", v)}
           />
         </div>
-        <div className="p-3">
-          <Field
+        <div className="px-4 py-3.5">
+          <SettingRow
             htmlFor={`${id}-min`}
             label="Skip calls shorter than"
             hint="Saves queue time on key-ups. 0 sends every call."
             error={minOk ? null : "Enter 0 to 60 seconds"}
           >
-            <label className="input w-32">
+            <label className="input w-full">
               <input
                 id={`${id}-min`}
                 type="number"
@@ -193,16 +194,16 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
               />
               <span className="text-base-content-dim">s</span>
             </label>
-          </Field>
+          </SettingRow>
         </div>
       </div>
 
       <div
         role="region"
         aria-label="Unsaved changes"
-        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
+        className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-20 rounded-lg border border-admin-line bg-base-200/95 px-4 py-2.5 backdrop-blur md:bottom-3"
       >
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="min-w-0 text-sm">
             {dirty ? (
               <>
@@ -214,10 +215,10 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
             )}
           </p>
           <div className="flex gap-2">
-            <button type="button" className="btn btn-ghost btn-sm" disabled={!dirty || saving} onClick={() => setOverrides({})}>
+            <button type="button" className="btn btn-ghost" disabled={!dirty || saving} onClick={() => setOverrides({})}>
               Discard
             </button>
-            <button type="button" className="btn btn-primary btn-sm" disabled={!dirty || saving || errors.length > 0} onClick={() => void save()}>
+            <button type="button" className="btn btn-primary" disabled={!dirty || saving || errors.length > 0} onClick={() => void save()}>
               {saving ? "Saving…" : "Save"}
             </button>
           </div>

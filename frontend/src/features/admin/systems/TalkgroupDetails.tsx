@@ -4,9 +4,10 @@ import { Ban, Headphones, Trash2 } from "lucide-react";
 import {
   ActionButton,
   DetailsPanel,
-  FactList,
   InlineConfirm,
   PanelSection,
+  StatGrid,
+  StatTile,
   formatAgo,
   useNavigationGuard,
 } from "@/features/admin/_shell";
@@ -16,6 +17,8 @@ import { formatSeconds, fromTalkgroup, talkgroupTitle, toInput, type TalkgroupFo
 
 export interface TalkgroupDetailsProps {
   systemRowId: number;
+  /** The system's name, for the panel's subtitle. */
+  systemName: string;
   talkgroup: AdminTalkgroup;
   groups: AdminGroup[];
   tags: AdminTag[];
@@ -31,6 +34,7 @@ export interface TalkgroupDetailsProps {
 /** One talkgroup: activity, its fields to edit in place, and the rarer actions. */
 export default function TalkgroupDetails({
   systemRowId,
+  systemName,
   talkgroup,
   groups,
   tags,
@@ -62,14 +66,14 @@ export default function TalkgroupDetails({
   return (
     <DetailsPanel
       title={talkgroupTitle(talkgroup)}
-      subtitle={talkgroup.name ?? undefined}
-      badges={blocked ? <span className="badge badge-warning badge-sm">blocked</span> : undefined}
+      subtitle={[talkgroup.name, systemName].filter(Boolean).join(" · ")}
+      badges={blocked ? <span className="badge badge-warning">blocked</span> : undefined}
       onClose={onClose}
       footer={
         confirm ? null : (
           <>
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
-              Close
+              Cancel
             </button>
             <button type="submit" form={formId} className="btn btn-primary" disabled={busy || !dirty}>
               {busy ? "Saving…" : "Save"}
@@ -78,13 +82,11 @@ export default function TalkgroupDetails({
         )
       }
     >
-      <FactList
-        facts={[
-          { label: "Calls, 24 h", value: (talkgroup.calls24h ?? 0).toLocaleString() },
-          { label: "Last heard", value: talkgroup.lastHeard ? formatAgo(talkgroup.lastHeard) : "never" },
-          { label: "Average length", value: formatSeconds(talkgroup.avgDurationMs) },
-        ]}
-      />
+      <StatGrid className="grid-cols-3">
+        <StatTile label="Calls 24 h" value={(talkgroup.calls24h ?? 0).toLocaleString()} />
+        <StatTile label="Last heard" small value={talkgroup.lastHeard ? formatAgo(talkgroup.lastHeard) : "never"} />
+        <StatTile label="Avg length" small value={formatSeconds(talkgroup.avgDurationMs)} />
+      </StatGrid>
 
       <form
         id={formId}
@@ -125,15 +127,15 @@ export default function TalkgroupDetails({
             onConfirm={onBlock}
           />
         ) : (
-          <div className="space-y-1">
+          <div className="flex flex-col gap-2">
             <Link
               to={`/?system=${systemRowId}&talkgroup=${talkgroup.id}`}
-              className="flex items-center gap-3 rounded-box px-2 py-2 text-sm hover:bg-base-200"
+              className="btn btn-block min-h-11 justify-start whitespace-normal px-3.5 py-2.5 text-left"
             >
               <Headphones className="h-4 w-4" aria-hidden="true" />
-              <span>
-                <span className="block">Listen to recent calls</span>
-                <span className="block text-xs text-base-content-dim">Opens the scanner search on this talkgroup.</span>
+              <span className="flex flex-col">
+                <span className="font-medium">Listen to recent calls</span>
+                <span className="mt-0.5 text-xs font-normal text-base-content-dim">Opens the scanner search on this talkgroup.</span>
               </span>
             </Link>
             {!blocked && (

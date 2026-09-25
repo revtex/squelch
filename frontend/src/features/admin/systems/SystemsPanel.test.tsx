@@ -186,13 +186,16 @@ describe("SystemsPanel", () => {
     renderPanel();
     await user.click(screen.getByRole("button", { name: "Details for 101 FD Disp" }));
     const panel = within(screen.getByRole("dialog", { name: "101 FD Disp" }));
-    expect(panel.getByText("6.2 s")).toBeInTheDocument();
+    expect(panel.getByText("Avg length").nextElementSibling).toHaveTextContent("6.2 s");
+    expect(panel.getByText(/· County/)).toBeInTheDocument();
+    expect(panel.getByRole("radio", { name: "System default" })).toBeChecked();
+    await user.click(panel.getByRole("radio", { name: "Red" }));
     expect(panel.getByRole("link", { name: /Listen to recent calls/ })).toHaveAttribute("href", "/?system=10&talkgroup=100");
     await user.clear(panel.getByLabelText("Label"));
     await user.type(panel.getByLabelText("Label"), "Fire Dispatch");
     await user.click(panel.getByRole("button", { name: "Save" }));
     expect(ops.updateTalkgroup).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 100, systemId: 10, talkgroupId: 101, label: "Fire Dispatch", groupId: 1, tagId: 5 }),
+      expect.objectContaining({ id: 100, systemId: 10, talkgroupId: 101, label: "Fire Dispatch", groupId: 1, tagId: 5, led: "red" }),
     );
   });
 
@@ -241,7 +244,7 @@ describe("SystemsPanel", () => {
   it("blocks and unblocks talkgroup numbers", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await user.click(screen.getByRole("tab", { name: /Blocked/ }));
+    await user.click(screen.getByRole("tab", { name: /^Blocked talkgroups/ }));
     await user.type(screen.getByLabelText("Talkgroup number"), "555");
     await user.click(screen.getByRole("button", { name: "Block" }));
     expect(ops.block).toHaveBeenCalledWith({ id: 10, talkgroupId: 555 });
@@ -299,7 +302,7 @@ describe("SystemsPanel", () => {
     expect(screen.queryByRole("table", { name: "Talkgroups" })).toBeNull();
     await user.click(screen.getByRole("option", { name: /City/ }));
     expect(screen.getByRole("table", { name: "Talkgroups" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "City" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^City · system/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "All systems" }));
     expect(screen.queryByRole("table", { name: "Talkgroups" })).toBeNull();
   });

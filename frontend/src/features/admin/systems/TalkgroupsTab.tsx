@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { DataTable, InlineConfirm, SearchBox, formatAgo, plural, type Column } from "@/features/admin/_shell";
+import {
+  CHIP,
+  CHIP_OFF,
+  CHIP_ON,
+  DataTable,
+  InlineConfirm,
+  SearchBox,
+  formatAgo,
+  plural,
+  type Column,
+} from "@/features/admin/_shell";
 import type { AdminGroup, AdminTag, AdminTalkgroup } from "@/types";
 import { LED_COLORS, isUnlabeled, labelMap, ledCss, matchesTalkgroup } from "./systems";
 
@@ -78,29 +88,46 @@ export default function TalkgroupsTab({
     {
       id: "tg",
       header: "TG",
-      phone: "title",
+      phone: "show",
       sortValue: (tg) => tg.talkgroupId,
       cell: (tg) => (
-        <span className="flex items-center gap-2 font-mono">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: ledCss(tg.led) }} aria-hidden="true" />
-          {tg.talkgroupId}
-          {blocked.has(tg.talkgroupId) && <span className="badge badge-warning badge-xs">blocked</span>}
+        <span className="flex items-center gap-2">
+          <span className="font-mono">{tg.talkgroupId}</span>
+          {blocked.has(tg.talkgroupId) && <span className="badge badge-warning">blocked</span>}
         </span>
       ),
     },
     {
       id: "label",
       header: "Label · name",
-      phone: "show",
+      phone: "title",
       sortValue: (tg) => tg.label ?? "",
       className: "min-w-0",
       cell: (tg) =>
         isUnlabeled(tg) ? (
-          <span className="italic text-admin-dim2">unlabeled</span>
+          <span className="block min-w-0">
+            <span className="block text-base-content-dim">TG {tg.talkgroupId}</span>
+            <span className="badge badge-warning mt-0.5">unlabeled</span>
+          </span>
         ) : (
           <span className="block min-w-0">
             <span className="block truncate font-medium">{tg.label ?? "—"}</span>
-            {tg.name && <span className="block truncate text-xs text-base-content-dim">{tg.name}</span>}
+            {(tg.name || tg.led) && (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-base-content-dim">
+                {tg.name && <span className="truncate">{tg.name}</span>}
+                {tg.name && tg.led && <span aria-hidden="true">·</span>}
+                {tg.led && (
+                  <>
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: ledCss(tg.led) }}
+                      aria-hidden="true"
+                    />
+                    {tg.led}
+                  </>
+                )}
+              </span>
+            )}
           </span>
         ),
     },
@@ -121,7 +148,6 @@ export default function TalkgroupsTab({
     {
       id: "calls",
       header: "Calls 24 h",
-      align: "right",
       phone: "hide",
       sortValue: (tg) => tg.calls24h ?? 0,
       cell: (tg) => (tg.calls24h ? tg.calls24h.toLocaleString() : <span className="text-admin-dim2">0</span>),
@@ -240,8 +266,13 @@ export default function TalkgroupsTab({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={query} onChange={setQuery} label="Search talkgroups" className="w-full sm:w-64" />
-        <select className="select select-sm w-44" aria-label="Filter by group" value={group} onChange={(e) => setGroup(e.target.value)}>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label="Filter by ID, label, name, group or tag"
+          className="w-full md:max-w-[340px] md:min-w-[180px] md:flex-[1_1_200px]"
+        />
+        <select className="select w-36" aria-label="Filter by group" value={group} onChange={(e) => setGroup(e.target.value)}>
           <option value="">Any group</option>
           <option value="none">No group</option>
           {groups.map((g) => (
@@ -250,7 +281,7 @@ export default function TalkgroupsTab({
             </option>
           ))}
         </select>
-        <select className="select select-sm w-44" aria-label="Filter by tag" value={tag} onChange={(e) => setTag(e.target.value)}>
+        <select className="select w-36" aria-label="Filter by tag" value={tag} onChange={(e) => setTag(e.target.value)}>
           <option value="">Any tag</option>
           <option value="none">No tag</option>
           {tags.map((t) => (
@@ -262,14 +293,14 @@ export default function TalkgroupsTab({
         {unlabeled > 0 && (
           <button
             type="button"
-            className={`btn btn-sm ${unlabeledOnly ? "btn-primary" : "btn-ghost"}`}
+            className={`${CHIP} ${unlabeledOnly ? CHIP_ON : CHIP_OFF}`}
             aria-pressed={unlabeledOnly}
             onClick={() => setUnlabeledOnly((v) => !v)}
           >
             {unlabeled} unlabeled
           </button>
         )}
-        <button type="button" className="btn btn-sm btn-primary ms-auto" onClick={onAdd}>
+        <button type="button" className="btn ms-auto" onClick={onAdd}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           Add talkgroup
         </button>

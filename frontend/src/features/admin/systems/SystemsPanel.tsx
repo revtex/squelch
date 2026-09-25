@@ -1,7 +1,10 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowUpDown, ChevronLeft, Download, Plus, Settings2, Upload } from "lucide-react";
+import { ChevronLeft, Download, Info, Plus, Settings2, Upload } from "lucide-react";
 import {
+  COUNT,
+  Card,
+  Notice,
   PageHeader,
   formatAgo,
   plural,
@@ -15,6 +18,7 @@ import {
   useDeleteTalkgroupsMutation,
   useDeleteUnitMutation,
   useDetails,
+  useGetConfigQuery,
   useOpenParam,
   useLazyExportTalkgroupsQuery,
   useListGroupsQuery,
@@ -38,7 +42,7 @@ import TalkgroupDetails from "./TalkgroupDetails";
 import TalkgroupForm from "./TalkgroupForm";
 import TalkgroupsTab, { type BulkChange } from "./TalkgroupsTab";
 import UnitsTab, { UnitForm } from "./UnitsTab";
-import { systemsInOrder, tabFrom, type Tab } from "./systems";
+import { ledCss, systemsInOrder, tabFrom, type Tab } from "./systems";
 
 type Panel =
   | { kind: "system-create" }
@@ -52,7 +56,7 @@ type Panel =
 const TABS: { id: Tab; label: string }[] = [
   { id: "talkgroups", label: "Talkgroups" },
   { id: "units", label: "Units" },
-  { id: "blocked", label: "Blocked" },
+  { id: "blocked", label: "Blocked talkgroups" },
 ];
 
 const desktopQuery = "(min-width: 768px)";
@@ -95,6 +99,9 @@ export default function SystemsPanel() {
   const { data: systemsData, isLoading: loadingSystems } = useListSystemsQuery();
   const { data: groups } = useListGroupsQuery();
   const { data: tags } = useListTagsQuery();
+  const { data: config } = useGetConfigQuery();
+  const autoCreate =
+    (config?.settings.find((x) => x.key === "autoPopulateSystems")?.value ?? "true") === "true";
   const systems = useMemo(() => systemsInOrder(systemsData), [systemsData]);
 
   const paramId = numberParam(search.get("system"));
@@ -317,78 +324,97 @@ export default function SystemsPanel() {
   const showDetail = !!system && (desktop || paramId != null || linkedSystem != null);
 
   return (
-    <div className="space-y-[18px]">
+    <div className="flex flex-col gap-[18px]">
       <PageHeader
         title="Systems & talkgroups"
-        subtitle={
-          <>
-            {plural(systems.length, "system")}. Unknown systems and talkgroups are created from uploads when{" "}
-            <Link to="/admin/settings#settings-radio" className="link">
-              Settings → Radio data
-            </Link>{" "}
-            allows it.
-          </>
-        }
+        subtitle="One system per radio network your recorders upload. Pick a system to work on its talkgroups and units."
         actions={
-          <>
-            {systems.length > 1 &&
-              (reordering ? (
-                <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void finishReorder()}>
-                  Done reordering
-                </button>
-              ) : (
-                <button type="button" className="btn btn-sm btn-ghost" onClick={() => setReordering(true)}>
-                  <ArrowUpDown className="h-4 w-4" aria-hidden="true" />
-                  Reorder
-                </button>
-              ))}
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={(e) => {
-                setFormError(null);
-                panel.open({ kind: "system-create" }, e.currentTarget);
-              }}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add system
-            </button>
-          </>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={(e) => {
+              setFormError(null);
+              panel.open({ kind: "system-create" }, e.currentTarget);
+            }}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add system
+          </button>
         }
       />
 
-      <div className={desktop ? "grid grid-cols-[16rem_1fr] gap-4" : ""}>
+      {config && (
+        <Notice
+          icon={<Info />}
+          action={
+            <Link to="/admin/settings?q=Create%20systems" className="btn btn-sm">
+              Change
+            </Link>
+          }
+        >
+          <b className="font-semibold">Create systems from uploads</b>{" "}
+          {autoCreate
+            ? "is on. Unknown system numbers become new systems with talkgroup auto-create on."
+            : "is off. Uploads for an unknown system number are rejected."}
+        </Notice>
+      )}
+
+      <div className={desktop ? "grid grid-cols-[17.5rem_1fr] items-start gap-[18px]" : ""}>
         {showList && (
-          <div className="rounded-box border border-admin-line bg-base-100">
+          <Card
+            title="Systems"
+            count={systems.length}
+            bodyClassName=""
+            meta={
+              systems.length > 1 &&
+              (reordering ? (
+                <button type="button" className="btn btn-primary btn-xs" disabled={busy} onClick={() => void finishReorder()}>
+                  Done
+                </button>
+              ) : (
+                <button type="button" className="btn btn-ghost btn-xs" onClick={() => setReordering(true)}>
+                  Reorder
+                </button>
+              ))
+            }
+          >
             {loadingSystems ? (
-              <p className="p-3 text-sm text-base-content-dim">Loading…</p>
+              <p className="p-4 text-sm text-base-content-dim">Loading…</p>
             ) : (
               <SystemList systems={shown} selectedId={selectedId} onSelect={selectSystem} reordering={reordering} onMove={move} />
             )}
-          </div>
+          </Card>
         )}
 
         {showDetail && system && (
-          <section aria-label={system.label} className="min-w-0 space-y-3">
+          <section aria-label={system.label} className="flex min-w-0 flex-col gap-3.5">
             {!desktop && (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => selectSystem(null)}>
+              <button type="button" className="btn btn-ghost btn-sm self-start" onClick={() => selectSystem(null)}>
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                 All systems
               </button>
             )}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <div className="min-w-0 sm:flex-1">
-                <h2 className="truncate text-lg font-semibold">{system.label}</h2>
-                <p className="text-sm text-base-content-dim">
-                  System {system.systemId} · {plural(system.talkgroups, "talkgroup")} · {plural(system.units, "unit")} ·{" "}
-                  {system.calls24h.toLocaleString()} {system.calls24h === 1 ? "call" : "calls"} / 24 h
-                  {system.lastCall ? ` · last call ${formatAgo(system.lastCall)}` : ""}
+                <h2 className="flex min-w-0 items-center gap-2 text-lg">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: ledCss(system.led) }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate font-semibold">{system.label}</span>{" "}
+                  <span className="shrink-0 font-normal text-base-content-dim">· system {system.systemId}</span>
+                </h2>
+                <p className="mt-0.5 text-xs text-base-content-dim">
+                  {plural(system.talkgroups, "talkgroup")} · {plural(system.units, "unit")}
+                  {system.lastCall ? ` · last call ${formatAgo(system.lastCall)}` : " · no calls yet"} ·{" "}
+                  {system.calls24h.toLocaleString()} {system.calls24h === 1 ? "call" : "calls"} in 24 h
                 </p>
               </div>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-2 sm:justify-end">
                 <button
                   type="button"
-                  className="btn btn-sm btn-ghost"
+                  className="btn btn-sm"
                   onClick={(e) => {
                     setFormError(null);
                     panel.open({ kind: "system-edit" }, e.currentTarget);
@@ -399,7 +425,7 @@ export default function SystemsPanel() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm btn-ghost"
+                  className="btn btn-sm"
                   onClick={(e) => {
                     setFormError(null);
                     panel.open({ kind: "import" }, e.currentTarget);
@@ -408,7 +434,7 @@ export default function SystemsPanel() {
                   <Upload className="h-4 w-4" aria-hidden="true" />
                   Import
                 </button>
-                <button type="button" className="btn btn-sm btn-ghost" disabled={busy || system.talkgroups === 0} onClick={exportCsv}>
+                <button type="button" className="btn btn-sm" disabled={busy || system.talkgroups === 0} onClick={exportCsv}>
                   <Download className="h-4 w-4" aria-hidden="true" />
                   Export
                 </button>
@@ -424,11 +450,11 @@ export default function SystemsPanel() {
                     type="button"
                     role="tab"
                     aria-selected={t.id === tab}
-                    className={`tab ${t.id === tab ? "tab-active" : ""}`}
+                    className={`tab gap-2 ${t.id === tab ? "tab-active" : ""}`}
                     onClick={() => selectTab(t.id)}
                   >
                     {t.label}
-                    <span className="badge badge-ghost badge-sm ml-2">{count}</span>
+                    <span className={COUNT}>{count}</span>
                   </button>
                 );
               })}
@@ -543,6 +569,7 @@ export default function SystemsPanel() {
         <TalkgroupDetails
           key={currentTalkgroup.id}
           systemRowId={system.id}
+          systemName={system.label}
           talkgroup={currentTalkgroup}
           groups={groups ?? []}
           tags={tags ?? []}

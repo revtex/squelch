@@ -30,6 +30,40 @@ export function Field({ htmlFor, label, hint, error, children }: FieldProps) {
   );
 }
 
+export interface SettingRowProps extends FieldProps {
+  /** A wider control column, for a URL with a button beside it. */
+  wide?: boolean;
+}
+
+/**
+ * A settings row: name and help on the left, the control on the right. On a
+ * phone the control drops under the name.
+ */
+export function SettingRow({ htmlFor, label, hint, error, wide = false, children }: SettingRowProps) {
+  return (
+    <div
+      className={`grid gap-2 md:items-center md:gap-6 ${
+        wide ? "md:grid-cols-[minmax(0,1fr)_360px]" : "md:grid-cols-[minmax(0,1fr)_260px]"
+      }`}
+    >
+      <div className="min-w-0">
+        <label htmlFor={htmlFor} className="block font-medium">
+          {label}
+        </label>
+        {hint && <p className="text-xs text-base-content-dim">{hint}</p>}
+      </div>
+      <div className="min-w-0">
+        {children}
+        {error && (
+          <p role="alert" className="mt-1 text-xs text-error">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export interface SwitchRowProps {
   id: string;
   label: string;

@@ -21,6 +21,7 @@ export * from "./FilterChips";
 export * from "./SearchBox";
 export * from "./PageHeader";
 export * from "./Card";
+export * from "./StatTile";
 export * from "./Notice";
 export * from "./useHour12";
 export * from "./Field";

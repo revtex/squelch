@@ -3,8 +3,9 @@ import { RotateCcw } from "lucide-react";
 import {
   DataTable,
   FilterChips,
-  formatAgo,
+  formatWhen,
   plural,
+  useHour12,
   useRetryTranscriptionMutation,
   useToast,
   useTranscriptionJobsQuery,
@@ -28,14 +29,15 @@ function statusBadge(j: TranscriptionJob) {
     queued: "badge-info",
     done: "badge-success",
     failed: "badge-error",
-    skipped: "badge-ghost",
+    skipped: "badge-neutral",
   };
-  return <span className={`badge badge-sm ${tone[j.status]}`}>{JOB_STATUS_LABEL[j.status]}</span>;
+  return <span className={`badge ${tone[j.status]}`}>{JOB_STATUS_LABEL[j.status]}</span>;
 }
 
 /** What happened to recent calls, with a retry for the ones that failed. */
 export default function JobsTab({ initialFilter, failed24h, queued, transcribing, onChanged }: JobsTabProps) {
   const toast = useToast();
+  const hour12 = useHour12();
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const { data, isLoading, refetch } = useTranscriptionJobsQuery(filter === "all" ? undefined : filter);
   const [retry] = useRetryTranscriptionMutation();
@@ -59,7 +61,7 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
   const retryable = rows.filter((j) => j.status === "failed" || j.status === "skipped");
   const columns: Column<TranscriptionJob>[] = [
     { id: "call", header: "Call", phone: "title", sortValue: jobTitle, cell: (j) => <span className="font-medium">{jobTitle(j)}</span> },
-    { id: "when", header: "When", phone: "show", sortValue: (j) => j.callTime, cell: (j) => formatAgo(j.callTime) },
+    { id: "when", header: "When", phone: "show", sortValue: (j) => j.callTime, cell: (j) => formatWhen(j.callTime, { hour12 }) },
     {
       id: "result",
       header: "Result",
@@ -68,8 +70,8 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
       cell: (j) => (
         <span className="flex flex-wrap items-center gap-2">
           {statusBadge(j)}
-          {j.error && <span className="text-xs text-base-content-dim">{j.error}</span>}
-          {j.status === "done" && j.durationMs > 0 && <span className="text-xs text-base-content-dim">{formatSecs(j.durationMs)}</span>}
+          {j.error && <span>{j.error}</span>}
+          {j.status === "done" && j.durationMs > 0 && <span className="text-base-content-dim">{formatSecs(j.durationMs)}</span>}
         </span>
       ),
     },
@@ -82,12 +84,11 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
         j.status === "failed" || j.status === "skipped" ? (
           <button
             type="button"
-            className="btn btn-xs"
+            className="btn btn-sm btn-ghost"
             disabled={busy != null || !transcribing}
             title={transcribing ? undefined : "Turn transcription on first"}
             onClick={() => void doRetry([j.callId], j.callId)}
           >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             Retry
           </button>
         ) : null,

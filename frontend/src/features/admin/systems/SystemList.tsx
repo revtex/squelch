@@ -21,30 +21,28 @@ function activity(s: AdminSystem): string {
 /** The systems, one per row, with counts and activity; a listbox unless reordering. */
 export default function SystemList({ systems, selectedId, onSelect, reordering, onMove }: SystemListProps) {
   if (systems.length === 0) {
-    return <p className="p-3 text-sm text-base-content-dim">No systems yet. Most appear on their own when uploads may create them.</p>;
+    return <p className="p-4 text-sm text-base-content-dim">No systems yet. Most appear on their own when uploads may create them.</p>;
   }
   const rowBody = (s: AdminSystem) => (
     <>
-      <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ledCss(s.led) }} aria-hidden="true" />
+      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ledCss(s.led) }} aria-hidden="true" />
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate font-medium">{s.label}</span>
-          <span className={`badge badge-xs ${s.autoPopulateTalkgroups === 1 ? "badge-ghost" : "badge-outline"}`}>
-            {s.autoPopulateTalkgroups === 1 ? "auto" : "manual"}
-          </span>
-        </span>
+        <span className="block truncate font-medium">{s.label}</span>
         <span className="block text-xs text-base-content-dim">
           ID {s.systemId} · {plural(s.talkgroups, "talkgroup")} · {activity(s)}
         </span>
+      </span>
+      <span className={`badge mt-0.5 shrink-0 ${s.autoPopulateTalkgroups === 1 ? "badge-success" : ""}`}>
+        {s.autoPopulateTalkgroups === 1 ? "auto" : "manual"}
       </span>
     </>
   );
 
   if (reordering) {
     return (
-      <ul aria-label="Systems in display order" className="divide-y divide-admin-line">
+      <ul aria-label="Systems in display order" className="divide-y divide-admin-line2">
         {systems.map((s, i) => (
-          <li key={s.id} className="flex items-start gap-2 p-2">
+          <li key={s.id} className="flex items-center gap-2.5 px-4 py-3">
             {rowBody(s)}
             <span className="join shrink-0">
               <button
@@ -73,7 +71,7 @@ export default function SystemList({ systems, selectedId, onSelect, reordering, 
   }
 
   return (
-    <ul role="listbox" aria-label="Systems" className="divide-y divide-admin-line">
+    <ul role="listbox" aria-label="Systems" className="divide-y divide-admin-line2">
       {systems.map((s) => {
         const on = s.id === selectedId;
         return (
@@ -82,7 +80,7 @@ export default function SystemList({ systems, selectedId, onSelect, reordering, 
             role="option"
             aria-selected={on}
             tabIndex={0}
-            className={`flex cursor-pointer items-start gap-2 p-2 outline-none focus-visible:ring-2 focus-visible:ring-primary ${on ? "bg-primary/10" : "hover:bg-base-200"}`}
+            className={`flex cursor-pointer items-center gap-2.5 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-secondary ${on ? "bg-admin-navy2" : "hover:bg-base-300"}`}
             onClick={() => onSelect(s.id)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {

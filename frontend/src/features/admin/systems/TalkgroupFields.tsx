@@ -1,6 +1,6 @@
-import { Field } from "@/features/admin/_shell";
+import { CHIP, CHIP_OFF, CHIP_ON, Field } from "@/features/admin/_shell";
 import type { AdminGroup, AdminTag } from "@/types";
-import { LED_COLORS, type TalkgroupFormState } from "./systems";
+import { LED_COLORS, ledCss, type TalkgroupFormState } from "./systems";
 
 export interface TalkgroupFieldsProps {
   id: string;
@@ -29,6 +29,7 @@ export default function TalkgroupFields({ id, form, groups, tags, numberEditable
           />
         </Field>
       )}
+      <div className="grid gap-3 sm:grid-cols-2">
       <Field htmlFor={`${id}-label`} label="Label" hint="Short, for the scanner display.">
         <input
           id={`${id}-label`}
@@ -48,6 +49,7 @@ export default function TalkgroupFields({ id, form, groups, tags, numberEditable
           onChange={(e) => onChange("name", e.target.value)}
         />
       </Field>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field htmlFor={`${id}-group`} label="Group">
           <select id={`${id}-group`} className="select w-full" value={form.groupId} onChange={(e) => onChange("groupId", e.target.value)}>
@@ -69,16 +71,6 @@ export default function TalkgroupFields({ id, form, groups, tags, numberEditable
             ))}
           </select>
         </Field>
-        <Field htmlFor={`${id}-led`} label="LED colour">
-          <select id={`${id}-led`} className="select w-full" value={form.led} onChange={(e) => onChange("led", e.target.value)}>
-            <option value="">System default</option>
-            {LED_COLORS.map((c) => (
-              <option key={c} value={c}>
-                {c.charAt(0).toUpperCase() + c.slice(1)}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field htmlFor={`${id}-freq`} label="Frequency (MHz)" hint="Optional; shown on the display.">
           <input
             id={`${id}-freq`}
@@ -92,6 +84,30 @@ export default function TalkgroupFields({ id, form, groups, tags, numberEditable
           />
         </Field>
       </div>
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-[13px] font-medium">LED colour</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {["", ...LED_COLORS].map((c) => {
+            const on = form.led === c;
+            return (
+              <label key={c || "default"} className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} has-[:focus-visible]:outline-2`}>
+                <input
+                  type="radio"
+                  name={`${id}-led`}
+                  className="sr-only"
+                  value={c}
+                  checked={on}
+                  onChange={() => onChange("led", c)}
+                />
+                {c && (
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ledCss(c) }} aria-hidden="true" />
+                )}
+                {c ? c.charAt(0).toUpperCase() + c.slice(1) : "System default"}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
     </>
   );
 }

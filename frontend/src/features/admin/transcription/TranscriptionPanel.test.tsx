@@ -30,6 +30,8 @@ type Listener = (topic: string, data: unknown, at: number) => void;
 const listeners = new Map<string, Listener[]>();
 vi.mock("@/shared/services/ws/adminClient", () => ({
   adminWsClient: {
+    // The clock setting (useHour12) asks for config; offline keeps 24-hour.
+    isConnected: () => false,
     on: (topic: string, cb: Listener) => {
       listeners.set(topic, [...(listeners.get(topic) ?? []), cb]);
       return () => listeners.set(topic, (listeners.get(topic) ?? []).filter((l) => l !== cb));

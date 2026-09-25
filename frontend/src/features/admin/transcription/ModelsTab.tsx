@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Download, Trash2, X } from "lucide-react";
+import { Download } from "lucide-react";
 import {
   InlineConfirm,
   useCancelModelDownloadMutation,
@@ -24,16 +24,16 @@ export interface ModelsTabProps {
 function stateBadge(row: ModelRow) {
   switch (row.state) {
     case "active":
-      return <span className="badge badge-success badge-sm">active</span>;
+      return <span className="badge badge-success">active</span>;
     case "downloaded":
-      return <span className="badge badge-ghost badge-sm">downloaded</span>;
+      return <span className="badge badge-neutral">downloaded</span>;
     case "downloading":
-      return <span className="badge badge-info badge-sm">downloading</span>;
+      return <span className="badge badge-warning">downloading</span>;
     default:
       return row.missing ? (
-        <span className="badge badge-warning badge-sm">selected, not downloaded</span>
+        <span className="badge badge-warning">selected, not downloaded</span>
       ) : (
-        <span className="badge badge-outline badge-sm">available</span>
+        <span className="text-base-content-dim">available</span>
       );
   }
 }
@@ -105,7 +105,7 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
 
   if (error) {
     return (
-      <p role="alert" className="alert alert-warning text-sm">
+      <p role="alert" className="alert alert-warning">
         The model list could not be read: {error}. Check the URL under Settings.
       </p>
     );
@@ -113,8 +113,8 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-box border border-admin-line">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-lg border border-admin-line bg-base-200">
+        <table className="table">
           <caption className="sr-only">Models</caption>
           <thead>
             <tr>
@@ -139,24 +139,23 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
             {rows.map((row) => {
               const isBusy = busy === row.id;
               return (
-                <tr key={row.id} className={row.state === "active" ? "bg-primary/5" : ""}>
-                  <td className="font-mono text-xs">
-                    {row.id}
-                    {row.englishOnly && <span className="ms-2 badge badge-ghost badge-xs">English</span>}
-                  </td>
+                <tr key={row.id}>
+                  <td className="font-mono">{row.id}</td>
                   <td>{formatModelSize(row.bytes)}</td>
                   <td className="hidden sm:table-cell">{row.bytes ? row.speed : "—"}</td>
                   <td className="hidden sm:table-cell">{row.speakerTurns ? "yes" : "no"}</td>
                   <td>
                     {row.state === "downloading" && row.download ? (
-                      <span className="flex items-center gap-2">
+                      <span className="flex flex-col gap-1.5">
+                        <span className="badge badge-warning tabular-nums">
+                          downloading {Math.round(row.download.percent)}%
+                        </span>
                         <progress
-                          className="progress progress-info w-24"
+                          className="progress progress-warning h-1.5 w-28"
                           value={row.download.percent}
                           max={100}
                           aria-label={`Downloading ${row.id}`}
                         />
-                        <span className="text-xs tabular-nums">{Math.round(row.download.percent)}%</span>
                       </span>
                     ) : (
                       stateBadge(row)
@@ -176,27 +175,26 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
                     ) : row.state === "active" ? (
                       <span className="text-xs text-base-content-dim">{transcribing ? "in use" : "selected"}</span>
                     ) : row.state === "downloaded" ? (
-                      <span className="join">
-                        <button type="button" className="btn btn-xs join-item" disabled={isBusy} onClick={() => void use(row.id)}>
+                      <span className="inline-flex gap-1">
+                        <button type="button" className="btn btn-sm" disabled={isBusy} onClick={() => void use(row.id)}>
                           Use
                         </button>
                         <button
                           type="button"
-                          className="btn btn-xs btn-ghost join-item"
+                          className="btn btn-sm btn-ghost text-error"
                           aria-label={`Delete ${row.id}`}
                           disabled={isBusy}
                           onClick={() => setConfirmDelete(row.id)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          Delete
                         </button>
                       </span>
                     ) : row.state === "downloading" ? (
-                      <button type="button" className="btn btn-xs btn-ghost" disabled={isBusy} onClick={() => void stop(row.id)}>
-                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      <button type="button" className="btn btn-sm btn-ghost" disabled={isBusy} onClick={() => void stop(row.id)}>
                         Cancel
                       </button>
                     ) : (
-                      <button type="button" className="btn btn-xs" disabled={isBusy} onClick={() => void fetch(row.id)}>
+                      <button type="button" className="btn btn-sm" disabled={isBusy} onClick={() => void fetch(row.id)}>
                         <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         Download
                       </button>
