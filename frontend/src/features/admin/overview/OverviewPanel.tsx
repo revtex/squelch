@@ -219,7 +219,13 @@ export default function OverviewPanel() {
           label="Uptime"
           to="/admin/logs"
           value={stats ? formatUptime(stats.uptime) : "…"}
-          detail={stats ? `${stats.version} · restarted ${formatDay(stats.startedAt)}` : undefined}
+          detail={
+            stats ? (
+              <>
+                {stats.version} · <span className="whitespace-nowrap">restarted {formatDay(stats.startedAt)}</span>
+              </>
+            ) : undefined
+          }
         />
       </StatGrid>
 
@@ -248,13 +254,16 @@ export default function OverviewPanel() {
           {talkgroups.length === 0 ? (
             <p className="px-4 py-3.5 text-sm text-base-content-dim">No calls in this range.</p>
           ) : (
-            <div className="overflow-x-auto">
+            // The System column only when the card has room for it: a real
+            // system name ("Ohio MARCS-IP: Multi-Agency Radio Communications")
+            // would otherwise squeeze the talkgroup names to a few letters.
+            <div className="@container overflow-x-auto">
               <table className="table">
                 <caption className="sr-only">Busiest talkgroups, {words}</caption>
                 <thead>
                   <tr>
                     <th>Talkgroup</th>
-                    <th className="max-sm:hidden">System</th>
+                    <th className="hidden @[560px]:table-cell">System</th>
                     <th className="text-right">Calls</th>
                     <th className="w-24 max-sm:hidden">
                       <span className="sr-only">Share of the busiest</span>
@@ -275,10 +284,14 @@ export default function OverviewPanel() {
                             <span className="font-medium">{name}</span>
                           )}
                           {t.talkgroupName && <span className="block text-xs text-base-content-dim">{t.talkgroupName}</span>}
-                          <span className="block text-xs text-base-content-dim sm:hidden">{t.systemLabel}</span>
+                          <span className="block text-xs text-base-content-dim @[560px]:hidden">{t.systemLabel}</span>
                         </td>
-                        <td className="whitespace-nowrap max-sm:hidden">{t.systemLabel}</td>
-                        <td className="text-right tabular-nums">{t.callCount.toLocaleString()}</td>
+                        <td className="hidden @[560px]:table-cell">
+                          <span className="block max-w-[14rem] truncate" title={t.systemLabel}>
+                            {t.systemLabel}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap text-right tabular-nums">{t.callCount.toLocaleString()}</td>
                         <td className="max-sm:hidden">
                           <div className="h-1.5 rounded-full bg-base-300" aria-hidden="true">
                             <div

@@ -119,19 +119,37 @@ func probeWhisper(ctx context.Context, baseURL string) whisperProbe {
 		p.Error = fmt.Sprintf("the server answered %d", resp.StatusCode)
 		return p
 	}
-	var list struct {
-		Models []whisperModel `json:"models"`
-	}
-	if err := json.Unmarshal(body, &list); err != nil {
+	models, ok := parseModelList(body)
+	if !ok {
 		p.Error = "the reply was not a go-whisper model list"
 		return p
 	}
 	p.OK = true
-	p.Models = list.Models
-	if p.Models == nil {
-		p.Models = []whisperModel{}
-	}
+	p.Models = models
 	return p
+}
+
+// parseModelList reads go-whisper's model list in either shape it has used:
+// the documented {"object":"list","models":[…]} and the bare array that
+// deployed builds answer with.
+func parseModelList(body []byte) ([]whisperModel, bool) {
+	var bare []whisperModel
+	if err := json.Unmarshal(body, &bare); err == nil {
+		if bare == nil {
+			bare = []whisperModel{}
+		}
+		return bare, true
+	}
+	var list struct {
+		Models *[]whisperModel `json:"models"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil || list.Models == nil {
+		return nil, false
+	}
+	if *list.Models == nil {
+		return []whisperModel{}, true
+	}
+	return *list.Models, true
 }
 
 // whisperVersion pulls "0.9.2" out of a Server header like "go-whisper/0.9.2".
@@ -258,7 +276,8 @@ func (o *Operations) TranscriptionModels(ctx context.Context, _ json.RawMessage,
 	}
 	p := probeWhisper(ctx, baseURL)
 	if !p.OK {
-		return nil, fmt.Errorf("go-whisper at %s: %s", baseURL, p.Error)
+		// A UserError, so the Models tab can say why instead of "internal error".
+		return nil, UserError(fmt.Sprintf("go-whisper at %s: %s", baseURL, p.Error))
 	}
 	return map[string]any{
 		"models":    p.Models,

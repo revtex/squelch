@@ -382,6 +382,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Transcription recognises the go-whisper you run.** Deployed go-whisper
+  builds answer the model list with a bare array, not the documented
+  `{"models": […]}`, so the Transcription page said "Not connected" and the
+  Models tab could not load while calls were being transcribed. Both shapes
+  are read now, and a Models failure says why instead of "internal error".
+- **Busiest talkgroups fits a long system name.** A system named like "Ohio
+  MARCS-IP: Multi-Agency Radio Communications" squeezed the talkgroup names
+  to a few letters and pushed the call counts out of the card. The System
+  column now shows only when the card has room, cut short with the full
+  name on hover; otherwise the system sits under the talkgroup. Uptime's
+  restart date no longer breaks across lines, and a long address in the
+  Transcription and Trunk Recorder banners wraps instead of running under
+  the button.
 - **API keys counts legacy uploads for every key.** The legacy report
   keeps only the first six characters of a key's label, and the API keys
   page matched that against the whole label. A key named longer than six

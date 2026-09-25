@@ -101,7 +101,10 @@ describe("OverviewPanel", () => {
     expect(screen.getByText("18,942")).toBeInTheDocument();
     expect(screen.getByText("▲ 6% vs yesterday")).toBeInTheDocument();
     expect(screen.getByText("12 d 4 h")).toBeInTheDocument();
-    expect(screen.getByText(/^v3\.1\.0 · restarted/)).toBeInTheDocument();
+    // The restart date is kept on one line, so the detail is split across a span.
+    const restarted = screen.getByText(/^restarted \d{4}-\d{2}-\d{2}$/);
+    expect(restarted).toHaveClass("whitespace-nowrap");
+    expect(restarted.parentElement).toHaveTextContent(/^v3\.1\.0 · restarted/);
 
     const busiest = within(screen.getByRole("table", { name: /Busiest talkgroups/ }));
     expect(busiest.getByRole("link", { name: "LC FD Disp" })).toHaveAttribute("href", "/admin/systems?system=1&open=5");

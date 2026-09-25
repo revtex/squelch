@@ -62,7 +62,7 @@ function ConnectionBanner({ status, onTest, testing }: { status: TranscriptionSt
         className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${status.connected ? "bg-success" : "bg-warning"}`}
         aria-hidden="true"
       />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
         {lead}
         {extra.map((part, i) => (
           <Fragment key={i}> · {part}</Fragment>

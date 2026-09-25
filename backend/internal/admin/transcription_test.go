@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -258,5 +259,59 @@ func TestTranscriptionJobRecorder_AnnouncesEachChange(t *testing.T) {
 	job, err := q.GetTranscriptionJob(context.Background(), callID)
 	if err != nil || job.Status != "done" {
 		t.Fatalf("job = %+v, err = %v", job, err)
+	}
+}
+
+// TestParseModelList_BothShapes: deployed go-whisper answers with a bare
+// array, its API doc with an object; anything else is not a model list.
+func TestParseModelList_BothShapes(t *testing.T) {
+	bare := `[{"id":"ggml-large-v3-turbo","object":"model","path":"ggml-large-v3-turbo.bin","created":1776783926,"owned_by":"whisper"}]`
+	if got, ok := parseModelList([]byte(bare)); !ok || len(got) != 1 || got[0].ID != "ggml-large-v3-turbo" {
+		t.Errorf("bare array = %+v, %v", got, ok)
+	}
+	wrapped := `{"object":"list","models":[{"id":"ggml-base.en"}]}`
+	if got, ok := parseModelList([]byte(wrapped)); !ok || len(got) != 1 || got[0].ID != "ggml-base.en" {
+		t.Errorf("wrapped = %+v, %v", got, ok)
+	}
+	for _, empty := range []string{`[]`, `{"object":"list","models":[]}`} {
+		if got, ok := parseModelList([]byte(empty)); !ok || got == nil || len(got) != 0 {
+			t.Errorf("%s = %+v, %v", empty, got, ok)
+		}
+	}
+	for _, bad := range []string{`{"error":"nope"}`, `<html>`, `"text"`, `{}`} {
+		if _, ok := parseModelList([]byte(bad)); ok {
+			t.Errorf("%s parsed as a model list", bad)
+		}
+	}
+}
+
+// TestTranscriptionModels_BareArrayAndReadableError: the op works against a
+// sidecar that answers with a bare array, and a failure reaches the admin as
+// a UserError that names the reason.
+func TestTranscriptionModels_BareArrayAndReadableError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"ggml-large-v3-turbo","object":"model","path":"ggml-large-v3-turbo.bin"}]`))
+	}))
+	defer srv.Close()
+	o, q := newTestOperations(t, "")
+	_ = q.UpsertSetting(context.Background(), db.UpsertSettingParams{Key: "transcriptionUrl", Value: srv.URL})
+	res, err := o.TranscriptionModels(context.Background(), nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.(map[string]any)["models"].([]whisperModel); len(got) != 1 || got[0].ID != "ggml-large-v3-turbo" {
+		t.Errorf("models = %+v", got)
+	}
+
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html>`))
+	}))
+	defer bad.Close()
+	_ = q.UpsertSetting(context.Background(), db.UpsertSettingParams{Key: "transcriptionUrl", Value: bad.URL})
+	_, err = o.TranscriptionModels(context.Background(), nil, 1)
+	var ue UserError
+	if !errors.As(err, &ue) || !strings.Contains(err.Error(), "not a go-whisper model list") {
+		t.Errorf("err = %#v", err)
 	}
 }

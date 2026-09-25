@@ -185,7 +185,7 @@ export default function TrunkRecorderPanel() {
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${state === "connected" ? "bg-success" : state === "disabled" ? "bg-admin-dim2" : "bg-warning"}`}
               aria-hidden="true"
             />
-            <span className="min-w-0 flex-1">
+            <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <b>{selected.label}</b>
               {bannerParts.map((part, i) => (
                 <Fragment key={i}> · {part}</Fragment>
