@@ -380,6 +380,26 @@
   --led-live: #00e676;
 }
 
+/* Text on the status fills. The palettes define an ink only for base,
+   primary and neutral, so badge-info, btn-success, alert-error and the rest
+   drew their text in whatever colour they inherited — light text on a light
+   fill. Each fill takes the theme's own darkest or lightest colour, whichever
+   reads better on it (all pairs are 4.5:1 or more); no new palette values.
+   Success is the one dark fill in the block themes, so it takes light ink. */
+:root,
+[data-theme] {
+  --color-secondary-content: var(--color-base-100);
+  --color-accent-content: var(--color-base-100);
+  --color-info-content: var(--color-base-100);
+  --color-success-content: var(--color-base-content);
+  --color-warning-content: var(--color-base-100);
+  --color-error-content: var(--color-base-100);
+}
+[data-theme="squelch-classic"],
+:root:not([data-theme]) {
+  --color-success-content: var(--color-base-100);
+}
+
 /* Two colours the display owns. A block theme gets its highlight from the
    theme accent and its tag chip from the secondary — one piece of colour on
    the ink block. The classic panel has no block to stick a label onto, so

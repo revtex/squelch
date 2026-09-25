@@ -281,6 +281,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Text on coloured badges, buttons and alerts is readable in every
+  theme.** The themes gave no text colour for their info, success,
+  warning, error, accent and secondary fills, so labels such as
+  "temporary password" drew light text on a light fill, and the scanner's
+  LIVE button did the same in Squelch classic. Each fill now takes the
+  theme's own dark or light ink, whichever reads better on it (4.5:1 or
+  more in all seven themes).
+
 - **Webhooks are now delivered.** They could be created but nothing ever
   posted to them. A webhook's secret is no longer sent to the browser or
   pre-filled in the edit form; it is write-only and stored encrypted like a
