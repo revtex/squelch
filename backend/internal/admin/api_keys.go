@@ -37,11 +37,13 @@ func (o *Operations) APIKeysList(ctx context.Context, _ json.RawMessage, _ int64
 			calls[c.ApiKeyID.Int64] = c.Calls
 		}
 	}
-	legacy := map[string]int64{}
+	// Legacy hits carry the key's id; their ident is cut to six characters
+	// and cannot tell "TR-Lake-North" from "TR-Lake-South".
+	legacy := map[int64]int64{}
 	if o.Deps.LegacyUsage != nil {
 		for _, e := range o.Deps.LegacyUsage.Aggregate24h() {
-			if e.APIKeyIdent != "" {
-				legacy[e.APIKeyIdent] += int64(e.Count)
+			if e.APIKeyID != 0 {
+				legacy[e.APIKeyID] += int64(e.Count)
 			}
 		}
 	}
@@ -49,10 +51,7 @@ func (o *Operations) APIKeysList(ctx context.Context, _ json.RawMessage, _ int64
 	for _, k := range keys {
 		m := mapAPIKey(k)
 		m["calls24h"] = calls[k.ID]
-		m["legacy24h"] = int64(0)
-		if k.Ident.Valid {
-			m["legacy24h"] = legacy[k.Ident.String]
-		}
+		m["legacy24h"] = legacy[k.ID]
 		out = append(out, m)
 	}
 	return out, nil

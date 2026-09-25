@@ -346,6 +346,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **API keys counts legacy uploads for every key.** The legacy report
+  keeps only the first six characters of a key's label, and the API keys
+  page matched that against the whole label. A key named longer than six
+  characters always showed no legacy use. The report now records which
+  key made each request, and two keys that start alike no longer share a
+  count. `GET /api/v1/admin/legacy-usage` entries carry `apiKeyId`.
 - **Transcription no longer claims more than 100% of calls.** The
   transcribed count goes by when a call finished transcribing, so a
   catch-up or a retry could pass the day's calls. The tile now says it

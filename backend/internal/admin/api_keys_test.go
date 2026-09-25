@@ -93,8 +93,9 @@ func TestAPIKeysList_ShowsUsage(t *testing.T) {
 	ops, q := newTestOperations(t, "")
 	store := middleware.NewLegacyUsageStore(nil)
 	ops.Deps.LegacyUsage = store
-	id, _ := createAPIKey(t, ops, "TR-Lake")
-	quiet, _ := createAPIKey(t, ops, "Spare")
+	id, _ := createAPIKey(t, ops, "TR-Lake-North")
+	// Shares the six characters the legacy report keeps ("TR-Lak").
+	quiet, _ := createAPIKey(t, ops, "TR-Lake-South")
 
 	sysID, err := q.CreateSystem(context.Background(), db.CreateSystemParams{SystemID: 1, Label: "Test", AutoPopulateTalkgroups: 1})
 	if err != nil {
@@ -116,8 +117,9 @@ func TestAPIKeysList_ShowsUsage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("TouchAPIKeyUsed: %v", err)
 	}
-	store.Record("/api/call-upload", "POST", "TR-Lake", 200)
-	store.Record("/api/call-upload", "POST", "TR-Lake", 200)
+	store.RecordKey("/api/call-upload", "POST", "TR-Lak", id, 200)
+	store.RecordKey("/api/call-upload", "POST", "TR-Lak", id, 200)
+	store.Record("/api/call-upload", "POST", "", 200) // no key: nobody's
 
 	res, err := ops.APIKeysList(context.Background(), nil, 1)
 	if err != nil {
