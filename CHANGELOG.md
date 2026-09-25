@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A new admin shell.** The sidebar is grouped into Overview, People &
+  access, Radio data, Ingest & delivery and Server, with **Webhooks** finally
+  listed (the page existed but nothing linked to it) and **Trunk Recorder**
+  as a page of its own. Press **Ctrl K** to jump to any section by typing a
+  few letters. The top bar shows whether the admin's live connection to the
+  server is up. On a phone the sidebar becomes a bottom bar with a **More**
+  sheet listing every section, and details panels open as a bottom sheet.
+  Messages from actions now appear as a toast at the bottom of the page, with
+  **Undo** where an action can be undone.
 - **Admin → Connections.** See everyone connected right now — listening
   (LIVE), on background audio (BKGND) or on the admin dashboard — with their
   address, whether they are on the Squelch app or a browser, and how long they

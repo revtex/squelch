@@ -1,4 +1,4 @@
-import { useListConnectionsQuery } from "@/features/admin/_shell";
+import { useListConnectionsQuery, OpenButton } from "@/features/admin/_shell";
 import type { AdminConnection } from "@/types";
 import {
   KIND_LABELS,
@@ -10,7 +10,6 @@ import { useNow } from "./useNow";
 import type { HistoryLink } from "./types";
 import { CountryCell, GeoIPCredit } from "./Country";
 import { placeText } from "./place";
-import OpenButton from "./OpenButton";
 import { liveSelection, type OpenDetails } from "./selection";
 
 function matches(c: AdminConnection, q: string): boolean {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { useConnectionHistoryQuery } from "@/features/admin/_shell";
+import { useConnectionHistoryQuery, OpenButton } from "@/features/admin/_shell";
 import type { ConnectionHistoryFilter, ConnectionKind } from "@/types";
 import {
   KIND_LABELS,
@@ -10,7 +10,6 @@ import {
   reasonLabel,
 } from "./format";
 import { CountryCell, GeoIPCredit } from "./Country";
-import OpenButton from "./OpenButton";
 import { historySelection, type OpenDetails } from "./selection";
 
 const PAGE_SIZE = 100;

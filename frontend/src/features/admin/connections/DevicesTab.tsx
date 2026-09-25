@@ -1,10 +1,9 @@
-import { useListSessionsQuery } from "@/features/admin/_shell";
+import { useListSessionsQuery, OpenButton } from "@/features/admin/_shell";
 import type { AdminSession } from "@/types";
 import { clientLabel, formatDateTime } from "./format";
 import type { HistoryLink } from "./types";
 import { CountryCell, GeoIPCredit } from "./Country";
 import { placeText } from "./place";
-import OpenButton from "./OpenButton";
 import { deviceSelection, type OpenDetails } from "./selection";
 
 function matches(s: AdminSession, q: string): boolean {

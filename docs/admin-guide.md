@@ -9,7 +9,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 ## Contents
 
 - [Navigation](#navigation)
-- [Activity](#activity)
+- [Overview](#overview)
 - [Trunk Recorder Dashboard](#trunk-recorder-dashboard)
 - [Users](#users)
 - [Connections](#connections)
@@ -20,7 +20,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 - [Downstreams](#downstreams)
 - [Shared Links](#shared-links)
 - [Transcription](#transcription)
-- [Options](#options)
+- [Settings](#settings)
 - [Logs](#logs)
 - [Tools](#tools)
 
@@ -28,31 +28,25 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 
 ## Navigation
 
-The sidebar contains these panels, in order:
+The sidebar groups the admin into five areas:
 
-1. **Dashboards** — overview stats, and the Trunk Recorder view
-2. **Users** — manage user accounts
-3. **Connections** — who is connected, which devices are signed in, and who has been
-4. **Systems** — manage systems, talkgroups, and units
-5. **Groups & Tags** — organize talkgroups into categories
-6. **API Keys** — manage recorder upload keys
-7. **Monitors** — set up directory-based call import
-8. **Downstreams** — forward calls to other Squelch instances
-9. **Shared Links** — view and manage shared call links
-10. **Transcription** — configure speech-to-text
-11. **Options** — general settings and behavior
-12. **Logs** — view server logs
-13. **Tools** — import, export, and maintenance
+- **Overview** — stats and recent activity
+- **People & access** — **Users** and **Connections**
+- **Radio data** — **Systems**, **Groups & tags** and **API keys**
+- **Ingest & delivery** — **Folder monitors**, **Downstreams**, **Webhooks**, **Shared links** and **Transcription**
+- **Server** — **Settings**, **Logs & audit**, **Trunk Recorder** and **Backup & import**
 
-**Dashboards** holds two tabs: **Activity** (the default) and **Trunk Recorder**. The tab you're on is kept in the address bar, so you can bookmark or share a link straight to either one.
+Press **Ctrl K** (or choose **Go to** in the top bar) and type a few letters to jump to any section. The top bar also shows whether the admin's live connection to the server is up: **Live**, **Reconnecting…** or **Offline**. While it is reconnecting, lists stop updating until it is back.
 
-The **Scanner** link in the sidebar returns you to the live scanner at `/`. **Sign Out** clears your session. If you have unsaved changes in a panel, you'll be prompted before navigating away.
+On a phone the sidebar becomes a bar along the bottom with **Overview**, **Users**, **Systems** and **Logs & audit**; **More** lists every section. On a narrow desktop window the sidebar shrinks to icons with short labels.
+
+The **Scanner** link in the sidebar and in the account menu returns you to the live scanner at `/`. **Sign out** clears your session. If you have unsaved changes in a panel, you'll be prompted before navigating away.
 
 ---
 
-## Activity
+## Overview
 
-**Dashboards → Activity** gives you a quick overview of your system:
+**Overview** gives you a quick overview of your system:
 
 - **Calls Today** — number of calls ingested today
 - **This Week** — calls over the last 7 days
@@ -66,9 +60,9 @@ The **Scanner** link in the sidebar returns you to the live scanner at `/`. **Si
 
 ## Trunk Recorder Dashboard
 
-If you run [trunk-recorder](https://github.com/robotastic/trunk-recorder) with the [MQTT status plugin](https://github.com/taclane/trunk-recorder-mqtt-status), Squelch can subscribe to its broker and surface live operational data — control-channel decode rate, recorder states, active calls, system tables, unit affiliation, and trunking-message debugging — under **Dashboards → Trunk Recorder**.
+If you run [trunk-recorder](https://github.com/robotastic/trunk-recorder) with the [MQTT status plugin](https://github.com/taclane/trunk-recorder-mqtt-status), Squelch can subscribe to its broker and surface live operational data — control-channel decode rate, recorder states, active calls, system tables, unit affiliation, and trunking-message debugging — under **Trunk Recorder**.
 
-The Trunk Recorder integration is opt-in. Enable it under **Options → Trunk Recorder MQTT**, then add one instance row per trunk-recorder under **Dashboards → Trunk Recorder → Instances**.
+The Trunk Recorder integration is opt-in. Enable it under **Settings → Trunk Recorder MQTT**, then add one instance row per trunk-recorder under **Trunk Recorder → Instances**.
 
 > Audio is **not** consumed over MQTT — calls keep flowing through your existing dirmonitor or `/api/v1/calls` upload pipeline. The MQTT feed only powers the live dashboard.
 
@@ -143,7 +137,7 @@ A record of every connection: who, from where, when, how long it lasted, and how
 | Disconnected by an admin | An admin used **Disconnect** |
 | Blocked | An admin blocked the address it came from |
 
-Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Options → Connections](#connections-1). Setting it to 0 stops recording and leaves the tab empty.
+Choose a time range and a connection type, and page through with **Previous** and **Next**. History is kept for 30 days by default; change it with **Keep Connection History** under [Settings → Connections](#connections-1). Setting it to 0 stops recording and leaves the tab empty.
 
 ### Blocked addresses
 
@@ -291,7 +285,7 @@ Lists all shared call links created by users. Each entry shows:
 
 You can delete shared links from here. Deleting a link makes the call eligible for normal pruning.
 
-Shared link creation and expiry are controlled in **Options → Sharing & Notifications**.
+Shared link creation and expiry are controlled in **Settings → Sharing & Notifications**.
 
 ---
 
@@ -321,7 +315,7 @@ The panel also shows transcription statistics when available.
 
 ---
 
-## Options
+## Settings
 
 General settings that control how Squelch behaves. Settings are organized into groups.
 
@@ -390,9 +384,9 @@ General settings that control how Squelch behaves. Settings are organized into g
 
 | Setting | Description | Default |
 | --- | --- | --- |
-| Trunk Recorder MQTT | Subscribe to trunk-recorder's MQTT status plugin and enable the **Dashboards → Trunk Recorder** view | Off |
+| Trunk Recorder MQTT | Subscribe to trunk-recorder's MQTT status plugin and enable the **Trunk Recorder** page | Off |
 
-Turning this on only enables the feature. You still need to add one instance row per trunk-recorder under **Dashboards → Trunk Recorder → Instances**, pointing at your broker. The [Trunk Recorder MQTT guide](tr-mqtt-guide.md) has the plugin-side configuration.
+Turning this on only enables the feature. You still need to add one instance row per trunk-recorder under **Trunk Recorder → Instances**, pointing at your broker. The [Trunk Recorder MQTT guide](tr-mqtt-guide.md) has the plugin-side configuration.
 
 ---
 

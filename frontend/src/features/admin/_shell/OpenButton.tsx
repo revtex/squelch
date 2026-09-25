@@ -1,17 +1,15 @@
 import { ChevronRight } from "lucide-react";
 
-/** The one way into a row's details panel. */
-export default function OpenButton({
-  label,
-  open,
-  onOpen,
-}: {
-  /** Names the row, e.g. "Details for alice (LIVE)". */
+export interface OpenButtonProps {
+  /** Names the row, e.g. "Details for alice". */
   label: string;
   /** This row's panel is showing. */
   open: boolean;
   onOpen: (trigger: HTMLElement) => void;
-}) {
+}
+
+/** The one way into a row's details panel. */
+export function OpenButton({ label, open, onOpen }: OpenButtonProps) {
   return (
     <button
       type="button"

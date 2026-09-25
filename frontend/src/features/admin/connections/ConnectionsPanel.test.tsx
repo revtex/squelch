@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConnectionsPanel from "./ConnectionsPanel";
+import { ToastProvider } from "@/features/admin/_shell";
 import type {
   AdminConnection,
   AdminConnectionHistoryPage,
@@ -94,7 +95,8 @@ vi.mock("@/app/store", () => ({
     select({ auth: { username: "root" } }),
 }));
 
-vi.mock("@/features/admin/_shell", () => ({
+vi.mock("@/features/admin/_shell", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/admin/_shell")>()),
   useListConnectionsQuery: () => ({
     data: { connections, geoip },
     isLoading: false,
@@ -194,7 +196,11 @@ async function openDetails(
 
 describe("ConnectionsPanel", () => {
   it("lists live connections with domain labels and anonymous listeners", () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const table = screen.getByRole("table");
     expect(within(table).getByText("alice")).toBeInTheDocument();
     expect(within(table).getAllByText("LIVE").length).toBeGreaterThan(0);
@@ -204,7 +210,11 @@ describe("ConnectionsPanel", () => {
   });
 
   it("filters live connections by user or address", async () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await userEvent.type(
       screen.getByRole("searchbox", {
         name: "Filter by user, address or country",
@@ -216,7 +226,11 @@ describe("ConnectionsPanel", () => {
   });
 
   it("shows signed-in devices with the app and online state", async () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await userEvent.click(screen.getByRole("tab", { name: "Devices" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("Squelch app")).toBeInTheDocument();
@@ -224,7 +238,11 @@ describe("ConnectionsPanel", () => {
   });
 
   it("jumps from an address to its history", async () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await userEvent.click(screen.getByRole("button", { name: "203.0.113.9" }));
 
     expect(screen.getByRole("tab", { name: "History" })).toHaveAttribute(
@@ -241,7 +259,11 @@ describe("ConnectionsPanel", () => {
 
   it("says so when history is turned off", async () => {
     historyPage = { ...historyPage, items: [], total: 0, retentionDays: 0 };
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await userEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(
       screen.getByText(/Connection history is turned off/),
@@ -250,7 +272,11 @@ describe("ConnectionsPanel", () => {
 
   it("disconnects the chosen connection after confirming in the panel", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const panel = await openDetails(user, "Details for alice (LIVE)");
     expect(panel.getByRole("heading", { name: "alice" })).toBeInTheDocument();
     await user.click(panel.getByRole("button", { name: "Disconnect" }));
@@ -266,7 +292,11 @@ describe("ConnectionsPanel", () => {
 
   it("does nothing when the confirmation is cancelled", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const panel = await openDetails(user, "Details for alice (LIVE)");
     await user.click(
       panel.getByRole("button", { name: "Sign out everywhere" }),
@@ -280,7 +310,11 @@ describe("ConnectionsPanel", () => {
 
   it("offers no sign-out or block for an anonymous trusted listener, and says why", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const panel = await openDetails(user, "Details for anonymous (BKGND)");
     expect(
       panel.getByRole("button", { name: "Disconnect" }),
@@ -301,12 +335,16 @@ describe("ConnectionsPanel", () => {
 
   it("closes on Escape and gives focus back to the row's button", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const trigger = screen.getByRole("button", {
       name: "Details for alice (LIVE)",
     });
     await user.click(trigger);
-    expect(screen.getByRole("button", { name: "Close details" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(trigger).toHaveFocus();
@@ -317,7 +355,11 @@ describe("ConnectionsPanel", () => {
       new Error("that device is already signed out"),
     );
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: "Devices" }));
     const panel = await openDetails(user, "Details for alice's device");
     await user.click(
@@ -332,7 +374,11 @@ describe("ConnectionsPanel", () => {
 
   it("signs an account out everywhere from history", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: "History" }));
     const panel = await openDetails(user, "Details for root at 192.0.2.10");
     await user.click(
@@ -349,7 +395,11 @@ describe("ConnectionsPanel", () => {
 
   it("jumps from the panel to the address's history", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const panel = await openDetails(user, "Details for alice (LIVE)");
     await user.click(
       panel.getByRole("button", { name: "History for this address" }),
@@ -366,7 +416,11 @@ describe("ConnectionsPanel", () => {
       closed: 1,
     });
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const panel = await openDetails(user, "Details for alice (LIVE)");
     await user.click(panel.getByRole("button", { name: "Block this address" }));
     const dialog = screen.getByRole("dialog", { name: "Block an address" });
@@ -399,7 +453,11 @@ describe("ConnectionsPanel", () => {
         closed: 0,
       });
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: "Blocked addresses" }));
     await user.click(screen.getByRole("button", { name: "Block an address" }));
     const dialog = screen.getByRole("dialog", { name: "Block an address" });
@@ -429,7 +487,11 @@ describe("ConnectionsPanel", () => {
       new Error("10.0.0.0/8 is too wide; the widest block allowed is /16."),
     );
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: "Blocked addresses" }));
     await user.click(screen.getByRole("button", { name: "Block an address" }));
     const dialog = screen.getByRole("dialog", { name: "Block an address" });
@@ -444,7 +506,11 @@ describe("ConnectionsPanel", () => {
   });
 
   it("marks a trusted address in the table", () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     expect(
       within(screen.getByRole("table")).getByText("trusted"),
     ).toBeInTheDocument();
@@ -452,7 +518,11 @@ describe("ConnectionsPanel", () => {
 
   it("lists blocks and the never-blocked addresses, and removes a block", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: "Blocked addresses" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("203.0.113.0/24")).toBeInTheDocument();
@@ -469,7 +539,11 @@ describe("ConnectionsPanel", () => {
   });
 
   it("shows countries and the database's credit when lookup is on", () => {
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const table = screen.getByRole("table");
     expect(within(table).getByText("Germany")).toBeInTheDocument();
     expect(within(table).getByText("Local network")).toBeInTheDocument();
@@ -484,7 +558,11 @@ describe("ConnectionsPanel", () => {
     ["History", "United Kingdom", "192.0.2.10"],
   ])("shows the country under its address on %s", async (tab, country, ip) => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.click(screen.getByRole("tab", { name: tab }));
     const table = screen.getByRole("table");
     const cell = within(table).getByText(country).closest("td");
@@ -494,7 +572,11 @@ describe("ConnectionsPanel", () => {
 
   it("hides the country column without a database", () => {
     geoip = { enabled: false, credit: null };
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     const table = screen.getByRole("table");
     expect(within(table).queryByText("Germany")).toBeNull();
     expect(within(table).queryByText("Local network")).toBeNull();
@@ -503,7 +585,11 @@ describe("ConnectionsPanel", () => {
 
   it("filters live connections by country name", async () => {
     const user = userEvent.setup();
-    render(<ConnectionsPanel />);
+    render(
+      <ToastProvider>
+        <ConnectionsPanel />
+      </ToastProvider>,
+    );
     await user.type(
       screen.getByRole("searchbox", {
         name: "Filter by user, address or country",

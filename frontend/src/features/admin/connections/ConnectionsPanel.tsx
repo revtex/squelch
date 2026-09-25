@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useState } from "react";
 import {
+  useDetails,
   useListConnectionsQuery,
   useListIPBlocksQuery,
   useListSessionsQuery,
@@ -28,9 +28,9 @@ export default function ConnectionsPanel() {
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<HistoryScope>({});
   const actions = useConnectionActions();
-  const { notice, clearNotice, setNotice, blockAddress, closeBlock } = actions;
-  const [selected, setSelected] = useState<Selection | null>(null);
-  const trigger = useRef<HTMLElement | null>(null);
+  const { setNotice, blockAddress, closeBlock } = actions;
+  const details = useDetails<Selection>();
+  const selected = details.selected;
 
   // Counts for the tabs. These share the tabs' own subscriptions.
   const liveCount = useListConnectionsQuery().data?.connections.length;
@@ -42,20 +42,10 @@ export default function ConnectionsPanel() {
     blocks: blocks?.enabled ? blocks.blocks.length : undefined,
   };
 
-  const openDetails: OpenDetails = useCallback((selection, el) => {
-    trigger.current = el;
-    setSelected(selection);
-  }, []);
-  const closeDetails = useCallback(() => {
-    setSelected(null);
-    // Back to the row's button, if it is still on the page.
-    if (trigger.current?.isConnected) trigger.current.focus();
-    trigger.current = null;
-  }, []);
+  const openDetails: OpenDetails = details.open;
 
   const changeTab = (next: Tab) => {
-    setSelected(null);
-    trigger.current = null;
+    details.reset();
     setTab(next);
   };
 
@@ -79,23 +69,6 @@ export default function ConnectionsPanel() {
           />
         )}
       </div>
-
-      {notice && (
-        <div
-          role={notice.kind === "error" ? "alert" : "status"}
-          className={`alert ${notice.kind === "error" ? "alert-error" : "alert-success"}`}
-        >
-          <span>{notice.text}</span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            aria-label="Dismiss"
-            onClick={clearNotice}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
 
       <div role="tablist" className="tabs tabs-border">
         {TABS.map((t) => (
@@ -155,7 +128,7 @@ export default function ConnectionsPanel() {
           selection={selected}
           actions={actions}
           onShowHistory={showHistory}
-          onClose={closeDetails}
+          onClose={details.close}
         />
       )}
 

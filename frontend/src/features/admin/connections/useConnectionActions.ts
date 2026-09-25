@@ -4,6 +4,7 @@ import {
   useDisconnectConnectionMutation,
   useRevokeSessionMutation,
   useSignOutUserMutation,
+  useToast,
 } from "@/features/admin/_shell";
 import type { ConnectionKind } from "@/types";
 
@@ -39,12 +40,16 @@ function messageOf(e: unknown, fallback: string): string {
 
 /**
  * The three things an admin can do to a connection or device. The caller
- * confirms first; each reports its outcome through `notice` and resolves to
- * the error message, or null when it worked.
+ * confirms first; each reports its outcome as a toast and resolves to the
+ * error message, or null when it worked.
  */
 export function useConnectionActions() {
   const myUsername = useAppSelector((s) => s.auth.username);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const toast = useToast();
+  const setNotice = useCallback(
+    (n: Notice) => toast.show(n.kind, n.text),
+    [toast],
+  );
   const [disconnectOp] = useDisconnectConnectionMutation();
   const [revokeOp] = useRevokeSessionMutation();
   const [signOutOp] = useSignOutUserMutation();
@@ -62,7 +67,7 @@ export function useConnectionActions() {
         return text;
       }
     },
-    [disconnectOp],
+    [disconnectOp, setNotice],
   );
 
   const signOutDevice = useCallback(
@@ -80,7 +85,7 @@ export function useConnectionActions() {
         return text;
       }
     },
-    [revokeOp],
+    [revokeOp, setNotice],
   );
 
   const signOutEverywhere = useCallback(
@@ -98,10 +103,8 @@ export function useConnectionActions() {
         return text;
       }
     },
-    [signOutOp],
+    [signOutOp, setNotice],
   );
-
-  const clearNotice = useCallback(() => setNotice(null), []);
 
   // The address the Block dialog is open for; null = closed.
   const [blockAddress, setBlockAddress] = useState<string | null>(null);
@@ -112,9 +115,7 @@ export function useConnectionActions() {
 
   return {
     myUsername,
-    notice,
     setNotice,
-    clearNotice,
     blockAddress,
     openBlock,
     closeBlock,

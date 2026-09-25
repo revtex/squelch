@@ -1,5 +1,13 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Ban, History, LogOut, Smartphone, Unplug, X } from "lucide-react";
+import { useState } from "react";
+import { Ban, History, LogOut, Smartphone, Unplug } from "lucide-react";
+import {
+  ActionButton,
+  DetailsPanel,
+  FactList,
+  InlineConfirm,
+  PanelSection,
+  type Fact,
+} from "@/features/admin/_shell";
 import { KIND_LABELS } from "./format";
 import { CountryCell } from "./Country";
 import type { Selection } from "./selection";
@@ -67,44 +75,9 @@ function question(
   }
 }
 
-function ActionButton({
-  icon,
-  label,
-  hint,
-  danger = false,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  hint: string;
-  danger?: boolean;
-  onClick: () => void;
-}) {
-  const hintId = useId();
-  return (
-    <button
-      type="button"
-      aria-describedby={hintId}
-      className={`btn btn-block h-auto min-h-12 justify-start gap-3 py-2 text-left font-normal ${
-        danger ? "btn-outline btn-error" : ""
-      }`}
-      onClick={onClick}
-    >
-      <span aria-hidden="true">{icon}</span>
-      <span className="flex flex-col">
-        <span className="font-medium">{label}</span>
-        <span id={hintId} aria-hidden="true" className="text-xs opacity-70">
-          {hint}
-        </span>
-      </span>
-    </button>
-  );
-}
-
 /**
  * Everything about one connection, device or past connection, and what an
- * admin can do about it. A side sheet on wide screens, a bottom sheet on a
- * phone; it sits outside the table so nothing clips it.
+ * admin can do about it.
  */
 export default function ConnectionDetails({
   selection: s,
@@ -117,16 +90,9 @@ export default function ConnectionDetails({
   onShowHistory: HistoryLink;
   onClose: () => void;
 }) {
-  const titleId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
   const [pending, setPending] = useState<ActionKind | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Opened (the host remounts it per row): focus goes inside the sheet.
-  useEffect(() => {
-    closeRef.current?.focus();
-  }, []);
 
   const run = async (kind: ActionKind) => {
     setBusy(true);
@@ -141,137 +107,86 @@ export default function ConnectionDetails({
     }
     setBusy(false);
     setPending(null);
-    // The page's notice is behind the sheet, so a failure is said here too.
+    // The toast is behind the sheet, so a failure is said here too.
     if (failed === null) onClose();
     else setError(failed);
   };
 
   const ask = pending ? question(pending, s, actions.myUsername) : null;
 
-  return (
-    <dialog
-      open
-      className="modal modal-open modal-bottom sm:modal-end"
-      aria-labelledby={titleId}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onClose();
-        }
-      }}
-    >
-      <div className="modal-box flex max-h-[85vh] flex-col gap-5 sm:h-full sm:max-h-none sm:w-[26rem] sm:max-w-none sm:rounded-none">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3
-                id={titleId}
-                className={`truncate text-lg font-bold ${s.anonymous ? "text-base-content/70" : ""}`}
-              >
-                {s.title}
-              </h3>
-              {s.kind && (
-                <span className="badge badge-outline badge-sm">
-                  {KIND_LABELS[s.kind]}
-                </span>
-              )}
-              {s.role === "admin" && s.kind !== "admin" && (
-                <span className="badge badge-ghost badge-sm">admin</span>
-              )}
-              {s.self && <span className="badge badge-info badge-sm">you</span>}
-            </div>
-            <p className="text-sm text-base-content/60">{s.subtitle}</p>
-          </div>
-          <button
-            ref={closeRef}
-            type="button"
-            className="btn btn-ghost btn-sm btn-square"
-            aria-label="Close details"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
-          <dt className="text-base-content/60">Address</dt>
-          <dd className="break-all font-mono">
-            {s.ip ?? "-"}
-            {s.trusted && (
-              <span className="badge badge-ghost badge-xs ml-2 font-sans">
-                trusted
-              </span>
-            )}
-          </dd>
-          {s.showCountry && (
-            <>
-              <dt className="text-base-content/60">Country</dt>
-              <dd>
-                <CountryCell place={s.place} />
-              </dd>
-            </>
+  const facts: Fact[] = [
+    {
+      label: "Address",
+      value: (
+        <span className="break-all font-mono">
+          {s.ip ?? "-"}
+          {s.trusted && (
+            <span className="badge badge-ghost badge-xs ml-2 font-sans">
+              trusted
+            </span>
           )}
-          {s.facts.map((f) => (
-            <div key={f.label} className="contents">
-              <dt className="text-base-content/60">{f.label}</dt>
-              <dd className="break-words">{f.value}</dd>
-            </div>
-          ))}
-        </dl>
+        </span>
+      ),
+    },
+    ...(s.showCountry
+      ? [{ label: "Country", value: <CountryCell place={s.place} /> }]
+      : []),
+    ...s.facts,
+  ];
 
-        {s.self && (
-          <div className="alert alert-warning text-sm">
-            This is your own {s.kind ? "session" : "device"}. Signing it out
-            signs you out.
-          </div>
-        )}
-        {s.trusted && (
-          <div className="alert text-sm">
-            This address is on the server&apos;s trusted list, so it can&apos;t
-            be blocked from here.
-          </div>
-        )}
-        {error && (
-          <div role="alert" className="alert alert-error text-sm">
-            {error}
-          </div>
-        )}
+  return (
+    <DetailsPanel
+      title={s.title}
+      titleClassName={s.anonymous ? "text-base-content/70" : ""}
+      subtitle={s.subtitle}
+      badges={
+        <>
+          {s.kind && (
+            <span className="badge badge-outline badge-sm">
+              {KIND_LABELS[s.kind]}
+            </span>
+          )}
+          {s.role === "admin" && s.kind !== "admin" && (
+            <span className="badge badge-ghost badge-sm">admin</span>
+          )}
+          {s.self && <span className="badge badge-info badge-sm">you</span>}
+        </>
+      }
+      onClose={onClose}
+    >
+      <FactList facts={facts} />
 
-        {ask && pending ? (
-          <div
-            role="group"
-            aria-label="Confirm"
-            className="space-y-3 rounded-box border border-base-300 bg-base-200 p-4"
-          >
-            <p className="font-semibold">{ask.title}</p>
-            <p className="text-sm text-base-content/70">{ask.text}</p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setPending(null)}
-                disabled={busy}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${ask.danger ? "btn-error" : "btn-primary"}`}
-                onClick={() => void run(pending)}
-                disabled={busy}
-              >
-                {busy && (
-                  <span className="loading loading-spinner loading-xs" />
-                )}
-                {ask.button}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-base-content/60">
-              History
-            </p>
+      {s.self && (
+        <div className="alert alert-warning text-sm">
+          This is your own {s.kind ? "session" : "device"}. Signing it out
+          signs you out.
+        </div>
+      )}
+      {s.trusted && (
+        <div className="alert text-sm">
+          This address is on the server&apos;s trusted list, so it can&apos;t
+          be blocked from here.
+        </div>
+      )}
+      {error && (
+        <div role="alert" className="alert alert-error text-sm">
+          {error}
+        </div>
+      )}
+
+      {ask && pending ? (
+        <InlineConfirm
+          title={ask.title}
+          text={ask.text}
+          button={ask.button}
+          danger={ask.danger}
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void run(pending)}
+        />
+      ) : (
+        <>
+          <PanelSection title="History">
             {s.ip && (
               <ActionButton
                 icon={<History className="h-4 w-4" />}
@@ -293,56 +208,50 @@ export default function ConnectionDetails({
                 }
               />
             )}
+          </PanelSection>
 
-            {(s.disconnect ?? s.device ?? s.account) && (
-              <p className="pt-2 text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Actions
-              </p>
-            )}
-            {s.disconnect && (
-              <ActionButton
-                icon={<Unplug className="h-4 w-4" />}
-                label="Disconnect"
-                hint="Drops this connection. They can reconnect straight away."
-                onClick={() => setPending("disconnect")}
-              />
-            )}
-            {s.device && (
-              <ActionButton
-                icon={<Smartphone className="h-4 w-4" />}
-                label="Sign out this device"
-                hint="It needs the password again. Other devices stay signed in."
-                onClick={() => setPending("device")}
-              />
-            )}
-            {s.account && (
-              <ActionButton
-                icon={<LogOut className="h-4 w-4" />}
-                label="Sign out everywhere"
-                hint={`Every device ${s.title} uses needs the password again.`}
-                onClick={() => setPending("account")}
-              />
-            )}
-            {s.ip && !s.trusted && (
-              <ActionButton
-                icon={<Ban className="h-4 w-4" />}
-                label="Block this address"
-                hint={`Nothing from ${s.ip} can reach the server until you remove the block.`}
-                danger
-                onClick={() => {
-                  onClose();
-                  actions.openBlock(s.ip ?? "");
-                }}
-              />
-            )}
-          </div>
-        )}
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button type="button" onClick={onClose}>
-          close
-        </button>
-      </form>
-    </dialog>
+          {(s.disconnect ?? s.device ?? s.account ?? (s.ip && !s.trusted)) && (
+            <PanelSection title="Actions">
+              {s.disconnect && (
+                <ActionButton
+                  icon={<Unplug className="h-4 w-4" />}
+                  label="Disconnect"
+                  hint="Drops this connection. They can reconnect straight away."
+                  onClick={() => setPending("disconnect")}
+                />
+              )}
+              {s.device && (
+                <ActionButton
+                  icon={<Smartphone className="h-4 w-4" />}
+                  label="Sign out this device"
+                  hint="It needs the password again. Other devices stay signed in."
+                  onClick={() => setPending("device")}
+                />
+              )}
+              {s.account && (
+                <ActionButton
+                  icon={<LogOut className="h-4 w-4" />}
+                  label="Sign out everywhere"
+                  hint={`Every device ${s.title} uses needs the password again.`}
+                  onClick={() => setPending("account")}
+                />
+              )}
+              {s.ip && !s.trusted && (
+                <ActionButton
+                  icon={<Ban className="h-4 w-4" />}
+                  label="Block this address"
+                  hint={`Nothing from ${s.ip} can reach the server until you remove the block.`}
+                  danger
+                  onClick={() => {
+                    onClose();
+                    actions.openBlock(s.ip ?? "");
+                  }}
+                />
+              )}
+            </PanelSection>
+          )}
+        </>
+      )}
+    </DetailsPanel>
   );
 }

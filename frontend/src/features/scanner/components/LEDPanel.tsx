@@ -219,7 +219,7 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
             {token && role === "admin" && (
               <li>
                 <button
-                  onClick={closeMenuAnd(() => navigate("/admin/activity"))}
+                  onClick={closeMenuAnd(() => navigate("/admin/overview"))}
                 >
                   <Settings className="w-4 h-4" /> Admin Panel
                 </button>
