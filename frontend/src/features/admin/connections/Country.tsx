@@ -16,7 +16,7 @@ export function CountryCell({ place }: { place: AddressPlace }) {
   }
   const name = countryName(place.country);
   return (
-    <span className="whitespace-nowrap text-sm" title={place.country}>
+    <span className="text-sm sm:whitespace-nowrap" title={place.country}>
       <span aria-hidden="true" className="mr-1">
         {countryFlag(place.country)}
       </span>

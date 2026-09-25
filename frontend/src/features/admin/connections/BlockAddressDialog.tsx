@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useCreateIPBlockMutation } from "@/features/admin/_shell";
-import type { CreateIPBlockPayload } from "@/types";
+import type { CreateIPBlockPayload, CreateIPBlockResult } from "@/types";
 import type { Notice } from "./useConnectionActions";
 
 const EXPIRIES = [
@@ -32,6 +32,9 @@ export default function BlockAddressDialog({
   const [reason, setReason] = useState("");
   const [expiry, setExpiry] = useState<Expiry>("86400");
   const [error, setError] = useState<string | null>(null);
+  // The server's warning that the range holds this admin's own address;
+  // submitting again sends it anyway.
+  const [warning, setWarning] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [create] = useCreateIPBlockMutation();
 
@@ -46,25 +49,28 @@ export default function BlockAddressDialog({
         expiry === "never"
           ? undefined
           : Math.floor(Date.now() / 1000) + Number(expiry),
+      ...(warning ? { force: true } : {}),
     };
     try {
-      let result = await create(payload).unwrap();
-      if ("needsConfirm" in result) {
-        if (!window.confirm(`${result.message}\n\nBlock it anyway?`)) {
-          setBusy(false);
-          return;
-        }
-        try {
-          result = await create({ ...payload, force: true }).unwrap();
-        } catch {
-          // Blocking your own address closes this connection, so the reply
-          // may never arrive. The block was made.
+      let result: CreateIPBlockResult;
+      try {
+        result = await create(payload).unwrap();
+      } catch (err) {
+        // Blocking your own address closes this connection, so the reply
+        // may never arrive. The block was made.
+        if (warning) {
           onDone({
             kind: "success",
             text: `Blocked ${address.trim()}. This page lost its connection because the block includes your address.`,
           });
           return;
         }
+        throw err;
+      }
+      if ("needsConfirm" in result) {
+        setWarning(result.message);
+        setBusy(false);
+        return;
       }
       if ("ok" in result) {
         const dropped =
@@ -100,7 +106,10 @@ export default function BlockAddressDialog({
             <input
               className="input input-bordered w-full font-mono"
               value={address}
-              onChange={(e) => setAddress(e.target.value)}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setWarning(null);
+              }}
               placeholder="203.0.113.9 or 203.0.113.0/24"
               required
               autoFocus
@@ -115,20 +124,27 @@ export default function BlockAddressDialog({
               onChange={(e) => setReason(e.target.value)}
             />
           </label>
-          <label className="form-control w-full">
-            <span className="label-text">For</span>
-            <select
-              className="select select-bordered w-full"
-              value={expiry}
-              onChange={(e) => setExpiry(e.target.value as Expiry)}
-            >
+          <fieldset className="space-y-1">
+            <legend className="label-text">For</legend>
+            <div className="flex flex-wrap gap-2">
               {EXPIRIES.map((x) => (
-                <option key={x.value} value={x.value}>
+                <button
+                  key={x.value}
+                  type="button"
+                  className={`btn btn-sm ${expiry === x.value ? "btn-primary" : "btn-outline"}`}
+                  aria-pressed={expiry === x.value}
+                  onClick={() => setExpiry(x.value)}
+                >
                   {x.label}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </fieldset>
+          {warning && (
+            <div role="alert" className="alert alert-warning text-sm">
+              {warning} Block it anyway?
+            </div>
+          )}
           {error && (
             <div role="alert" className="alert alert-error text-sm">
               {error}
@@ -140,7 +156,7 @@ export default function BlockAddressDialog({
             </button>
             <button type="submit" className="btn btn-error" disabled={busy}>
               {busy && <span className="loading loading-spinner loading-xs" />}
-              Block
+              {warning ? "Block anyway" : "Block"}
             </button>
           </div>
         </form>

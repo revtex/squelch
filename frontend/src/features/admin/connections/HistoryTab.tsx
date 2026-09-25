@@ -1,11 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useConnectionHistoryQuery } from "@/features/admin/_shell";
-import type {
-  AdminConnectionHistoryEntry,
-  ConnectionHistoryFilter,
-  ConnectionKind,
-} from "@/types";
+import type { ConnectionHistoryFilter, ConnectionKind } from "@/types";
 import {
   KIND_LABELS,
   clientLabel,
@@ -14,8 +10,8 @@ import {
   reasonLabel,
 } from "./format";
 import { CountryCell, GeoIPCredit } from "./Country";
-import RowActions, { type RowAction } from "./RowActions";
-import type { ConnectionActions } from "./useConnectionActions";
+import OpenButton from "./OpenButton";
+import { historySelection, type OpenDetails } from "./selection";
 
 const PAGE_SIZE = 100;
 
@@ -43,12 +39,14 @@ export default function HistoryTab({
   scope,
   onClearScope,
   onScope,
-  actions,
+  onOpen,
+  openKey,
 }: {
   scope: HistoryScope;
   onClearScope: () => void;
   onScope: (scope: HistoryScope) => void;
-  actions: ConnectionActions;
+  onOpen: OpenDetails;
+  openKey: string | undefined;
 }) {
   const [range, setRange] = useState<Range>("7");
   // Anchored when the range is picked (or refreshed), not on every render,
@@ -160,102 +158,122 @@ export default function HistoryTab({
       ) : (
         <>
           <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
-            <table className="table table-zebra table-sm w-full">
+            <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
               <thead>
                 <tr>
-                  <th>User</th>
-                  <th>Type</th>
-                  <th>Address</th>
-                  {data.geoip.enabled && <th>Country</th>}
-                  <th>Client</th>
-                  <th>Connected</th>
-                  <th>Lasted</th>
-                  <th>Ended</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
+                  <th>Who</th>
+                  <th className="hidden sm:table-cell">Type</th>
+                  <th>From</th>
+                  <th>When</th>
+                  <th className="hidden sm:table-cell">Ended</th>
+                  <th className="w-px">
+                    <span className="sr-only">Details</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((e) => (
-                  <tr key={e.id}>
-                    <td>
-                      {e.userId !== null ? (
-                        <button
-                          type="button"
-                          className="link link-hover"
-                          onClick={() => {
-                            onScope({
-                              userId: e.userId ?? undefined,
-                              label: e.username ?? undefined,
-                            });
-                            setPage(1);
-                          }}
-                          title={`Show only ${e.username ?? "this user"}`}
-                        >
-                          {e.username ?? `#${e.userId}`}
-                        </button>
-                      ) : (
-                        <span className="text-base-content/60">Anonymous</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className="badge badge-outline badge-sm">
-                        {KIND_LABELS[e.kind] ?? e.kind}
-                      </span>
-                    </td>
-                    <td className="font-mono text-xs">
-                      <button
-                        type="button"
-                        className="link link-hover"
-                        onClick={() => {
-                          onScope({ ip: e.ip });
-                          setPage(1);
-                        }}
-                        title={`Show only ${e.ip}`}
-                      >
-                        {e.ip}
-                      </button>
-                      {e.trusted && (
-                        <span
-                          className="badge badge-ghost badge-xs ml-1"
-                          title="On the server's trusted list: can never be blocked"
-                        >
-                          trusted
-                        </span>
-                      )}
-                    </td>
-                    {data.geoip.enabled && (
+                {data.items.map((e) => {
+                  const key = `history:${e.id}`;
+                  return (
+                    <tr
+                      key={e.id}
+                      className={
+                        key === openKey ? "bg-base-300" : "hover:bg-base-200"
+                      }
+                    >
                       <td>
-                        <CountryCell place={e} />
-                      </td>
-                    )}
-                    <td title={e.userAgent ?? undefined}>
-                      {clientLabel(e.native)}
-                    </td>
-                    <td className="whitespace-nowrap text-sm">
-                      {formatDateTime(e.connectedAt)}
-                    </td>
-                    <td className="whitespace-nowrap text-sm">
-                      {e.disconnectedAt !== null ? (
-                        formatDuration(e.disconnectedAt - e.connectedAt)
-                      ) : (
-                        <span className="badge badge-success badge-sm">
-                          Connected
+                        {e.userId !== null ? (
+                          <button
+                            type="button"
+                            className="link link-hover font-medium"
+                            onClick={() => {
+                              onScope({
+                                userId: e.userId ?? undefined,
+                                label: e.username ?? undefined,
+                              });
+                              setPage(1);
+                            }}
+                            title={`Show only ${e.username ?? "this user"}`}
+                          >
+                            {e.username ?? `#${e.userId}`}
+                          </button>
+                        ) : (
+                          <span className="text-base-content/60">
+                            Anonymous
+                          </span>
+                        )}
+                        <span className="badge badge-outline badge-xs sm:hidden">
+                          {KIND_LABELS[e.kind] ?? e.kind}
                         </span>
-                      )}
-                    </td>
-                    <td className="text-sm">
-                      {reasonLabel(e.disconnectReason)}
-                    </td>
-                    <td className="text-right">
-                      <RowActions
-                        label={`Actions for ${e.username ?? "anonymous"} at ${e.ip}`}
-                        actions={historyActions(e, actions)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                        <div
+                          className="text-xs text-base-content/60"
+                          title={e.userAgent ?? undefined}
+                        >
+                          {clientLabel(e.native)}
+                        </div>
+                      </td>
+                      <td className="hidden sm:table-cell">
+                        <span className="badge badge-outline badge-sm">
+                          {KIND_LABELS[e.kind] ?? e.kind}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="break-all font-mono text-xs">
+                          <button
+                            type="button"
+                            className="link link-hover text-left"
+                            onClick={() => {
+                              onScope({ ip: e.ip });
+                              setPage(1);
+                            }}
+                            title={`Show only ${e.ip}`}
+                          >
+                            {e.ip}
+                          </button>
+                          {e.trusted && (
+                            <span
+                              className="badge badge-ghost badge-xs ml-1 font-sans"
+                              title="On the server's trusted list: can never be blocked"
+                            >
+                              trusted
+                            </span>
+                          )}
+                        </div>
+                        {data.geoip.enabled && (
+                          <div className="text-xs">
+                            <CountryCell place={e} />
+                          </div>
+                        )}
+                      </td>
+                      <td className="text-sm">
+                        <div className="sm:whitespace-nowrap">
+                          {formatDateTime(e.connectedAt)}
+                        </div>
+                        <div className="sm:whitespace-nowrap text-xs text-base-content/60">
+                          {e.disconnectedAt !== null ? (
+                            `for ${formatDuration(e.disconnectedAt - e.connectedAt)}`
+                          ) : (
+                            <span className="badge badge-success badge-xs">
+                              Connected
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="hidden text-sm sm:table-cell">
+                        {reasonLabel(e.disconnectReason)}
+                      </td>
+                      <td className="text-right">
+                        <OpenButton
+                          label={`Details for ${e.username ?? "anonymous"} at ${e.ip}`}
+                          open={key === openKey}
+                          onOpen={(el) =>
+                            onOpen(historySelection(e, data.geoip.enabled), el)
+                          }
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -291,40 +309,4 @@ export default function HistoryTab({
       )}
     </div>
   );
-}
-
-/**
- * A past connection can still point at a device or account that is signed
- * in. The server says so if it no longer is.
- */
-function historyActions(
-  e: AdminConnectionHistoryEntry,
-  actions: ConnectionActions,
-): RowAction[] {
-  const out: RowAction[] = [];
-  const username = e.username ?? `user #${e.userId}`;
-  if (e.familyId) {
-    const familyId = e.familyId;
-    out.push({
-      label: "Sign out device",
-      onSelect: () =>
-        void actions.signOutDevice({ familyId, username, current: false }),
-    });
-  }
-  if (e.userId !== null) {
-    const userId = e.userId;
-    out.push({
-      label: "Sign out everywhere",
-      danger: true,
-      onSelect: () => void actions.signOutEverywhere({ userId, username }),
-    });
-  }
-  if (!e.trusted) {
-    out.push({
-      label: "Block address",
-      danger: true,
-      onSelect: () => actions.openBlock(e.ip),
-    });
-  }
-  return out;
 }

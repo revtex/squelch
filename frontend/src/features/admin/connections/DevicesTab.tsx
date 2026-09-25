@@ -4,8 +4,8 @@ import { clientLabel, formatDateTime } from "./format";
 import type { HistoryLink } from "./types";
 import { CountryCell, GeoIPCredit } from "./Country";
 import { placeText } from "./place";
-import RowActions from "./RowActions";
-import type { ConnectionActions } from "./useConnectionActions";
+import OpenButton from "./OpenButton";
+import { deviceSelection, type OpenDetails } from "./selection";
 
 function matches(s: AdminSession, q: string): boolean {
   if (!q) return true;
@@ -20,11 +20,13 @@ function matches(s: AdminSession, q: string): boolean {
 export default function DevicesTab({
   search,
   onShowHistory,
-  actions,
+  onOpen,
+  openKey,
 }: {
   search: string;
   onShowHistory: HistoryLink;
-  actions: ConnectionActions;
+  onOpen: OpenDetails;
+  openKey: string | undefined;
 }) {
   const { data, isLoading, isError } = useListSessionsQuery();
 
@@ -59,125 +61,120 @@ export default function DevicesTab({
         sign-in from.
       </p>
       <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
-        <table className="table table-zebra table-sm w-full">
+        <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Client</th>
-              <th>Last address</th>
-              {showCountry && <th>Country</th>}
-              <th>Signed in</th>
-              <th>Last used</th>
+              <th>Who</th>
+              <th>Last seen from</th>
+              <th className="hidden sm:table-cell">Signed in</th>
               <th>Status</th>
-              <th>
-                <span className="sr-only">Actions</span>
+              <th className="w-px">
+                <span className="sr-only">Details</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((s) => (
-              <tr key={s.familyId}>
-                <td>
-                  <button
-                    type="button"
-                    className="link link-hover"
-                    onClick={() =>
-                      onShowHistory({ userId: s.userId, label: s.username })
-                    }
-                    title={`Show ${s.username}'s connection history`}
-                  >
-                    {s.username}
-                  </button>
-                  {s.role === "admin" && (
-                    <span className="badge badge-ghost badge-xs ml-1">
-                      admin
-                    </span>
-                  )}
-                  {s.current && (
-                    <span className="badge badge-info badge-xs ml-1">
-                      this device
-                    </span>
-                  )}
-                </td>
-                <td title={s.userAgent ?? undefined}>
-                  {clientLabel(s.native)}
-                </td>
-                <td className="font-mono text-xs">
-                  {s.ip ? (
-                    <button
-                      type="button"
-                      className="link link-hover"
-                      onClick={() => onShowHistory({ ip: s.ip ?? undefined })}
-                      title={`Show connection history for ${s.ip}`}
-                    >
-                      {s.ip}
-                    </button>
-                  ) : (
-                    "-"
-                  )}
-                  {s.trusted && (
-                    <span
-                      className="badge badge-ghost badge-xs ml-1"
-                      title="On the server's trusted list: can never be blocked"
-                    >
-                      trusted
-                    </span>
-                  )}
-                </td>
-                {showCountry && (
+            {rows.map((s) => {
+              const key = `device:${s.familyId}`;
+              return (
+                <tr
+                  key={s.familyId}
+                  className={
+                    key === openKey ? "bg-base-300" : "hover:bg-base-200"
+                  }
+                >
                   <td>
-                    <CountryCell place={s} />
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        className="link link-hover font-medium"
+                        onClick={() =>
+                          onShowHistory({ userId: s.userId, label: s.username })
+                        }
+                        title={`Show ${s.username}'s connection history`}
+                      >
+                        {s.username}
+                      </button>
+                      {s.role === "admin" && (
+                        <span className="badge badge-ghost badge-xs">
+                          admin
+                        </span>
+                      )}
+                      {s.current && (
+                        <span className="badge badge-info badge-xs">
+                          this device
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="text-xs text-base-content/60"
+                      title={s.userAgent ?? undefined}
+                    >
+                      {clientLabel(s.native)}
+                    </div>
                   </td>
-                )}
-                <td className="whitespace-nowrap text-sm">
-                  {s.signedInAt ? formatDateTime(s.signedInAt) : "-"}
-                </td>
-                <td className="whitespace-nowrap text-sm">
-                  {formatDateTime(s.lastUsedAt)}
-                </td>
-                <td>
-                  {s.liveConnections > 0 ? (
-                    <span className="badge badge-success badge-sm">Online</span>
-                  ) : (
-                    <span className="badge badge-ghost badge-sm">Offline</span>
-                  )}
-                </td>
-                <td className="text-right">
-                  <RowActions
-                    label={`Actions for ${s.username}'s device`}
-                    actions={[
-                      {
-                        label: "Sign out device",
-                        onSelect: () =>
-                          void actions.signOutDevice({
-                            familyId: s.familyId,
-                            username: s.username,
-                            current: s.current,
-                          }),
-                      },
-                      {
-                        label: "Sign out everywhere",
-                        danger: true,
-                        onSelect: () =>
-                          void actions.signOutEverywhere({
-                            userId: s.userId,
-                            username: s.username,
-                          }),
-                      },
-                      ...(s.ip && !s.trusted
-                        ? [
-                            {
-                              label: "Block address",
-                              danger: true,
-                              onSelect: () => actions.openBlock(s.ip ?? ""),
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                </td>
-              </tr>
-            ))}
+                  <td>
+                    <div className="break-all font-mono text-xs">
+                      {s.ip ? (
+                        <button
+                          type="button"
+                          className="link link-hover text-left"
+                          onClick={() =>
+                            onShowHistory({ ip: s.ip ?? undefined })
+                          }
+                          title={`Show connection history for ${s.ip}`}
+                        >
+                          {s.ip}
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                      {s.trusted && (
+                        <span
+                          className="badge badge-ghost badge-xs ml-1 font-sans"
+                          title="On the server's trusted list: can never be blocked"
+                        >
+                          trusted
+                        </span>
+                      )}
+                    </div>
+                    {showCountry && (
+                      <div className="text-xs">
+                        <CountryCell place={s} />
+                      </div>
+                    )}
+                  </td>
+                  <td className="hidden text-sm sm:table-cell">
+                    <div className="whitespace-nowrap">
+                      {s.signedInAt ? formatDateTime(s.signedInAt) : "-"}
+                    </div>
+                    <div className="whitespace-nowrap text-xs text-base-content/60">
+                      Last used {formatDateTime(s.lastUsedAt)}
+                    </div>
+                  </td>
+                  <td>
+                    {s.liveConnections > 0 ? (
+                      <span className="badge badge-success badge-sm">
+                        Online
+                      </span>
+                    ) : (
+                      <span className="badge badge-ghost badge-sm">
+                        Offline
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-right">
+                    <OpenButton
+                      label={`Details for ${s.username}'s device`}
+                      open={key === openKey}
+                      onOpen={(el) =>
+                        onOpen(deviceSelection(s, showCountry), el)
+                      }
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

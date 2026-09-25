@@ -5,7 +5,6 @@ import {
   useRevokeSessionMutation,
   useSignOutUserMutation,
 } from "@/features/admin/_shell";
-import { KIND_LABELS } from "./format";
 import type { ConnectionKind } from "@/types";
 
 export interface Notice {
@@ -39,8 +38,9 @@ function messageOf(e: unknown, fallback: string): string {
 }
 
 /**
- * The three things an admin can do to a connection or device. Each confirms
- * first, then reports the outcome through `notice`.
+ * The three things an admin can do to a connection or device. The caller
+ * confirms first; each reports its outcome through `notice` and resolves to
+ * the error message, or null when it worked.
  */
 export function useConnectionActions() {
   const myUsername = useAppSelector((s) => s.auth.username);
@@ -50,65 +50,55 @@ export function useConnectionActions() {
   const [signOutOp] = useSignOutUserMutation();
 
   const disconnect = useCallback(
-    async (t: DisconnectTarget) => {
-      const who = t.username || "this anonymous listener";
-      const question = t.self
-        ? "Disconnect your own admin session? This page will reconnect."
-        : `Disconnect ${who}'s ${KIND_LABELS[t.kind]} connection? A signed-in app or browser can reconnect straight away. To keep them out, sign the device out instead.`;
-      if (!window.confirm(question)) return;
+    async (t: DisconnectTarget): Promise<string | null> => {
+      const who = t.username || "the anonymous listener";
       try {
         await disconnectOp(t.id).unwrap();
         setNotice({ kind: "success", text: `Disconnected ${who}.` });
+        return null;
       } catch (e) {
-        setNotice({
-          kind: "error",
-          text: messageOf(e, "Failed to disconnect."),
-        });
+        const text = messageOf(e, "Failed to disconnect.");
+        setNotice({ kind: "error", text });
+        return text;
       }
     },
     [disconnectOp],
   );
 
   const signOutDevice = useCallback(
-    async (t: DeviceTarget) => {
-      const question = t.current
-        ? "Sign out the device you are using now? You will need to sign in again."
-        : `Sign out this device of ${t.username}? It will need the password to sign in again.`;
-      if (!window.confirm(question)) return;
+    async (t: DeviceTarget): Promise<string | null> => {
       try {
         await revokeOp(t.familyId).unwrap();
         setNotice({
           kind: "success",
           text: `Signed out a device of ${t.username}.`,
         });
+        return null;
       } catch (e) {
-        setNotice({
-          kind: "error",
-          text: messageOf(e, "Failed to sign out the device."),
-        });
+        const text = messageOf(e, "Failed to sign out the device.");
+        setNotice({ kind: "error", text });
+        return text;
       }
     },
     [revokeOp],
   );
 
   const signOutEverywhere = useCallback(
-    async (t: AccountTarget) => {
-      const question =
-        t.username === myUsername
-          ? "Sign yourself out on every device, including this one?"
-          : `Sign ${t.username} out on every device? They will need the password to sign in again.`;
-      if (!window.confirm(question)) return;
+    async (t: AccountTarget): Promise<string | null> => {
       try {
         await signOutOp(t.userId).unwrap();
         setNotice({
           kind: "success",
           text: `Signed ${t.username} out on every device.`,
         });
+        return null;
       } catch (e) {
-        setNotice({ kind: "error", text: messageOf(e, "Failed to sign out.") });
+        const text = messageOf(e, "Failed to sign out.");
+        setNotice({ kind: "error", text });
+        return text;
       }
     },
-    [signOutOp, myUsername],
+    [signOutOp],
   );
 
   const clearNotice = useCallback(() => setNotice(null), []);
@@ -121,6 +111,7 @@ export function useConnectionActions() {
   const closeBlock = useCallback(() => setBlockAddress(null), []);
 
   return {
+    myUsername,
     notice,
     setNotice,
     clearNotice,

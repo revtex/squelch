@@ -16,8 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without a password, with where it was last used from, and a third keeps a
   history of every connection and how it ended, so someone who has already
   left can still be found. Click a user or an address to see everything they
-  did. History is kept for 30 days by default; change it under **Options →
-  Connections**.
+  did. The **›** button on a row opens its details, with everything known
+  about it and every action, each explained before you confirm it. History is
+  kept for 30 days by default; change it under **Options → Connections**.
 - **See where listeners connect from.** Point the new `--geoip-db` option
   (`SQUELCH_GEOIP_DB`) at a free country database, DB-IP IP to Country Lite or
   MaxMind GeoLite2-Country, and Admin → Connections shows each connection's

@@ -183,16 +183,13 @@ beforeEach(() => {
   };
 });
 
-/** Opens a row's action menu and returns queries scoped to it. */
-async function openMenu(
+/** Opens a row's details panel and returns queries scoped to it. */
+async function openDetails(
   user: ReturnType<typeof userEvent.setup>,
   name: string,
 ) {
-  const trigger = screen.getByRole("button", { name });
-  await user.click(trigger);
-  const menu = trigger.closest(".dropdown");
-  if (!(menu instanceof HTMLElement)) throw new Error(`no menu for ${name}`);
-  return within(menu);
+  await user.click(screen.getByRole("button", { name }));
+  return within(screen.getByRole("dialog"));
 }
 
 describe("ConnectionsPanel", () => {
@@ -200,8 +197,8 @@ describe("ConnectionsPanel", () => {
     render(<ConnectionsPanel />);
     const table = screen.getByRole("table");
     expect(within(table).getByText("alice")).toBeInTheDocument();
-    expect(within(table).getByText("LIVE")).toBeInTheDocument();
-    expect(within(table).getByText("BKGND")).toBeInTheDocument();
+    expect(within(table).getAllByText("LIVE").length).toBeGreaterThan(0);
+    expect(within(table).getAllByText("BKGND").length).toBeGreaterThan(0);
     expect(within(table).getByText("Anonymous")).toBeInTheDocument();
     expect(within(table).getByText(formatDuration(125))).toBeInTheDocument();
   });
@@ -220,9 +217,7 @@ describe("ConnectionsPanel", () => {
 
   it("shows signed-in devices with the app and online state", async () => {
     render(<ConnectionsPanel />);
-    await userEvent.click(
-      screen.getByRole("tab", { name: "Signed-in devices" }),
-    );
+    await userEvent.click(screen.getByRole("tab", { name: "Devices" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("Squelch app")).toBeInTheDocument();
     expect(within(table).getByText("Online")).toBeInTheDocument();
@@ -253,51 +248,84 @@ describe("ConnectionsPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("disconnects the chosen connection after confirming", async () => {
+  it("disconnects the chosen connection after confirming in the panel", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
-    const menu = await openMenu(user, "Actions for alice (LIVE)");
-    await user.click(menu.getByRole("button", { name: "Disconnect" }));
-    expect(window.confirm).toHaveBeenCalled();
+    const panel = await openDetails(user, "Details for alice (LIVE)");
+    expect(panel.getByRole("heading", { name: "alice" })).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Disconnect" }));
+    expect(disconnectOp).not.toHaveBeenCalled();
+    expect(panel.getByText("Disconnect alice?")).toBeInTheDocument();
+    await user.click(panel.getByRole("button", { name: "Disconnect" }));
     expect(disconnectOp).toHaveBeenCalledWith("c1");
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Disconnected alice.",
     );
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("does nothing when the confirmation is cancelled", async () => {
-    vi.mocked(window.confirm).mockReturnValue(false);
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
-    const menu = await openMenu(user, "Actions for alice (LIVE)");
-    await user.click(menu.getByRole("button", { name: "Sign out everywhere" }));
+    const panel = await openDetails(user, "Details for alice (LIVE)");
+    await user.click(
+      panel.getByRole("button", { name: "Sign out everywhere" }),
+    );
+    await user.click(panel.getByRole("button", { name: "Cancel" }));
     expect(signOutOp).not.toHaveBeenCalled();
+    expect(
+      panel.getByRole("button", { name: "Sign out everywhere" }),
+    ).toBeInTheDocument();
   });
 
-  it("offers no sign-out for an anonymous listener", async () => {
+  it("offers no sign-out or block for an anonymous trusted listener, and says why", async () => {
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
-    const menu = await openMenu(user, "Actions for anonymous (BKGND)");
+    const panel = await openDetails(user, "Details for anonymous (BKGND)");
     expect(
-      menu.getByRole("button", { name: "Disconnect" }),
+      panel.getByRole("button", { name: "Disconnect" }),
     ).toBeInTheDocument();
-    expect(menu.queryByRole("button", { name: "Sign out device" })).toBeNull();
     expect(
-      menu.queryByRole("button", { name: "Sign out everywhere" }),
+      panel.queryByRole("button", { name: "Sign out this device" }),
     ).toBeNull();
+    expect(
+      panel.queryByRole("button", { name: "Sign out everywhere" }),
+    ).toBeNull();
+    expect(
+      panel.queryByRole("button", { name: "Block this address" }),
+    ).toBeNull();
+    expect(
+      panel.getByText(/trusted list, so it can't be blocked/),
+    ).toBeInTheDocument();
   });
 
-  it("signs a device out from the devices tab and shows server errors", async () => {
+  it("closes on Escape and gives focus back to the row's button", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPanel />);
+    const trigger = screen.getByRole("button", {
+      name: "Details for alice (LIVE)",
+    });
+    await user.click(trigger);
+    expect(screen.getByRole("button", { name: "Close details" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("signs a device out from the devices tab and shows server errors in the panel", async () => {
     revokeOp.mockRejectedValueOnce(
       new Error("that device is already signed out"),
     );
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
-    await user.click(screen.getByRole("tab", { name: "Signed-in devices" }));
-    const menu = await openMenu(user, "Actions for alice's device");
-    await user.click(menu.getByRole("button", { name: "Sign out device" }));
+    await user.click(screen.getByRole("tab", { name: "Devices" }));
+    const panel = await openDetails(user, "Details for alice's device");
+    await user.click(
+      panel.getByRole("button", { name: "Sign out this device" }),
+    );
+    await user.click(panel.getByRole("button", { name: "Sign out device" }));
     expect(revokeOp).toHaveBeenCalledWith("fam-a");
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await panel.findByRole("alert")).toHaveTextContent(
       "that device is already signed out",
     );
   });
@@ -306,12 +334,28 @@ describe("ConnectionsPanel", () => {
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
     await user.click(screen.getByRole("tab", { name: "History" }));
-    const menu = await openMenu(user, "Actions for root at 192.0.2.10");
-    await user.click(menu.getByRole("button", { name: "Sign out everywhere" }));
-    expect(window.confirm).toHaveBeenCalledWith(
-      "Sign yourself out on every device, including this one?",
+    const panel = await openDetails(user, "Details for root at 192.0.2.10");
+    await user.click(
+      panel.getByRole("button", { name: "Sign out everywhere" }),
+    );
+    expect(
+      panel.getByText("Sign yourself out everywhere?"),
+    ).toBeInTheDocument();
+    await user.click(
+      panel.getByRole("button", { name: "Sign out everywhere" }),
     );
     expect(signOutOp).toHaveBeenCalledWith(1);
+  });
+
+  it("jumps from the panel to the address's history", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionsPanel />);
+    const panel = await openDetails(user, "Details for alice (LIVE)");
+    await user.click(
+      panel.getByRole("button", { name: "History for this address" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(historyCalls[historyCalls.length - 1]?.ip).toBe("203.0.113.9");
   });
 
   it("blocks an address from a live row", async () => {
@@ -323,8 +367,8 @@ describe("ConnectionsPanel", () => {
     });
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
-    const menu = await openMenu(user, "Actions for alice (LIVE)");
-    await user.click(menu.getByRole("button", { name: "Block address" }));
+    const panel = await openDetails(user, "Details for alice (LIVE)");
+    await user.click(panel.getByRole("button", { name: "Block this address" }));
     const dialog = screen.getByRole("dialog", { name: "Block an address" });
     expect(within(dialog).getByLabelText("Address or range")).toHaveValue(
       "203.0.113.9",
@@ -341,7 +385,7 @@ describe("ConnectionsPanel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("asks before blocking a range that holds your own address", async () => {
+  it("warns in the dialog before blocking a range that holds your own address", async () => {
     createBlockOp
       .mockResolvedValueOnce({
         needsConfirm: true,
@@ -363,10 +407,16 @@ describe("ConnectionsPanel", () => {
       within(dialog).getByLabelText("Address or range"),
       "192.0.2.0/24",
     );
-    await user.selectOptions(within(dialog).getByLabelText("For"), "never");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Until removed" }),
+    );
     await user.click(within(dialog).getByRole("button", { name: "Block" }));
-    expect(window.confirm).toHaveBeenCalledWith(
-      expect.stringContaining("includes your own address"),
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "includes your own address",
+    );
+    expect(createBlockOp).toHaveBeenCalledTimes(1);
+    await user.click(
+      within(dialog).getByRole("button", { name: "Block anyway" }),
     );
     expect(createBlockOp).toHaveBeenCalledTimes(2);
     const forced = createBlockOp.mock.calls[1][0] as Record<string, unknown>;
@@ -393,11 +443,8 @@ describe("ConnectionsPanel", () => {
     );
   });
 
-  it("offers no block on a trusted address and marks it", async () => {
-    const user = userEvent.setup();
+  it("marks a trusted address in the table", () => {
     render(<ConnectionsPanel />);
-    const menu = await openMenu(user, "Actions for anonymous (BKGND)");
-    expect(menu.queryByRole("button", { name: "Block address" })).toBeNull();
     expect(
       within(screen.getByRole("table")).getByText("trusted"),
     ).toBeInTheDocument();
@@ -424,9 +471,6 @@ describe("ConnectionsPanel", () => {
   it("shows countries and the database's credit when lookup is on", () => {
     render(<ConnectionsPanel />);
     const table = screen.getByRole("table");
-    expect(
-      within(table).getByRole("columnheader", { name: "Country" }),
-    ).toBeInTheDocument();
     expect(within(table).getByText("Germany")).toBeInTheDocument();
     expect(within(table).getByText("Local network")).toBeInTheDocument();
     expect(
@@ -435,32 +479,25 @@ describe("ConnectionsPanel", () => {
   });
 
   it.each([
-    ["Live", "Germany"],
-    ["Signed-in devices", "Germany"],
-    ["History", "United Kingdom"],
-  ])("puts the country under its own header on %s", async (tab, country) => {
+    ["Live", "Germany", "203.0.113.9"],
+    ["Devices", "Germany", "203.0.113.9"],
+    ["History", "United Kingdom", "192.0.2.10"],
+  ])("shows the country under its address on %s", async (tab, country, ip) => {
     const user = userEvent.setup();
     render(<ConnectionsPanel />);
     await user.click(screen.getByRole("tab", { name: tab }));
     const table = screen.getByRole("table");
-    const column = within(table)
-      .getAllByRole("columnheader")
-      .findIndex((th) => th.textContent === "Country");
     const cell = within(table).getByText(country).closest("td");
     expect(cell).not.toBeNull();
-    expect(
-      Array.from(cell?.parentElement?.children ?? []).indexOf(cell as Element),
-    ).toBe(column);
+    expect(cell).toHaveTextContent(ip);
   });
 
   it("hides the country column without a database", () => {
     geoip = { enabled: false, credit: null };
     render(<ConnectionsPanel />);
-    expect(
-      within(screen.getByRole("table")).queryByRole("columnheader", {
-        name: "Country",
-      }),
-    ).toBeNull();
+    const table = screen.getByRole("table");
+    expect(within(table).queryByText("Germany")).toBeNull();
+    expect(within(table).queryByText("Local network")).toBeNull();
     expect(screen.queryByRole("link", { name: /DB-IP/ })).toBeNull();
   });
 

@@ -98,37 +98,37 @@ The first admin account cannot be disabled. Disabling an account also signs it o
 
 ## Connections
 
-See who is using the server right now, which devices can sign back in, who has connected recently, and which addresses are blocked. The first three tabs share these columns:
+See who is using the server right now, which devices can sign back in, who has connected recently, and which addresses are blocked. The tabs show how many connections, devices and blocks there are. On the first three tabs each row shows:
 
+- **Who** — the user name, or **Anonymous**, with **Squelch app** (the mobile app) or **Browser** under it. Hover over the client to see the full browser identification.
 - **Address** — the visitor's IP address. Behind a reverse proxy this is only right once Squelch trusts that proxy; if every row shows the same address, see [Showing the Real Client Address](deployment-guide.md#showing-the-real-client-address).
-- **Client** — **Squelch app** for the mobile app, **Browser** for everything else. Hover to see the full browser identification.
 - **Type** — **LIVE** is the listening screen's live feed, **BKGND** is background audio (one listener with BKGND on has both a LIVE and a BKGND connection), **Admin** is someone on the admin dashboard.
-- **Country** — where the address is, when the server has a country database. See [Showing Listeners' Countries](deployment-guide.md#showing-listeners-countries-optional). Private and local addresses show as **Local network**. History shows the country found at the time of the connection.
+- **Country** — shown under the address when the server has a country database. See [Showing Listeners' Countries](deployment-guide.md#showing-listeners-countries-optional). Private and local addresses show as **Local network**. History shows the country found at the time of the connection.
 
 Click any user name or address to jump to **History** filtered to it.
 
 ### Acting on a Connection or Device
 
-Each row has a **⋯** menu. Every action asks you to confirm first and is written to **Logs** with your user name.
+Choose the **›** button at the end of a row to open its details. They slide in from the right (from the bottom on a phone) with everything known about that connection or device, links to its history, and what you can do about it. Each action says what it will do, asks you to confirm in the same place, and is written to **Logs** with your user name. Press **Esc** or **✕** to close the details.
 
 | Action | What it does |
 | --- | --- |
 | Disconnect | Closes that one connection. Nothing is signed out, so a signed-in browser or app usually reconnects within seconds. Use it to clear a stuck connection. |
-| Sign out device | Signs that one browser or phone out. It is disconnected straight away and needs the password to get back in. The account's other devices stay signed in. |
+| Sign out this device | Signs that one browser or phone out. It is disconnected straight away and needs the password to get back in. The account's other devices stay signed in. |
 | Sign out everywhere | Signs the account out on every device at once. |
-| Block address | Opens the block form with that row's address filled in. See [Blocked addresses](#blocked-addresses). |
+| Block this address | Opens the block form with that row's address filled in. See [Blocked addresses](#blocked-addresses). |
 
-**Disconnect** is on **Live** only. **Sign out device** needs a signed-in device, so it is missing for anonymous visitors. **Block address** is missing on rows marked **trusted**, because those addresses can never be blocked. From **History** you can sign out a device or an account that is not connected right now; if it has already been signed out, you are told so.
+**Disconnect** is on **Live** only. **Sign out this device** needs a signed-in device, so it is missing for anonymous visitors. **Block this address** is missing on rows marked **trusted**, because those addresses can never be blocked, and the details say so. From **History** you can sign out a device or an account that is not connected right now; if it has already been signed out, you are told so.
 
-Your own admin connection is marked **this session**, and the device you are using is marked **this device**. Signing it out takes you to the sign-in page.
+Your own admin connection is marked **you**, and the device you are using is marked **this device**. Signing it out takes you to the sign-in page.
 
 ### Live
 
 Every open connection, with how long it has been up. Anonymous visitors (with **Public Access** on) show as **Anonymous**. The list updates on its own as people come and go. Use the filter box to narrow it by user name, address or country.
 
-### Signed-in devices
+### Devices
 
-Every sign-in that can still renew itself without a password: each browser or phone that signed in and has not signed out, been signed out, or gone 30 days without using the server. A browser that signed in without **Remember me** forgets its sign-in when it closes, but stays listed here until that 30 days runs out. **Last address** is where it last renewed its sign-in from — within the last 15 minutes if it is in use. **Online** means it has at least one connection open right now.
+Every sign-in that can still renew itself without a password: each browser or phone that signed in and has not signed out, been signed out, or gone 30 days without using the server. A browser that signed in without **Remember me** forgets its sign-in when it closes, but stays listed here until that 30 days runs out. **Last seen from** is where it last renewed its sign-in from — within the last 15 minutes if it is in use. **Online** means it has at least one connection open right now.
 
 ### History
 
@@ -149,14 +149,14 @@ Choose a time range and a connection type, and page through with **Previous** an
 
 A blocked address cannot reach Squelch at all. It is refused for listening, for the admin dashboard, and for uploads from recorders. Anyone connected from it is dropped as soon as you add the block.
 
-To block an address, choose **Block address** on a row, or **Block an address** on this tab. Enter an address such as `203.0.113.9` or a range such as `203.0.113.0/24`, and optionally a reason. Then choose how long the block lasts: 1 hour, 24 hours, 7 days, or until you remove it. **Remove** lifts a block straight away.
+To block an address, choose **Block this address** in a row's details, or **Block an address** on this tab. Enter an address such as `203.0.113.9` or a range such as `203.0.113.0/24`, and optionally a reason. Then choose how long the block lasts: 1 hour, 24 hours, 7 days, or until you remove it. **Remove** lifts a block straight away.
 
 Some blocks are refused:
 
 - **Too wide.** The widest block allowed is `/16` for IPv4 or `/48` for IPv6. Block anything wider at your firewall or reverse proxy.
 - **A range written with host bits.** For example, `192.168.1.5/24` is refused, and the message gives the range you probably meant, `192.168.1.0/24`.
 - **Loopback, or a range that overlaps the Never blocked list.**
-- **Your own address.** If the range includes the address you are connected from, Squelch asks before blocking it. Blocking yourself disconnects this page, and you cannot get back in from that address until the block is removed.
+- **Your own address.** If the range includes the address you are connected from, the block form warns you and the button changes to **Block anyway**. Blocking yourself disconnects this page, and you cannot get back in from that address until the block is removed.
 
 **Never blocked** lists the addresses no block applies to: loopback, plus any addresses set on the server with `--trusted-addresses`. The list cannot be changed from the dashboard, so an admin account alone cannot lock out whoever runs the server. See [Addresses That Can Never Be Blocked](deployment-guide.md#addresses-that-can-never-be-blocked).
 
