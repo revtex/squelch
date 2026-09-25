@@ -18,7 +18,7 @@ export default function BlockedTab({ blocked, talkgroups, autoPopulate, busy, on
 
   return (
     <div className="space-y-4">
-      <p className="max-w-prose text-sm text-base-content/70">
+      <p className="max-w-prose text-sm text-base-content-dim">
         Uploads for a blocked talkgroup are dropped before they are stored.
         {autoPopulate
           ? " Use it for talkgroups auto-populate keeps creating that you never want."
@@ -51,13 +51,13 @@ export default function BlockedTab({ blocked, talkgroups, autoPopulate, busy, on
         </button>
       </form>
       {blocked.length === 0 ? (
-        <p className="text-sm text-base-content/60">Nothing is blocked.</p>
+        <p className="text-sm text-base-content-dim">Nothing is blocked.</p>
       ) : (
         <ul aria-label="Blocked talkgroups" className="flex flex-wrap gap-2">
           {blocked.map((n) => (
             <li key={n} className="badge badge-lg gap-1 pe-1">
               <span className="font-mono">{n}</span>
-              {labels.get(n) && <span className="text-base-content/60">{labels.get(n)}</span>}
+              {labels.get(n) && <span className="text-base-content-dim">{labels.get(n)}</span>}
               <button
                 type="button"
                 className="btn btn-ghost btn-xs btn-circle"

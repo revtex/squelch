@@ -113,7 +113,7 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-box border border-base-300">
+      <div className="overflow-x-auto rounded-box border border-admin-line">
         <table className="table table-sm">
           <caption className="sr-only">Models</caption>
           <thead>
@@ -131,7 +131,7 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
           <tbody>
             {loading && !data && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/60">
+                <td colSpan={6} className="text-center text-base-content-dim">
                   Loading…
                 </td>
               </tr>
@@ -174,7 +174,7 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
                         onConfirm={() => void del(row.id)}
                       />
                     ) : row.state === "active" ? (
-                      <span className="text-xs text-base-content/60">{transcribing ? "in use" : "selected"}</span>
+                      <span className="text-xs text-base-content-dim">{transcribing ? "in use" : "selected"}</span>
                     ) : row.state === "downloaded" ? (
                       <span className="join">
                         <button type="button" className="btn btn-xs join-item" disabled={isBusy} onClick={() => void use(row.id)}>
@@ -208,7 +208,7 @@ export default function ModelsTab({ data, loading, error, activeModel, transcrib
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-base-content/60">
+      <p className="text-xs text-base-content-dim">
         Sizes are the model files; speed is relative and depends on the sidecar's CPU. Downloads continue if you leave this page.
       </p>
     </div>

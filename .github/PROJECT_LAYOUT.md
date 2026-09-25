@@ -158,6 +158,7 @@ frontend/
   src/
     main.tsx               entry — wires store, router, lazy-loads pages
     index.css              Tailwind + DaisyUI imports
+    admin.css              the admin's look: DaisyUI classes restyled under .admin-ui (ADR 0010)
     test-setup.ts          Vitest globals, MSW handlers (if used)
     app/
       api.ts               single shared RTK Query api object (one createApi call;

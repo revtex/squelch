@@ -311,7 +311,7 @@ export default function SystemsPanel() {
   const showDetail = !!system && (desktop || paramId != null || linkedSystem != null);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Systems"
         subtitle={
@@ -353,9 +353,9 @@ export default function SystemsPanel() {
 
       <div className={desktop ? "grid grid-cols-[16rem_1fr] gap-4" : ""}>
         {showList && (
-          <div className="rounded-box border border-base-300 bg-base-100">
+          <div className="rounded-box border border-admin-line bg-base-100">
             {loadingSystems ? (
-              <p className="p-3 text-sm text-base-content/60">Loading…</p>
+              <p className="p-3 text-sm text-base-content-dim">Loading…</p>
             ) : (
               <SystemList systems={shown} selectedId={selectedId} onSelect={selectSystem} reordering={reordering} onMove={move} />
             )}
@@ -373,7 +373,7 @@ export default function SystemsPanel() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="min-w-0 sm:flex-1">
                 <h2 className="truncate text-lg font-semibold">{system.label}</h2>
-                <p className="text-sm text-base-content/60">
+                <p className="text-sm text-base-content-dim">
                   System {system.systemId} · {plural(system.talkgroups, "talkgroup")} · {plural(system.units, "unit")} ·{" "}
                   {system.calls24h.toLocaleString()} {system.calls24h === 1 ? "call" : "calls"} / 24 h
                   {system.lastCall ? ` · last call ${formatAgo(system.lastCall)}` : ""}
@@ -484,7 +484,7 @@ export default function SystemsPanel() {
         )}
 
         {desktop && !system && !loadingSystems && systems.length > 0 && (
-          <p className="p-4 text-sm text-base-content/60">Choose a system.</p>
+          <p className="p-4 text-sm text-base-content-dim">Choose a system.</p>
         )}
       </div>
 

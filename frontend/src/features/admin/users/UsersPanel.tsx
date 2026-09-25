@@ -303,7 +303,7 @@ export default function UsersPanel() {
         u.lastSeenAt ? (
           <span title={u.lastSeenIp ?? undefined}>{formatAgo(u.lastSeenAt, now)}</span>
         ) : (
-          <span className="text-base-content/50">—</span>
+          <span className="text-admin-dim2">—</span>
         ),
     },
     {
@@ -312,7 +312,7 @@ export default function UsersPanel() {
       phone: "hide",
       sortValue: (u) => u.expiration ?? Number.MAX_SAFE_INTEGER,
       cell: (u) =>
-        u.expiration ? formatDate(u.expiration) : <span className="text-base-content/50">Never</span>,
+        u.expiration ? formatDate(u.expiration) : <span className="text-admin-dim2">Never</span>,
     },
   ];
 
@@ -321,7 +321,7 @@ export default function UsersPanel() {
   const selectedUsers = all.filter((u) => selected.has(u.id));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Users"
         subtitle="Who can sign in, what they can hear, and where they are signed in."

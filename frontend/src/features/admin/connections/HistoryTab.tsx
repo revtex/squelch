@@ -151,12 +151,12 @@ export default function HistoryTab({
           <span className="loading loading-spinner loading-lg" />
         </div>
       ) : !data?.items.length ? (
-        <div className="text-base-content/60 py-8 text-center">
+        <div className="text-base-content-dim py-8 text-center">
           No connections in this range.
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
+          <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
             <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
               <thead>
                 <tr>
@@ -197,7 +197,7 @@ export default function HistoryTab({
                             {e.username ?? `#${e.userId}`}
                           </button>
                         ) : (
-                          <span className="text-base-content/60">
+                          <span className="text-base-content-dim">
                             Anonymous
                           </span>
                         )}
@@ -205,7 +205,7 @@ export default function HistoryTab({
                           {KIND_LABELS[e.kind] ?? e.kind}
                         </span>
                         <div
-                          className="text-xs text-base-content/60"
+                          className="text-xs text-base-content-dim"
                           title={e.userAgent ?? undefined}
                         >
                           {clientLabel(e.native)}
@@ -248,7 +248,7 @@ export default function HistoryTab({
                         <div className="sm:whitespace-nowrap">
                           {formatDateTime(e.connectedAt)}
                         </div>
-                        <div className="sm:whitespace-nowrap text-xs text-base-content/60">
+                        <div className="sm:whitespace-nowrap text-xs text-base-content-dim">
                           {e.disconnectedAt !== null ? (
                             `for ${formatDuration(e.disconnectedAt - e.connectedAt)}`
                           ) : (
@@ -279,7 +279,7 @@ export default function HistoryTab({
           <GeoIPCredit geoip={data.geoip} />
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-base-content/60">
+            <span className="text-base-content-dim">
               {data.total} connection{data.total === 1 ? "" : "s"}
             </span>
             <div className="join">

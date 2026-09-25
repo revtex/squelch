@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CHIP, CHIP_OFF, CHIP_ON } from "./FilterChips";
 
 export interface FieldProps {
   /** The control's id; the label points at it. */
@@ -55,7 +56,7 @@ export function SwitchRow({
       <span className="min-w-0">
         <span className="block font-medium">{label}</span>
         {hint && (
-          <span className="block text-xs text-base-content/60">{hint}</span>
+          <span className="block text-xs text-base-content-dim">{hint}</span>
         )}
       </span>
       <input
@@ -94,7 +95,7 @@ export function Segmented<K extends string>({
   onChange,
 }: SegmentedProps<K>) {
   return (
-    <div role="radiogroup" aria-label={label} className="join">
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
       {options.map((o) => {
         const on = o.id === value;
         return (
@@ -105,7 +106,7 @@ export function Segmented<K extends string>({
             aria-checked={on}
             title={o.hint}
             disabled={disabled}
-            className={`btn btn-sm join-item ${on ? "btn-primary" : ""}`}
+            className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
             onClick={() => onChange(o.id)}
           >
             {o.label}

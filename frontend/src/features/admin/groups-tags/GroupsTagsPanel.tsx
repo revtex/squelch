@@ -25,7 +25,7 @@ export default function GroupsTagsPanel() {
   const [deleteTag] = useDeleteTagMutation();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Groups & tags"
         subtitle={

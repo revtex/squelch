@@ -92,7 +92,7 @@ export default function CallsTab({ instance, active, recent, view, onView }: Cal
         />
       )}
       {view === "recent" && recentRows.length > 0 && (
-        <p className="text-xs text-base-content/60">The last {plural(recentRows.length, "event")} since the page opened; the recorder does not replay history.</p>
+        <p className="text-xs text-base-content-dim">The last {plural(recentRows.length, "event")} since the page opened; the recorder does not replay history.</p>
       )}
     </div>
   );

@@ -39,11 +39,11 @@ export default function LockoutsCard() {
         <ShieldAlert className="h-4 w-4 text-warning" aria-hidden="true" />
         Sign-in lockouts
       </h3>
-      <p className="mt-1 text-sm text-base-content/60">
+      <p className="mt-1 text-sm text-base-content-dim">
         An address is locked out for ten minutes after {MAX_FAILURES} failed
         sign-ins. Clear one to let it try again now.
       </p>
-      <ul className="mt-3 divide-y divide-base-300">
+      <ul className="mt-3 divide-y divide-admin-line">
         {lockouts.map((l) => (
           <li
             key={l.ip}
@@ -51,7 +51,7 @@ export default function LockoutsCard() {
           >
             <span className="min-w-0">
               <span className="font-mono">{l.ip}</span>
-              <span className="ml-2 text-base-content/60">
+              <span className="ml-2 text-base-content-dim">
                 {l.lockedUntil
                   ? `locked, lifts ${formatUntil(l.lockedUntil)}`
                   : `${l.failures} of ${MAX_FAILURES} attempts used`}

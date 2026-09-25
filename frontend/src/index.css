@@ -1,10 +1,13 @@
 @import "tailwindcss";
+@import "./admin.css";
 @plugin "daisyui" {
   themes: false;
 }
 
-/* Bundled typefaces — the same three the mobile app ships (SIL OFL 1.1;
-   the licences sit beside the files in src/assets/fonts/). */
+/* Bundled typefaces (SIL OFL 1.1; the licences sit beside the files in
+   src/assets/fonts/). Selawik, JetBrains Mono and Big Shoulders are the
+   three the mobile app ships and draw the scanner; IBM Plex Sans and Mono
+   are the admin's, applied in admin.css. Latin subsets only. */
 @font-face {
   font-family: "Selawik";
   src: url("./assets/fonts/selawik_regular.woff2") format("woff2");
@@ -51,6 +54,37 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("./assets/fonts/ibmplexsans_400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("./assets/fonts/ibmplexsans_500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("./assets/fonts/ibmplexsans_600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./assets/fonts/ibmplexmono_400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("./assets/fonts/ibmplexmono_500.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
 @theme {
   --font-sans: "Selawik", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -72,6 +106,30 @@
   --color-lcd-face: var(--lcd-face);
   --color-lcd-accent: var(--lcd-accent);
   --color-lcd-chip: var(--lcd-chip-bg);
+}
+
+/* The admin's roles (set in admin.css, only inside the admin) as Tailwind
+   colours: border-admin-line, bg-admin-ok-bg, text-admin-warn-fg, ... */
+@theme inline {
+  --color-admin-line: var(--admin-line);
+  --color-admin-line2: var(--admin-line2);
+  --color-admin-dim2: var(--admin-dim2);
+  --color-admin-navy2: var(--admin-navy2);
+  --color-admin-gold-fg: var(--admin-gold-fg);
+  --color-admin-gold-bg: var(--admin-gold-bg);
+  --color-admin-green-line: var(--admin-green-line);
+  --color-admin-ok-bg: var(--admin-ok-bg);
+  --color-admin-ok-fg: var(--admin-ok-fg);
+  --color-admin-red-bg: var(--admin-red-bg);
+  --color-admin-red-line: var(--admin-red-line);
+  --color-admin-red-fg: var(--admin-red-fg);
+  --color-admin-warn-bg: var(--admin-warn-bg);
+  --color-admin-warn-line: var(--admin-warn-line);
+  --color-admin-warn-fg: var(--admin-warn-fg);
+  --color-admin-ghost-fg: var(--admin-ghost-fg);
+  --color-admin-up: var(--admin-up);
+  --color-admin-live: var(--admin-live);
+  --color-admin-paused: var(--admin-paused);
 }
 
 /* Themes — generated from squelch-mobile's design-tokens/tokens.json so the

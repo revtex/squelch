@@ -133,7 +133,7 @@ export default function TalkgroupDetails({
               <Headphones className="h-4 w-4" aria-hidden="true" />
               <span>
                 <span className="block">Listen to recent calls</span>
-                <span className="block text-xs text-base-content/60">Opens the scanner search on this talkgroup.</span>
+                <span className="block text-xs text-base-content-dim">Opens the scanner search on this talkgroup.</span>
               </span>
             </Link>
             {!blocked && (

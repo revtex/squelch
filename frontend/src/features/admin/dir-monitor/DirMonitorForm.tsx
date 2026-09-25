@@ -392,7 +392,7 @@ function MaskField({ id, value, onChange }: MaskFieldProps) {
   const found = result ? Object.entries(result.values).sort(([a], [b]) => a.localeCompare(b)) : [];
 
   return (
-    <div className="space-y-2 rounded-box border border-base-300 p-3">
+    <div className="space-y-2 rounded-box border border-admin-line p-3">
       <Field
         htmlFor={id}
         label="Filename mask"
@@ -441,14 +441,14 @@ function MaskField({ id, value, onChange }: MaskFieldProps) {
         </div>
       )}
       <details>
-        <summary className="cursor-pointer select-none text-xs text-base-content/70">
+        <summary className="cursor-pointer select-none text-xs text-base-content-dim">
           Tokens the mask understands
         </summary>
         <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
           {MASK_TOKENS.map((t) => (
             <div key={t.token} className="contents">
               <dt className="font-mono">{t.token}</dt>
-              <dd className="text-base-content/70">{t.means}</dd>
+              <dd className="text-base-content-dim">{t.means}</dd>
             </div>
           ))}
         </dl>
@@ -540,7 +540,7 @@ function FolderBrowser({ start, onPick, onBack, onClose }: FolderBrowserProps) {
       <p className="font-mono text-sm break-all" aria-live="polite">
         {here}
       </p>
-      <ul className="menu max-h-80 w-full overflow-auto rounded-box border border-base-300 p-0">
+      <ul className="menu max-h-80 w-full overflow-auto rounded-box border border-admin-line p-0">
         {data?.parent && (
           <li>
             <button type="button" onClick={() => go(data.parent!)} disabled={isFetching}>
@@ -561,7 +561,7 @@ function FolderBrowser({ start, onPick, onBack, onClose }: FolderBrowserProps) {
           </li>
         ))}
         {data && data.directories.length === 0 && (
-          <li className="p-3 text-sm text-base-content/60">No folders inside this one.</li>
+          <li className="p-3 text-sm text-base-content-dim">No folders inside this one.</li>
         )}
       </ul>
     </DetailsPanel>

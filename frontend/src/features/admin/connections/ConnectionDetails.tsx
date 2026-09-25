@@ -137,7 +137,7 @@ export default function ConnectionDetails({
   return (
     <DetailsPanel
       title={s.title}
-      titleClassName={s.anonymous ? "text-base-content/70" : ""}
+      titleClassName={s.anonymous ? "text-base-content-dim" : ""}
       subtitle={s.subtitle}
       badges={
         <>

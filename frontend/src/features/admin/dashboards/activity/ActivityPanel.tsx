@@ -81,7 +81,7 @@ function Sparkline({
   } | null>(null);
 
   return (
-    <div className="relative w-full rounded-xl border border-base-300 bg-base-100/60 overflow-hidden">
+    <div className="relative w-full rounded-xl border border-admin-line bg-base-100/60 overflow-hidden">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-40"
@@ -188,7 +188,7 @@ function Sparkline({
       {/* Hover tooltip */}
       {tooltip && (
         <div
-          className="pointer-events-none absolute z-20 rounded-lg border border-base-300 bg-base-200 px-2.5 py-1.5 text-xs font-medium shadow-lg -translate-x-1/2 -translate-y-full"
+          className="pointer-events-none absolute z-20 rounded-lg border border-admin-line bg-base-200 px-2.5 py-1.5 text-xs font-medium shadow-lg -translate-x-1/2 -translate-y-full"
           style={{ left: tooltip.x, top: tooltip.y - 8 }}
         >
           {tooltip.text}
@@ -244,7 +244,7 @@ export default function ActivityPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border border-base-300 bg-linear-to-r from-base-200 via-base-200 to-primary/10 p-5">
+      <div className="relative overflow-hidden rounded-2xl border border-admin-line bg-linear-to-r from-base-200 via-base-200 to-primary/10 p-5">
         <div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-wrap items-center gap-3">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary">
@@ -254,7 +254,7 @@ export default function ActivityPanel() {
             <h1 className="text-2xl font-bold tracking-wide">
               Radio Operations Center
             </h1>
-            <p className="text-sm text-base-content/70">
+            <p className="text-sm text-base-content-dim">
               Live network activity across the last 24 hours and busiest
               channels.
             </p>
@@ -275,8 +275,8 @@ export default function ActivityPanel() {
       ) : stats ? (
         <>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-              <div className="mb-2 flex items-center justify-between text-base-content/70">
+            <div className="rounded-xl border border-admin-line bg-base-200 p-4">
+              <div className="mb-2 flex items-center justify-between text-base-content-dim">
                 <span className="text-sm font-medium">Calls Today</span>
                 <Radio className="h-4 w-4" />
               </div>
@@ -284,8 +284,8 @@ export default function ActivityPanel() {
                 {stats.callsToday.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-              <div className="mb-2 flex items-center justify-between text-base-content/70">
+            <div className="rounded-xl border border-admin-line bg-base-200 p-4">
+              <div className="mb-2 flex items-center justify-between text-base-content-dim">
                 <span className="text-sm font-medium">This Week</span>
                 <Activity className="h-4 w-4" />
               </div>
@@ -293,8 +293,8 @@ export default function ActivityPanel() {
                 {stats.callsThisWeek.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-              <div className="mb-2 flex items-center justify-between text-base-content/70">
+            <div className="rounded-xl border border-admin-line bg-base-200 p-4">
+              <div className="mb-2 flex items-center justify-between text-base-content-dim">
                 <span className="text-sm font-medium">Total Calls</span>
                 <Signal className="h-4 w-4" />
               </div>
@@ -302,8 +302,8 @@ export default function ActivityPanel() {
                 {stats.callsTotal.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-              <div className="mb-2 flex items-center justify-between text-base-content/70">
+            <div className="rounded-xl border border-admin-line bg-base-200 p-4">
+              <div className="mb-2 flex items-center justify-between text-base-content-dim">
                 <span className="text-sm font-medium">Listeners</span>
                 <Headphones className="h-4 w-4" />
               </div>
@@ -311,8 +311,8 @@ export default function ActivityPanel() {
                 {stats.activeListeners}
               </div>
             </div>
-            <div className="rounded-xl border border-base-300 bg-base-200 p-4">
-              <div className="mb-2 flex items-center justify-between text-base-content/70">
+            <div className="rounded-xl border border-admin-line bg-base-200 p-4">
+              <div className="mb-2 flex items-center justify-between text-base-content-dim">
                 <span className="text-sm font-medium">Uptime</span>
                 <Clock3 className="h-4 w-4" />
               </div>
@@ -323,24 +323,24 @@ export default function ActivityPanel() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-base-300 bg-base-200 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-base-content/60">
+            <div className="rounded-lg border border-admin-line bg-base-200 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-base-content-dim">
                 Last 24h Total
               </div>
               <div className="mt-1 text-xl font-bold">
                 {totalLast24h.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-lg border border-base-300 bg-base-200 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-base-content/60">
+            <div className="rounded-lg border border-admin-line bg-base-200 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-base-content-dim">
                 Average / Hour
               </div>
               <div className="mt-1 text-xl font-bold">
                 {avgPerHour.toLocaleString()}
               </div>
             </div>
-            <div className="rounded-lg border border-base-300 bg-base-200 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-base-content/60">
+            <div className="rounded-lg border border-admin-line bg-base-200 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-base-content-dim">
                 Peak Hour
               </div>
               <div className="mt-1 text-xl font-bold">
@@ -349,8 +349,8 @@ export default function ActivityPanel() {
                   : "N/A"}
               </div>
             </div>
-            <div className="rounded-lg border border-base-300 bg-base-200 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-base-content/60">
+            <div className="rounded-lg border border-admin-line bg-base-200 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-base-content-dim">
                 Current Trend
               </div>
               <div
@@ -377,7 +377,7 @@ export default function ActivityPanel() {
           ) : chart && chart.buckets.length > 0 ? (
             <Sparkline buckets={chart.buckets} hour12={hour12} />
           ) : (
-            <p className="text-sm text-base-content/50">No data available</p>
+            <p className="text-sm text-admin-dim2">No data available</p>
           )}
         </div>
       </div>
@@ -407,15 +407,15 @@ export default function ActivityPanel() {
                 <tbody>
                   {topTG.talkgroups.map((tg, i) => (
                     <tr key={tg.talkgroupId}>
-                      <td className="text-base-content/50">{i + 1}</td>
+                      <td className="text-admin-dim2">{i + 1}</td>
                       <td className="font-semibold">{tg.talkgroupLabel}</td>
                       <td
-                        className="text-base-content/70 max-w-40 truncate"
+                        className="text-base-content-dim max-w-40 truncate"
                         title={tg.talkgroupName || undefined}
                       >
                         {tg.talkgroupName || "—"}
                       </td>
-                      <td className="text-base-content/70">{tg.systemLabel}</td>
+                      <td className="text-base-content-dim">{tg.systemLabel}</td>
                       <td>
                         <div className="flex items-center gap-2">
                           <progress
@@ -429,7 +429,7 @@ export default function ActivityPanel() {
                             }
                             max={100}
                           />
-                          <span className="text-xs text-base-content/60">
+                          <span className="text-xs text-base-content-dim">
                             {topTalkgroupCount > 0
                               ? `${Math.round((tg.callCount / topTalkgroupCount) * 100)}%`
                               : "0%"}
@@ -446,7 +446,7 @@ export default function ActivityPanel() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-base-content/50">No data available</p>
+            <p className="text-sm text-admin-dim2">No data available</p>
           )}
         </div>
       </div>

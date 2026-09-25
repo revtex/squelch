@@ -118,7 +118,7 @@ export default function SettingsPanel() {
   }
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-[18px] pb-24">
       <PageHeader
         title="Settings"
         subtitle="Server-wide options. Nothing applies until you save, except where a row says otherwise."
@@ -136,7 +136,7 @@ export default function SettingsPanel() {
         ))}
       </nav>
 
-      {visibleGroups.length === 0 && <p className="text-sm text-base-content/60">No setting matches.</p>}
+      {visibleGroups.length === 0 && <p className="text-sm text-base-content-dim">No setting matches.</p>}
 
       {visibleGroups.map((group) => (
         <section
@@ -149,10 +149,10 @@ export default function SettingsPanel() {
             <h3 id={`settings-${group.id}-title`} className="text-base font-semibold">
               {group.title}
             </h3>
-            {group.hint && <p className="text-xs text-base-content/60">{group.hint}</p>}
+            {group.hint && <p className="text-xs text-base-content-dim">{group.hint}</p>}
             {group.id === "storage" && <StorageLine storage={config?.storage} />}
           </div>
-          <div className="divide-y divide-base-300 rounded-box border border-base-300 bg-base-200">
+          <div className="divide-y divide-admin-line rounded-box border border-admin-line bg-base-200">
             {group.rows.map((row) => (
               <SettingRowView
                 key={row.key}
@@ -181,7 +181,7 @@ export default function SettingsPanel() {
       <div
         role="region"
         aria-label="Unsaved changes"
-        className="fixed inset-x-0 bottom-16 z-20 border-t border-base-300 bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
+        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
       >
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
           <p className="min-w-0 text-sm">
@@ -193,7 +193,7 @@ export default function SettingsPanel() {
                 )}
               </>
             ) : (
-              <span className="text-base-content/60">No unsaved changes</span>
+              <span className="text-base-content-dim">No unsaved changes</span>
             )}
           </p>
           <div className="flex gap-2">
@@ -285,7 +285,7 @@ function SettingRowView({ row, value, enabled, changed, error, capabilities, onC
           aria-describedby={error ? `${id}-error` : undefined}
           onChange={(e) => onChange(e.target.value)}
         />
-        {row.unit && <span className="text-sm text-base-content/60">{row.unit}</span>}
+        {row.unit && <span className="text-sm text-base-content-dim">{row.unit}</span>}
       </span>
     );
   }
@@ -305,7 +305,7 @@ function SettingRowView({ row, value, enabled, changed, error, capabilities, onC
           {perUser}
           {badge}
         </span>
-        <p className="text-xs text-base-content/60">{row.hint}</p>
+        <p className="text-xs text-base-content-dim">{row.hint}</p>
         {!enabled && capabilities && !capabilities.ffmpeg && row.key === "audioConversion" && (
           <p className="text-xs text-warning">FFmpeg is not installed on the server, so audio is stored as uploaded.</p>
         )}
@@ -331,7 +331,7 @@ function StorageLine({ storage }: { storage: StorageInfo | undefined }) {
   if (storage.databaseBytes > 0) parts.push(`Database ${formatBytes(storage.databaseBytes)}.`);
   if (storage.oldestCall) parts.push(`Oldest call ${formatDate(storage.oldestCall)}, ${formatAgo(storage.oldestCall)}.`);
   return (
-    <p className="text-xs text-base-content/60" data-testid="storage-line">
+    <p className="text-xs text-base-content-dim" data-testid="storage-line">
       {parts.join(" ")}
     </p>
   );
@@ -342,12 +342,12 @@ function TrustedAddresses({ addresses }: { addresses: string[] }) {
     <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <span className="block font-medium">Trusted addresses</span>
-        <p className="text-xs text-base-content/60">
+        <p className="text-xs text-base-content-dim">
           Set on the server with <code>--trusted-addresses</code> or <code>SQUELCH_TRUSTED_ADDRESSES</code>; never blockable from Connections. The server itself is always trusted.
         </p>
       </div>
       <div className="shrink-0 font-mono text-sm">
-        {addresses.length === 0 ? <span className="text-base-content/60">None besides localhost</span> : addresses.join(", ")}
+        {addresses.length === 0 ? <span className="text-base-content-dim">None besides localhost</span> : addresses.join(", ")}
       </div>
     </div>
   );
@@ -358,7 +358,7 @@ function LinkRow({ to, label, hint }: { to: string; label: string; hint: string 
     <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <span className="block font-medium">{label}</span>
-        <p className="text-xs text-base-content/60">{hint}</p>
+        <p className="text-xs text-base-content-dim">{hint}</p>
       </div>
       <Link to={to} className="btn btn-ghost btn-sm gap-2">
         <ExternalLink className="h-4 w-4" aria-hidden="true" />

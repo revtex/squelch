@@ -21,7 +21,7 @@ function activity(s: AdminSystem): string {
 /** The systems, one per row, with counts and activity; a listbox unless reordering. */
 export default function SystemList({ systems, selectedId, onSelect, reordering, onMove }: SystemListProps) {
   if (systems.length === 0) {
-    return <p className="p-3 text-sm text-base-content/60">No systems yet. Most appear on their own when uploads may create them.</p>;
+    return <p className="p-3 text-sm text-base-content-dim">No systems yet. Most appear on their own when uploads may create them.</p>;
   }
   const rowBody = (s: AdminSystem) => (
     <>
@@ -33,7 +33,7 @@ export default function SystemList({ systems, selectedId, onSelect, reordering, 
             {s.autoPopulateTalkgroups === 1 ? "auto" : "manual"}
           </span>
         </span>
-        <span className="block text-xs text-base-content/60">
+        <span className="block text-xs text-base-content-dim">
           ID {s.systemId} · {plural(s.talkgroups, "talkgroup")} · {activity(s)}
         </span>
       </span>
@@ -42,7 +42,7 @@ export default function SystemList({ systems, selectedId, onSelect, reordering, 
 
   if (reordering) {
     return (
-      <ul aria-label="Systems in display order" className="divide-y divide-base-300">
+      <ul aria-label="Systems in display order" className="divide-y divide-admin-line">
         {systems.map((s, i) => (
           <li key={s.id} className="flex items-start gap-2 p-2">
             {rowBody(s)}
@@ -73,7 +73,7 @@ export default function SystemList({ systems, selectedId, onSelect, reordering, 
   }
 
   return (
-    <ul role="listbox" aria-label="Systems" className="divide-y divide-base-300">
+    <ul role="listbox" aria-label="Systems" className="divide-y divide-admin-line">
       {systems.map((s) => {
         const on = s.id === selectedId;
         return (

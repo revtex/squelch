@@ -11,7 +11,7 @@ function RateChart({ samples }: { samples: RateSample[] }) {
   const L = 36;
   const PAD = 6;
   if (samples.length < 2) {
-    return <p className="text-sm text-base-content/60">The chart fills in as rate frames arrive, one a second.</p>;
+    return <p className="text-sm text-base-content-dim">The chart fills in as rate frames arrive, one a second.</p>;
   }
   const max = Math.max(1, ...samples.map((s) => s.rate));
   const top = Math.ceil(max / 10) * 10 || 10;
@@ -36,7 +36,7 @@ function RateChart({ samples }: { samples: RateSample[] }) {
         ))}
         <polyline fill="none" stroke="currentColor" strokeWidth={1.5} points={points} className="text-primary" />
       </svg>
-      <figcaption className="text-xs text-base-content/60">msgs / s · last 5 min · y-axis 0 to {top}</figcaption>
+      <figcaption className="text-xs text-base-content-dim">msgs / s · last 5 min · y-axis 0 to {top}</figcaption>
     </figure>
   );
 }
@@ -68,7 +68,7 @@ export default function DashboardTab({ samples, systemRates, systems, config }: 
   ];
   return (
     <div className="space-y-4">
-      <section className="rounded-box border border-base-300 bg-base-100 p-3">
+      <section className="rounded-box border border-admin-line bg-base-100 p-3">
         <h3 className="mb-2 text-sm font-semibold">Decode rate</h3>
         <RateChart samples={samples} />
       </section>

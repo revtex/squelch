@@ -42,6 +42,7 @@ than invent it: a reconstructed alternative is worse than none.
 | [0007](0007-share-link-app-handoff.md) | Hand share links to the app with a custom scheme, not Universal Links | Accepted |
 | [0008](0008-ip-blocks-are-global-with-a-server-side-trusted-list.md) | IP blocks are global, with a trusted list only the host can change | Accepted |
 | [0009](0009-country-from-a-local-database-only.md) | Country comes from a local database file only | Accepted |
+| [0010](0010-admin-has-its-own-type-and-component-styling.md) | The admin has its own type and component styling, derived from the scanner theme | Accepted |
 
 ## Not yet written
 

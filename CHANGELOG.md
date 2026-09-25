@@ -247,6 +247,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The admin takes the redesign's look.** It now uses IBM Plex Sans and
+  Mono, bundled with the app. Buttons are bordered and full height, and the
+  main action on a page is gold. Status badges are small tinted labels.
+  Tabs underline in gold, switches turn green when on, and tick boxes are
+  square. Table headers are small capitals, and a table's pages are
+  stepped with Previous and Next. The admin still follows the theme picked
+  in the scanner, and in Midnight it matches the design exactly. On a
+  phone each table row is a card of labelled values.
 - **Keypad beeps are a listener's own setting now, and they follow the
   account.** The button-press sound moved out of the admin options panel and
   into the scanner's ⋮ menu — Off, Uniden or Whistler, and picking one plays

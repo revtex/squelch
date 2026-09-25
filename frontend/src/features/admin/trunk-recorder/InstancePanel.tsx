@@ -139,7 +139,7 @@ export default function InstancePanel({ instance, state, onClose, onSaved, onDel
               Reconnect
             </button>
           </div>
-          <p role="status" className={`mt-2 text-sm ${testResult ? (testResult.ok ? "text-success" : "text-error") : "text-base-content/60"}`}>
+          <p role="status" className={`mt-2 text-sm ${testResult ? (testResult.ok ? "text-success" : "text-error") : "text-base-content-dim"}`}>
             {testResult ? testResult.text : "Test tries the saved settings; save first after a change."}
           </p>
         </PanelSection>

@@ -5,14 +5,14 @@ import { countryFlag, countryName } from "./place";
 export function CountryCell({ place }: { place: AddressPlace }) {
   if (place.local) {
     return (
-      <span className="inline-flex items-center gap-1 text-sm text-base-content/70">
+      <span className="inline-flex items-center gap-1 text-sm text-base-content-dim">
         <House className="h-3.5 w-3.5" aria-hidden="true" />
         Local network
       </span>
     );
   }
   if (!place.country) {
-    return <span className="text-base-content/50">-</span>;
+    return <span className="text-admin-dim2">-</span>;
   }
   const name = countryName(place.country);
   return (
@@ -29,7 +29,7 @@ export function CountryCell({ place }: { place: AddressPlace }) {
 export function GeoIPCredit({ geoip }: { geoip: GeoIPInfo | undefined }) {
   if (!geoip?.enabled || !geoip.credit) return null;
   return (
-    <p className="text-xs text-base-content/50">
+    <p className="text-xs text-admin-dim2">
       Countries:{" "}
       <a
         href={geoip.credit.url}

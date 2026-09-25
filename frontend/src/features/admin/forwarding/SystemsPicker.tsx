@@ -19,7 +19,7 @@ export default function SystemsPicker({ systems, value, onChange }: SystemsPicke
         Which systems' calls are sent. Pick none to send them all.
       </p>
       {sorted.length === 0 ? (
-        <p className="text-sm text-base-content/60">
+        <p className="text-sm text-base-content-dim">
           No systems yet, so every system that gets created is sent.
         </p>
       ) : (

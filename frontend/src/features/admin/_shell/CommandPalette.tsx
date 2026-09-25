@@ -62,8 +62,8 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         }
       }}
     >
-      <div className="modal-box w-full max-w-lg p-0">
-        <label className="input input-lg flex w-full items-center gap-3 rounded-none border-0 border-b border-base-300 focus-within:outline-none">
+      <div className="modal-box w-full max-w-[560px] overflow-hidden rounded-[10px] p-0 shadow-none">
+        <label className="input flex h-auto w-full items-center gap-3 rounded-none border-0 border-b border-admin-line px-4 py-3.5 text-[15px] focus-within:outline-none">
           <Search className="h-5 w-5 opacity-60" aria-hidden="true" />
           <input
             ref={input}
@@ -89,7 +89,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
           className="menu max-h-[60vh] w-full flex-nowrap overflow-y-auto p-2"
         >
           {matches.length === 0 && (
-            <li className="px-3 py-4 text-sm text-base-content/60">
+            <li className="px-3 py-4 text-sm text-base-content-dim">
               No section matches “{query}”.
             </li>
           )}

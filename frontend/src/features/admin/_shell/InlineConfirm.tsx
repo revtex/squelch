@@ -38,12 +38,16 @@ export function InlineConfirm({
     <div
       role="group"
       aria-label="Confirm"
-      className="space-y-3 rounded-box border border-base-300 bg-base-200 p-4"
+      className={`flex flex-col gap-2.5 rounded-lg border p-3.5 ${
+        danger
+          ? "border-admin-red-line bg-admin-red-bg"
+          : "border-primary bg-admin-navy2"
+      }`}
     >
       <p className="font-semibold">{title}</p>
-      <p className="text-sm text-base-content/70">{text}</p>
+      <p className="text-sm text-base-content-dim">{text}</p>
       {children}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
           className="btn btn-ghost btn-sm"

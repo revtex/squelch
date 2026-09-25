@@ -52,7 +52,7 @@ export default function LogDetails({ log, index, count, onMove, onShowSimilar, o
       subtitle="Server log line"
       onClose={onClose}
     >
-      <div className="flex items-center justify-between text-xs text-base-content/60">
+      <div className="flex items-center justify-between text-xs text-base-content-dim">
         <span>
           Line {index + 1} of {count}
         </span>
@@ -82,12 +82,12 @@ export default function LogDetails({ log, index, count, onMove, onShowSimilar, o
 
       <PanelSection title="Attributes">
         {attrs.length === 0 ? (
-          <p className="text-sm text-base-content/60">This line has no attributes.</p>
+          <p className="text-sm text-base-content-dim">This line has no attributes.</p>
         ) : (
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-box bg-base-200 p-3 font-mono text-xs">
             {attrs.map(([k, v]) => (
               <div key={k} className="contents">
-                <dt className="text-base-content/60">{k}</dt>
+                <dt className="text-base-content-dim">{k}</dt>
                 <dd className="break-all">{v}</dd>
               </div>
             ))}

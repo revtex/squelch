@@ -153,7 +153,7 @@ export default function ApiKeyForm({
             Which systems the key may upload to. Pick none to allow them all.
           </p>
           {sorted.length === 0 ? (
-            <p className="text-sm text-base-content/60">
+            <p className="text-sm text-base-content-dim">
               No systems yet, so the key can upload to any system that gets
               created.
             </p>

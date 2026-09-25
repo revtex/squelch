@@ -51,7 +51,7 @@ export default function LiveTab({
   const showCountry = data?.geoip.enabled ?? false;
   if (rows.length === 0) {
     return (
-      <div className="text-base-content/60 py-8 text-center">
+      <div className="text-base-content-dim py-8 text-center">
         {search ? "No connections match." : "Nobody is connected right now."}
       </div>
     );
@@ -59,7 +59,7 @@ export default function LiveTab({
 
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
+      <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
         <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
           <thead>
             <tr>
@@ -99,7 +99,7 @@ export default function LiveTab({
                           {c.username}
                         </button>
                       ) : (
-                        <span className="text-base-content/60">Anonymous</span>
+                        <span className="text-base-content-dim">Anonymous</span>
                       )}
                       {c.role === "admin" && (
                         <span className="badge badge-ghost badge-xs">
@@ -114,7 +114,7 @@ export default function LiveTab({
                       {KIND_LABELS[c.kind]}
                     </span>
                     <div
-                      className="text-xs text-base-content/60"
+                      className="text-xs text-base-content-dim"
                       title={c.userAgent || undefined}
                     >
                       {clientLabel(c.native)}

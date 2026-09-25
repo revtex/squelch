@@ -31,7 +31,7 @@ export default function MessagesTab({ messages }: { messages: MessageEntry[] }) 
     { id: "otype", header: "Opcode type", phone: "show", sortValue: (r) => r.opcodeType, cell: (r) => r.opcodeType },
     { id: "sys", header: "Systems", phone: "hide", sortValue: (r) => r.systems, cell: (r) => r.systems },
     { id: "last", header: "Last seen", phone: "show", sortValue: (r) => r.lastSeen, cell: (r) => <span className="font-mono text-xs">{fmtTime(r.lastSeen)}</span> },
-    { id: "desc", header: "Description", phone: "hide", sortValue: (r) => r.description, cell: (r) => <span className="text-xs text-base-content/70">{r.description || "—"}</span> },
+    { id: "desc", header: "Description", phone: "hide", sortValue: (r) => r.description, cell: (r) => <span className="text-xs text-base-content-dim">{r.description || "—"}</span> },
   ];
 
   const liveColumns: Column<MessageEntry>[] = [
@@ -45,7 +45,7 @@ export default function MessagesTab({ messages }: { messages: MessageEntry[] }) 
       header: "Description",
       phone: "show",
       sortValue: (r) => r.meta ?? r.opcodeDesc ?? r.trunkMsg,
-      cell: (r) => <span className="text-xs text-base-content/70">{r.meta ?? r.opcodeDesc ?? r.trunkMsg ?? "—"}</span>,
+      cell: (r) => <span className="text-xs text-base-content-dim">{r.meta ?? r.opcodeDesc ?? r.trunkMsg ?? "—"}</span>,
     },
   ];
 

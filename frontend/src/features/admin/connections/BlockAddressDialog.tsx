@@ -95,7 +95,7 @@ export default function BlockAddressDialog({
         <h3 id="block-address-title" className="text-lg font-bold">
           Block an address
         </h3>
-        <p className="py-2 text-sm text-base-content/70">
+        <p className="py-2 text-sm text-base-content-dim">
           Everything from this address is refused: listening, the admin
           dashboard and uploads from recorders. Anyone connected from it now is
           dropped.

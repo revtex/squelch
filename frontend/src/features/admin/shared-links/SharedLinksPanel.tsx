@@ -168,7 +168,7 @@ export default function SharedLinksPanel() {
       cell: (l) => (
         <span className={`block ${l.expired ? "opacity-60" : ""}`}>
           <span className="font-medium">{callTitle(l)}</span>
-          <span className="block text-xs text-base-content/60">
+          <span className="block text-xs text-base-content-dim">
             {l.systemLabel || "Unknown system"}
             {l.talkgroupName && l.talkgroupLabel ? ` · ${l.talkgroupName}` : ""}
           </span>
@@ -182,7 +182,7 @@ export default function SharedLinksPanel() {
       cell: (l) => (
         <span>
           {formatDateTime(l.dateTime)}
-          <span className="ml-1 text-xs text-base-content/60">{formatDuration(l.duration)}</span>
+          <span className="ml-1 text-xs text-base-content-dim">{formatDuration(l.duration)}</span>
         </span>
       ),
     },
@@ -193,7 +193,7 @@ export default function SharedLinksPanel() {
       cell: (l) => (
         <span>
           {formatAgo(l.createdAt)}
-          <span className="block text-xs text-base-content/60">by {l.sharedBy || "unknown"}</span>
+          <span className="block text-xs text-base-content-dim">by {l.sharedBy || "unknown"}</span>
         </span>
       ),
     },
@@ -214,7 +214,7 @@ export default function SharedLinksPanel() {
         ) : l.effectiveExpiresAt ? (
           formatUntil(l.effectiveExpiresAt)
         ) : (
-          <span className="text-base-content/60">never</span>
+          <span className="text-base-content-dim">never</span>
         ),
     },
   ];
@@ -253,7 +253,7 @@ export default function SharedLinksPanel() {
     : [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Shared links"
         subtitle="Calls listeners have shared by link. Anyone with a link can play that one call until it expires or you revoke it."
@@ -324,7 +324,7 @@ export default function SharedLinksPanel() {
         onOpen={(l, trigger) => panel.open({ key: `details:${l.id}`, kind: "details", id: l.id }, trigger)}
         rowLabel={callTitle}
         openKey={p?.kind === "details" ? p.id : null}
-        rowClassName={(l) => (l.expired ? "text-base-content/70" : "")}
+        rowClassName={(l) => (l.expired ? "text-base-content-dim" : "")}
       />
 
       {p?.kind === "details" && current && (
@@ -385,7 +385,7 @@ export default function SharedLinksPanel() {
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 <span>
                   <span className="block font-medium">Open shared page</span>
-                  <span className="block text-xs text-base-content/60">
+                  <span className="block text-xs text-base-content-dim">
                     Plays the call the way a visitor sees it, in a new tab.
                   </span>
                 </span>

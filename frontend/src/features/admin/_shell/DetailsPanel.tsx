@@ -41,7 +41,7 @@ export function DetailsPanel({
     closeRef.current?.focus();
   }, []);
 
-  const width = size === "wide" ? "sm:w-[34rem]" : "sm:w-[26rem]";
+  const width = size === "wide" ? "sm:w-[34rem]" : "sm:w-[420px]";
 
   return (
     <dialog
@@ -56,39 +56,39 @@ export function DetailsPanel({
       }}
     >
       <div
-        className={`modal-box relative flex max-h-[85vh] flex-col gap-5 p-0 sm:h-full sm:max-h-none sm:max-w-none sm:rounded-none ${width}`}
+        className={`modal-box relative flex max-h-[88vh] flex-col p-0 max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0 sm:h-full sm:max-h-none sm:max-w-none sm:rounded-none sm:border-y-0 sm:border-r-0 ${width}`}
       >
         <button
           ref={closeRef}
           type="button"
-          className="btn btn-ghost btn-sm btn-square absolute right-3 top-3 z-10"
+          className="absolute right-3.5 top-3 z-10 inline-flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-md border border-admin-line bg-base-300 text-base-content hover:border-secondary"
           aria-label="Close"
           onClick={onClose}
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
 
-        <div className="min-w-0 space-y-1 px-5 pr-14 pt-5">
+        <div className="min-w-0 border-b border-admin-line py-4 pl-[18px] pr-14">
           <div className="flex flex-wrap items-center gap-2">
             <h3
               id={titleId}
-              className={`truncate text-lg font-bold ${titleClassName}`}
+              className={`truncate text-[17px] font-semibold ${titleClassName}`}
             >
               {title}
             </h3>
             {badges}
           </div>
           {subtitle && (
-            <p className="text-sm text-base-content/60">{subtitle}</p>
+            <p className="mt-0.5 text-[13px] text-base-content-dim">{subtitle}</p>
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-[18px]">
           {children}
         </div>
 
         {footer && (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-base-300 bg-base-100 px-5 py-3">
+          <div className="admin-acts flex flex-wrap justify-end gap-2 border-t border-admin-line bg-base-200 px-[18px] py-3 max-sm:[&>.btn]:flex-auto max-sm:[&>.btn]:justify-center">
             {footer}
           </div>
         )}
@@ -112,7 +112,7 @@ export function PanelSection({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-base-content/60">
+      <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-base-content-dim">
         {title}
       </p>
       {children}
@@ -128,11 +128,11 @@ export interface Fact {
 /** Label and value pairs, two columns, wrapping long values. */
 export function FactList({ facts }: { facts: Fact[] }) {
   return (
-    <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-sm">
+    <dl className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2 sm:grid-cols-[130px_1fr]">
       {facts.map((f) => (
         <div key={f.label} className="contents">
-          <dt className="text-base-content/60">{f.label}</dt>
-          <dd className="min-w-0 break-words">{f.value}</dd>
+          <dt className="text-base-content-dim">{f.label}</dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">{f.value}</dd>
         </div>
       ))}
     </dl>

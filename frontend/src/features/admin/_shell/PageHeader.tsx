@@ -11,14 +11,20 @@ export interface PageHeaderProps {
 /** Every admin page starts with this: a title, a line of help, and its actions. */
 export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-x-5 gap-y-3">
       <div className="min-w-0">
-        <h2 className="text-xl font-bold">{title}</h2>
+        <h2 className="text-xl font-semibold tracking-[-0.01em] md:text-[22px]">
+          {title}
+        </h2>
         {subtitle && (
-          <p className="mt-0.5 text-sm text-base-content/60">{subtitle}</p>
+          <p className="mt-1 max-w-[62ch] text-base-content-dim">{subtitle}</p>
         )}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && (
+        <div className="admin-acts flex flex-wrap items-center justify-end gap-2 max-md:w-full max-md:justify-start max-md:[&>.btn]:flex-auto max-md:[&>.btn]:justify-center">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

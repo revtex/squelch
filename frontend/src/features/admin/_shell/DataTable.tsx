@@ -5,7 +5,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { OpenButton } from "./OpenButton";
 
 export type SortValue = string | number | null | undefined;
@@ -73,12 +72,12 @@ function compare(a: SortValue, b: SortValue): number {
   });
 }
 
+// On a phone each row is a card: a two-column grid of label-over-value
+// pairs, the title top-left, the tick box top-right, the › bottom-right.
 const CELL_PHONE =
-  "max-sm:flex max-sm:items-baseline max-sm:justify-between max-sm:gap-3 max-sm:px-0 max-sm:py-0.5 max-sm:before:shrink-0 max-sm:before:text-xs max-sm:before:text-base-content/60 max-sm:before:content-[attr(data-label)]";
-// The title cell leads the card whatever its column position, with room on
-// the right for the open button.
+  "max-sm:block max-sm:border-0 max-sm:p-0 max-sm:before:block max-sm:before:text-[11px] max-sm:before:uppercase max-sm:before:tracking-[0.04em] max-sm:before:text-base-content-dim max-sm:before:content-[attr(data-label)]";
 const TITLE_PHONE =
-  "max-sm:order-first max-sm:block max-sm:px-0 max-sm:pb-1 max-sm:pr-10 max-sm:text-base max-sm:font-semibold";
+  "max-sm:col-start-1 max-sm:row-start-1 max-sm:block max-sm:border-0 max-sm:p-0 max-sm:text-[15px]";
 
 /**
  * The admin's one table: sortable headers, paging, ticking rows for a bulk
@@ -172,15 +171,15 @@ export function DataTable<T, K extends string | number>({
         <div
           role="region"
           aria-label="Selected rows"
-          className="flex flex-wrap items-center gap-2 rounded-box bg-base-200 px-3 py-2 text-sm"
+          className="flex flex-wrap items-center gap-2.5 rounded-lg border border-primary bg-admin-navy2 px-3 py-2"
         >
           <span className="font-medium tabular-nums">
             {selectedCount} selected
           </span>
-          <div className="flex flex-wrap gap-1">{bulkActions}</div>
+          <div className="flex flex-wrap gap-2">{bulkActions}</div>
           <button
             type="button"
-            className="btn btn-ghost btn-xs ml-auto"
+            className="btn btn-ghost btn-sm ml-auto"
             onClick={() => onSelectedChange(new Set())}
           >
             Clear
@@ -188,175 +187,169 @@ export function DataTable<T, K extends string | number>({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 max-sm:border-0">
-        <table className="table table-sm max-sm:block">
-          <caption className="sr-only">{caption}</caption>
-          <thead className="max-sm:hidden">
-            <tr>
-              {selectable && (
-                <th className="w-8">
-                  <input
-                    ref={headerCheck}
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    aria-label="Select all on this page"
-                    checked={allVisibleSelected}
-                    onChange={toggleAll}
-                  />
-                </th>
-              )}
-              {columns.map((c) => {
-                const active = sort?.id === c.id;
-                const ariaSort = active
-                  ? sort.dir === "asc"
-                    ? "ascending"
-                    : "descending"
-                  : undefined;
-                const Icon = active
-                  ? sort.dir === "asc"
-                    ? ArrowUp
-                    : ArrowDown
-                  : ArrowUpDown;
-                return (
-                  <th
-                    key={c.id}
-                    aria-sort={ariaSort}
-                    className={`${c.align === "right" ? "text-right" : ""} ${c.className ?? ""}`}
-                  >
-                    {c.sortValue ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs -mx-2 gap-1 font-semibold"
-                        onClick={() => toggleSort(c.id)}
-                      >
-                        {c.header}
-                        <Icon
-                          className={`h-3 w-3 ${active ? "" : "opacity-40"}`}
-                          aria-hidden="true"
-                        />
-                      </button>
-                    ) : (
-                      c.header
-                    )}
+      <div className="overflow-hidden rounded-lg border border-admin-line bg-base-200">
+        <div className="overflow-x-auto [scrollbar-width:thin]">
+          <table className="table max-sm:block">
+            <caption className="sr-only">{caption}</caption>
+            <thead className="max-sm:hidden">
+              <tr>
+                {selectable && (
+                  <th className="w-9 pr-0">
+                    <input
+                      ref={headerCheck}
+                      type="checkbox"
+                      className="checkbox"
+                      aria-label="Select all on this page"
+                      checked={allVisibleSelected}
+                      onChange={toggleAll}
+                    />
                   </th>
+                )}
+                {columns.map((c) => {
+                  const active = sort?.id === c.id;
+                  const ariaSort = active
+                    ? sort.dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : undefined;
+                  return (
+                    <th
+                      key={c.id}
+                      aria-sort={ariaSort}
+                      className={`${c.align === "right" ? "text-right" : ""} ${c.className ?? ""}`}
+                    >
+                      {c.sortValue ? (
+                        <button
+                          type="button"
+                          className="inline-flex cursor-pointer items-center gap-1 uppercase"
+                          onClick={() => toggleSort(c.id)}
+                        >
+                          {c.header}
+                          <span
+                            aria-hidden="true"
+                            className={active ? "" : "opacity-50"}
+                          >
+                            {active ? (sort.dir === "asc" ? "↑" : "↓") : "↕"}
+                          </span>
+                        </button>
+                      ) : (
+                        c.header
+                      )}
+                    </th>
+                  );
+                })}
+                {onOpen && (
+                  <th className="w-12">
+                    <span className="sr-only">Details</span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="max-sm:block">
+              {loading && rows.length === 0 && (
+                <tr className="max-sm:block">
+                  <td
+                    colSpan={columns.length + (selectable ? 1 : 0) + (onOpen ? 1 : 0)}
+                    className="py-[30px] text-center max-sm:block"
+                  >
+                    <span className="loading loading-spinner loading-sm" />
+                    <span className="sr-only">Loading</span>
+                  </td>
+                </tr>
+              )}
+              {!loading && rows.length === 0 && (
+                <tr className="max-sm:block">
+                  <td
+                    colSpan={columns.length + (selectable ? 1 : 0) + (onOpen ? 1 : 0)}
+                    className="py-[30px] text-center text-base-content-dim max-sm:block"
+                  >
+                    {empty}
+                  </td>
+                </tr>
+              )}
+              {visible.map((row) => {
+                const k = rowKey(row);
+                const isOpen = openKey !== null && openKey === k;
+                const isSelected = selectable && selected.has(k);
+                const name = rowLabel?.(row) ?? String(k);
+                return (
+                  <tr
+                    key={k}
+                    className={`max-sm:grid max-sm:grid-cols-[1fr_auto] max-sm:gap-x-2.5 max-sm:gap-y-1 max-sm:border-b max-sm:border-admin-line max-sm:px-3.5 max-sm:py-2.5 max-sm:last:border-b-0 ${
+                      isOpen ? "bg-admin-navy2" : isSelected ? "bg-primary/10" : ""
+                    } ${rowClassName?.(row) ?? ""}`}
+                  >
+                    {selectable && (
+                      <td className="w-9 pr-0 max-sm:col-start-2 max-sm:row-start-1 max-sm:w-auto max-sm:justify-self-end max-sm:border-0 max-sm:p-0">
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          aria-label={`Select ${name}`}
+                          checked={isSelected}
+                          onChange={() => toggleOne(k)}
+                        />
+                      </td>
+                    )}
+                    {columns.map((c) => {
+                      const phone = c.phone ?? "show";
+                      const phoneClass =
+                        phone === "title"
+                          ? `${TITLE_PHONE} ${selectable ? "" : "max-sm:col-span-2"}`
+                          : phone === "hide"
+                            ? "max-sm:hidden"
+                            : CELL_PHONE;
+                      return (
+                        <td
+                          key={c.id}
+                          data-label={c.header}
+                          className={`${c.align === "right" ? "text-right tabular-nums max-sm:text-left" : ""} ${phoneClass} ${c.className ?? ""}`}
+                        >
+                          {c.cell(row)}
+                        </td>
+                      );
+                    })}
+                    {onOpen && (
+                      <td className="text-right max-sm:col-span-2 max-sm:flex max-sm:justify-end max-sm:border-0 max-sm:p-0 max-sm:pt-1.5">
+                        <OpenButton
+                          label={`Details for ${name}`}
+                          open={isOpen}
+                          onOpen={(el) => onOpen(row, el)}
+                        />
+                      </td>
+                    )}
+                  </tr>
                 );
               })}
-              {onOpen && (
-                <th className="w-10">
-                  <span className="sr-only">Details</span>
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="max-sm:block">
-            {loading && rows.length === 0 && (
-              <tr className="max-sm:block">
-                <td
-                  colSpan={columns.length + (selectable ? 1 : 0) + (onOpen ? 1 : 0)}
-                  className="py-8 text-center max-sm:block"
-                >
-                  <span className="loading loading-spinner loading-sm" />
-                  <span className="sr-only">Loading</span>
-                </td>
-              </tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr className="max-sm:block">
-                <td
-                  colSpan={columns.length + (selectable ? 1 : 0) + (onOpen ? 1 : 0)}
-                  className="py-8 text-center text-base-content/60 max-sm:block"
-                >
-                  {empty}
-                </td>
-              </tr>
-            )}
-            {visible.map((row) => {
-              const k = rowKey(row);
-              const isOpen = openKey !== null && openKey === k;
-              const isSelected = selectable && selected.has(k);
-              const name = rowLabel?.(row) ?? String(k);
-              return (
-                <tr
-                  key={k}
-                  className={`max-sm:relative max-sm:flex max-sm:flex-col max-sm:border-b max-sm:border-base-300 max-sm:py-3 ${
-                    selectable ? "max-sm:pl-8" : ""
-                  } ${isOpen ? "bg-base-200" : ""} ${isSelected ? "bg-primary/10" : ""} ${
-                    rowClassName?.(row) ?? ""
-                  }`}
-                >
-                  {selectable && (
-                    <td className="max-sm:absolute max-sm:left-0 max-sm:top-3 max-sm:p-0">
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-sm"
-                        aria-label={`Select ${name}`}
-                        checked={isSelected}
-                        onChange={() => toggleOne(k)}
-                      />
-                    </td>
-                  )}
-                  {columns.map((c) => {
-                    const phone = c.phone ?? "show";
-                    const phoneClass =
-                      phone === "title"
-                        ? TITLE_PHONE
-                        : phone === "hide"
-                          ? "max-sm:hidden"
-                          : CELL_PHONE;
-                    return (
-                      <td
-                        key={c.id}
-                        data-label={c.header}
-                        className={`${c.align === "right" ? "text-right tabular-nums" : ""} ${phoneClass} ${c.className ?? ""}`}
-                      >
-                        {c.cell(row)}
-                      </td>
-                    );
-                  })}
-                  {onOpen && (
-                    <td className="text-right max-sm:absolute max-sm:right-0 max-sm:top-2 max-sm:p-0">
-                      <OpenButton
-                        label={`Details for ${name}`}
-                        open={isOpen}
-                        onOpen={(el) => onOpen(row, el)}
-                      />
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {pageSize > 0 && sorted.length > pageSize && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-base-content/70">
-          <span className="tabular-nums">
-            Showing {from}–{to} of {sorted.length}
-          </span>
-          <div className="join">
-            <button
-              type="button"
-              className="btn btn-sm join-item"
-              disabled={current === 0}
-              onClick={() => setPage(current - 1)}
-            >
-              Previous
-            </button>
-            <span className="btn btn-sm join-item pointer-events-none tabular-nums">
-              {current + 1} / {pages}
-            </span>
-            <button
-              type="button"
-              className="btn btn-sm join-item"
-              disabled={current >= pages - 1}
-              onClick={() => setPage(current + 1)}
-            >
-              Next
-            </button>
-          </div>
+            </tbody>
+          </table>
         </div>
-      )}
+
+        {pageSize > 0 && sorted.length > pageSize && (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-admin-line2 px-3.5 py-2.5 text-xs text-base-content-dim">
+            <span className="tabular-nums">
+              Showing {from}–{to} of {sorted.length}
+            </span>
+            {current > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-base-content"
+                onClick={() => setPage(current - 1)}
+              >
+                <span aria-hidden="true">←</span> Previous
+              </button>
+            )}
+            {current < pages - 1 && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-base-content"
+                onClick={() => setPage(current + 1)}
+              >
+                Next <span aria-hidden="true">→</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

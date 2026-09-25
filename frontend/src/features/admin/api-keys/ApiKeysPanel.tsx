@@ -104,7 +104,7 @@ export default function ApiKeysPanel() {
       cell: (k) => (
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="font-medium">{keyName(k)}</span>
-          <span className="font-mono text-xs text-base-content/60">{k.fingerprint}</span>
+          <span className="font-mono text-xs text-base-content-dim">{k.fingerprint}</span>
         </span>
       ),
     },
@@ -152,7 +152,7 @@ export default function ApiKeysPanel() {
         k.lastUsedAt ? (
           <span title={k.lastUsedIp ?? undefined}>{formatAgo(k.lastUsedAt)}</span>
         ) : (
-          <span className="text-base-content/60">never</span>
+          <span className="text-base-content-dim">never</span>
         ),
     },
   ];
@@ -240,7 +240,7 @@ export default function ApiKeysPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="API keys"
         subtitle="What recorders use to upload calls. Each key can be limited to some systems and rate-limited."

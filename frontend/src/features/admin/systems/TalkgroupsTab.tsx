@@ -96,11 +96,11 @@ export default function TalkgroupsTab({
       className: "min-w-0",
       cell: (tg) =>
         isUnlabeled(tg) ? (
-          <span className="italic text-base-content/50">unlabeled</span>
+          <span className="italic text-admin-dim2">unlabeled</span>
         ) : (
           <span className="block min-w-0">
             <span className="block truncate font-medium">{tg.label ?? "—"}</span>
-            {tg.name && <span className="block truncate text-xs text-base-content/60">{tg.name}</span>}
+            {tg.name && <span className="block truncate text-xs text-base-content-dim">{tg.name}</span>}
           </span>
         ),
     },
@@ -109,14 +109,14 @@ export default function TalkgroupsTab({
       header: "Group",
       phone: "hide",
       sortValue: (tg) => (tg.groupId != null ? (groupNames.get(tg.groupId) ?? "") : ""),
-      cell: (tg) => (tg.groupId != null ? (groupNames.get(tg.groupId) ?? "—") : <span className="text-base-content/40">—</span>),
+      cell: (tg) => (tg.groupId != null ? (groupNames.get(tg.groupId) ?? "—") : <span className="text-admin-dim2">—</span>),
     },
     {
       id: "tag",
       header: "Tag",
       phone: "hide",
       sortValue: (tg) => (tg.tagId != null ? (tagNames.get(tg.tagId) ?? "") : ""),
-      cell: (tg) => (tg.tagId != null ? (tagNames.get(tg.tagId) ?? "—") : <span className="text-base-content/40">—</span>),
+      cell: (tg) => (tg.tagId != null ? (tagNames.get(tg.tagId) ?? "—") : <span className="text-admin-dim2">—</span>),
     },
     {
       id: "calls",
@@ -124,14 +124,14 @@ export default function TalkgroupsTab({
       align: "right",
       phone: "hide",
       sortValue: (tg) => tg.calls24h ?? 0,
-      cell: (tg) => (tg.calls24h ? tg.calls24h.toLocaleString() : <span className="text-base-content/40">0</span>),
+      cell: (tg) => (tg.calls24h ? tg.calls24h.toLocaleString() : <span className="text-admin-dim2">0</span>),
     },
     {
       id: "last",
       header: "Last heard",
       phone: "show",
       sortValue: (tg) => tg.lastHeard ?? 0,
-      cell: (tg) => (tg.lastHeard ? formatAgo(tg.lastHeard) : <span className="text-base-content/40">never</span>),
+      cell: (tg) => (tg.lastHeard ? formatAgo(tg.lastHeard) : <span className="text-admin-dim2">never</span>),
     },
   ];
 

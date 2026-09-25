@@ -55,10 +55,10 @@ function ConnectionBanner({ status, onTest, testing }: { status: TranscriptionSt
 
 function Tile({ label, value, detail }: { label: string; value: string; detail?: React.ReactNode }) {
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-3">
-      <p className="text-xs text-base-content/60">{label}</p>
+    <div className="rounded-box border border-admin-line bg-base-100 p-3">
+      <p className="text-xs text-base-content-dim">{label}</p>
       <p className="text-xl font-semibold tabular-nums">{value}</p>
-      {detail && <p className="text-xs text-base-content/60">{detail}</p>}
+      {detail && <p className="text-xs text-base-content-dim">{detail}</p>}
     </div>
   );
 }
@@ -124,7 +124,7 @@ export default function TranscriptionPanel() {
   const share = stats && stats.calls24h > 0 ? Math.round((stats.recent24h / stats.calls24h) * 100) : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Transcription"
         subtitle={
@@ -139,12 +139,12 @@ export default function TranscriptionPanel() {
       />
 
       {statusLoading && !status ? (
-        <p className="text-sm text-base-content/60">Loading…</p>
+        <p className="text-sm text-base-content-dim">Loading…</p>
       ) : status ? (
         <ConnectionBanner status={status} onTest={() => void runTest()} testing={testing} />
       ) : null}
       {testResult && (
-        <p className="text-xs text-base-content/70" aria-live="polite">
+        <p className="text-xs text-base-content-dim" aria-live="polite">
           Last test: {testResult}
         </p>
       )}
@@ -222,7 +222,7 @@ export default function TranscriptionPanel() {
         />
       )}
       {!status && !statusLoading && (
-        <p className="flex items-center gap-2 text-sm text-base-content/60">
+        <p className="flex items-center gap-2 text-sm text-base-content-dim">
           <Activity className="h-4 w-4" aria-hidden="true" />
           The transcription status could not be read.
         </p>

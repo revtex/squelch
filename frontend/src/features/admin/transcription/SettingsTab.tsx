@@ -106,7 +106,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
 
   return (
     <div className="space-y-4 pb-20">
-      <div className="rounded-box border border-base-300 bg-base-100 divide-y divide-base-300">
+      <div className="rounded-box border border-admin-line bg-base-100 divide-y divide-admin-line">
         <div className="p-3">
           <SwitchRow
             id={`${id}-enabled`}
@@ -191,7 +191,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
                 value={draft.minSeconds}
                 onChange={(e) => set("minSeconds", e.target.value)}
               />
-              <span className="text-base-content/60">s</span>
+              <span className="text-base-content-dim">s</span>
             </label>
           </Field>
         </div>
@@ -200,7 +200,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
       <div
         role="region"
         aria-label="Unsaved changes"
-        className="fixed inset-x-0 bottom-16 z-20 border-t border-base-300 bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
+        className="fixed inset-x-0 bottom-16 z-20 border-t border-admin-line bg-base-100/95 px-3 py-2 backdrop-blur md:bottom-0 md:left-24 lg:left-56"
       >
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-2">
           <p className="min-w-0 text-sm">
@@ -210,7 +210,7 @@ export default function SettingsTab({ status, onTest, testing, onSaved }: Settin
                 {errors.length > 0 && <span className="text-error"> · {plural(errors.length, "value needs", "values need")} fixing</span>}
               </>
             ) : (
-              <span className="text-base-content/60">Every change here needs Save, toggles included.</span>
+              <span className="text-base-content-dim">Every change here needs Save, toggles included.</span>
             )}
           </p>
           <div className="flex gap-2">

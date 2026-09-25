@@ -193,11 +193,11 @@ export default function UserDetails({
             />
             <label
               htmlFor={`${id}-needchange`}
-              className="flex cursor-pointer items-start justify-between gap-4 rounded-box border border-base-300 px-4 py-3"
+              className="flex cursor-pointer items-start justify-between gap-4 rounded-box border border-admin-line px-4 py-3"
             >
               <span className="min-w-0">
                 <span className="block font-medium">Require password change</span>
-                <span className="block text-xs text-base-content/60">
+                <span className="block text-xs text-base-content-dim">
                   Asks for a new password at the next sign-in.
                 </span>
               </span>

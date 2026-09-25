@@ -1,5 +1,16 @@
 import type { KeyboardEvent } from "react";
 
+/** The admin's chip: a bordered pill, navy when chosen. */
+export const CHIP =
+  "inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
+export const CHIP_OFF =
+  "border-admin-line bg-base-200 text-base-content hover:bg-base-300";
+export const CHIP_ON = "border-primary bg-primary text-primary-content";
+
+/** The count inside a chip or a tab. */
+export const COUNT =
+  "rounded-full bg-base-300 px-2 py-px text-xs font-medium tabular-nums text-base-content";
+
 export interface ChipOption<K extends string> {
   id: K;
   label: string;
@@ -47,7 +58,7 @@ export function FilterChips<K extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className="flex flex-wrap items-center gap-1"
+      className="flex flex-wrap items-center gap-2"
     >
       {options.map((o, i) => {
         const on = o.id === value;
@@ -58,13 +69,13 @@ export function FilterChips<K extends string>({
             role="radio"
             aria-checked={on}
             tabIndex={on ? 0 : -1}
-            className={`btn btn-xs ${on ? "btn-neutral" : "btn-ghost"}`}
+            className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
             onClick={() => onChange(o.id)}
             onKeyDown={(e) => onKeyDown(e, i)}
           >
             {o.label}
             {o.count !== undefined && (
-              <span className="opacity-60 tabular-nums" aria-hidden="true">
+              <span className={COUNT} aria-hidden="true">
                 {o.count}
               </span>
             )}
@@ -90,7 +101,7 @@ export function ToggleChips<K extends string>({
   onChange,
 }: ToggleChipsProps<K>) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1">
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2">
       {options.map((o) => {
         const on = value.includes(o.id);
         return (
@@ -98,14 +109,14 @@ export function ToggleChips<K extends string>({
             key={o.id}
             type="button"
             aria-pressed={on}
-            className={`btn btn-xs ${on ? "btn-neutral" : "btn-ghost"}`}
+            className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
             onClick={() =>
               onChange(on ? value.filter((v) => v !== o.id) : [...value, o.id])
             }
           >
             {o.label}
             {o.count !== undefined && (
-              <span className="opacity-60 tabular-nums" aria-hidden="true">
+              <span className={COUNT} aria-hidden="true">
                 {o.count}
               </span>
             )}

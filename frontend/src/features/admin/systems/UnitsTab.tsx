@@ -36,14 +36,14 @@ export default function UnitsTab({ systemRowId, units, loading, openId, onOpen, 
       header: "Label",
       phone: "show",
       sortValue: (u) => u.label ?? "",
-      cell: (u) => u.label ?? <span className="italic text-base-content/50">unlabeled</span>,
+      cell: (u) => u.label ?? <span className="italic text-admin-dim2">unlabeled</span>,
     },
     {
       id: "last",
       header: "Last heard",
       phone: "show",
       sortValue: (u) => u.lastHeard ?? 0,
-      cell: (u) => (u.lastHeard ? formatAgo(u.lastHeard) : <span className="text-base-content/40">never</span>),
+      cell: (u) => (u.lastHeard ? formatAgo(u.lastHeard) : <span className="text-admin-dim2">never</span>),
     },
   ];
 

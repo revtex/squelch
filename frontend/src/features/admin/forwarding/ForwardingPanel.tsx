@@ -124,7 +124,7 @@ export default function ForwardingPanel() {
       cell: (t) => (
         <span className="flex flex-col">
           <span className="font-medium">{targetName(t)}</span>
-          <span className="truncate font-mono text-xs text-base-content/60">{t.url}</span>
+          <span className="truncate font-mono text-xs text-base-content-dim">{t.url}</span>
         </span>
       ),
     },
@@ -170,7 +170,7 @@ export default function ForwardingPanel() {
         t.last ? (
           formatAgo(t.last.at)
         ) : (
-          <span className="text-base-content/60">never</span>
+          <span className="text-base-content-dim">never</span>
         ),
     },
     {
@@ -285,7 +285,7 @@ export default function ForwardingPanel() {
       : "No webhooks yet. Add one to notify a service or a Discord channel of every call.";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Forwarding"
         subtitle="Where a copy of each new call goes: other Squelch servers, and webhooks that notify a service or a Discord channel."
@@ -385,12 +385,12 @@ export default function ForwardingPanel() {
           onClose={panel.close}
         >
           {currentWebhook?.type === "generic" && sample && (
-            <details className="collapse collapse-arrow border border-base-300 bg-base-200">
+            <details className="collapse collapse-arrow border border-admin-line bg-base-200">
               <summary className="collapse-title text-sm font-medium">
                 What your service receives
               </summary>
               <div className="collapse-content space-y-2 text-xs">
-                <p className="text-base-content/70">
+                <p className="text-base-content-dim">
                   One POST per call, with these headers and a JSON body like this one.
                 </p>
                 <pre className="overflow-x-auto rounded bg-base-300 p-2 font-mono">

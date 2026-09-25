@@ -28,8 +28,8 @@ export function ActionButton({
     <button
       type="button"
       aria-describedby={hintId}
-      className={`btn btn-block h-auto min-h-12 justify-start gap-3 py-2 text-left font-normal ${
-        danger ? "btn-outline btn-error" : ""
+      className={`btn btn-block min-h-11 justify-start whitespace-normal px-3.5 py-2.5 text-left ${
+        danger ? "btn-error" : ""
       }`}
       onClick={onClick}
       disabled={disabled}
@@ -37,7 +37,11 @@ export function ActionButton({
       <span aria-hidden="true">{icon}</span>
       <span className="flex flex-col">
         <span className="font-medium">{label}</span>
-        <span id={hintId} aria-hidden="true" className="text-xs opacity-70">
+        <span
+          id={hintId}
+          aria-hidden="true"
+          className={`mt-0.5 text-xs font-normal ${danger ? "opacity-75" : "text-base-content-dim"}`}
+        >
           {hint}
         </span>
       </span>

@@ -91,7 +91,7 @@ export default function DirMonitorPanel() {
       cell: (m) => (
         <span className="flex flex-col">
           <span className="font-mono text-sm break-all">{m.directory}</span>
-          <span className="text-xs text-base-content/60">{recorderType(m.type).label}</span>
+          <span className="text-xs text-base-content-dim">{recorderType(m.type).label}</span>
         </span>
       ),
     },
@@ -125,12 +125,12 @@ export default function DirMonitorPanel() {
         m.status.lastFileAt ? (
           <span className="flex flex-col">
             <span>{formatAgo(m.status.lastFileAt)}</span>
-            <span className="truncate font-mono text-xs text-base-content/60" title={m.status.lastFile}>
+            <span className="truncate font-mono text-xs text-base-content-dim" title={m.status.lastFile}>
               {fileName(m.status.lastFile)}
             </span>
           </span>
         ) : (
-          <span className="text-base-content/60">none yet</span>
+          <span className="text-base-content-dim">none yet</span>
         ),
     },
     {
@@ -199,7 +199,7 @@ export default function DirMonitorPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Folder monitors"
         subtitle="Folders on this server that a recorder writes into. New recordings become calls without an upload."

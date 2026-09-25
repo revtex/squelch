@@ -59,7 +59,7 @@ export default function UnitsTab({ events }: { events: UnitEventEntry[] }) {
       phone: "hide",
       sortValue: (r) => [r.encrypted && "encrypted", r.callNum && `call ${r.callNum}`, r.talkgroupTag, r.talkgroupPatches && `patches ${r.talkgroupPatches}`].filter(Boolean).join(" · "),
       cell: (r) => (
-        <span className="text-xs text-base-content/70">
+        <span className="text-xs text-base-content-dim">
           {[r.encrypted && "encrypted", r.callNum && `call ${r.callNum}`, r.talkgroupTag, r.talkgroupPatches && `patches ${r.talkgroupPatches}`].filter(Boolean).join(" · ")}
         </span>
       ),

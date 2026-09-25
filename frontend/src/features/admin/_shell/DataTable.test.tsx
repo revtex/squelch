@@ -63,10 +63,40 @@ describe("DataTable", () => {
     );
     expect(bodyNames()).toHaveLength(25);
     expect(screen.getByText("Showing 1–25 of 30")).toBeInTheDocument();
+    // The first page offers only Next; the last only Previous.
+    expect(screen.queryByRole("button", { name: "Previous" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(bodyNames()).toHaveLength(5);
     expect(bodyNames()[0]).toBe("user26");
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    expect(bodyNames()[0]).toBe("user01");
+  });
+
+  it("draws every header the same way, sortable or not", () => {
+    render(
+      <DataTable
+        caption="Users"
+        columns={[
+          ...columns,
+          { id: "note", header: "Note", cell: () => "" },
+        ]}
+        rows={rows}
+        rowKey={(r) => r.id}
+        pageSize={0}
+      />,
+    );
+    const headers = Array.from(
+      screen.getByRole("table").querySelectorAll("thead th"),
+    );
+    // Sortable headers hold a bare button that inherits the header's type,
+    // not a DaisyUI button with its own size and weight.
+    for (const th of headers) {
+      for (const b of Array.from(th.querySelectorAll("button"))) {
+        expect(b.className).not.toMatch(/\bbtn\b|font-(semibold|bold)/);
+      }
+    }
+    expect(screen.getByRole("columnheader", { name: "Note" })).toBeInTheDocument();
   });
 
   it("sorts by a column, then the other way", async () => {

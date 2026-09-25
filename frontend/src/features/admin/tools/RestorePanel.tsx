@@ -130,7 +130,7 @@ export default function RestorePanel({ onClose, onDone }: RestorePanelProps) {
             className="file-input w-full"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-          <p className="text-sm text-base-content/70">
+          <p className="text-sm text-base-content-dim">
             Nothing changes until you have reviewed the file against what is here and confirmed. Passwords are never in a backup: a user the
             restore adds cannot sign in until an admin sets a password under Users.
           </p>

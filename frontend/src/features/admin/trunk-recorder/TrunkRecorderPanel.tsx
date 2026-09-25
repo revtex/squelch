@@ -46,10 +46,10 @@ const SETTINGS_LINK = "/admin/settings?q=Trunk%20Recorder#settings-integrations"
 
 function Tile({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-3">
-      <p className="text-xs text-base-content/60">{label}</p>
+    <div className="rounded-box border border-admin-line bg-base-100 p-3">
+      <p className="text-xs text-base-content-dim">{label}</p>
       <p className="text-xl font-semibold tabular-nums">{value}</p>
-      {detail && <p className="truncate text-xs text-base-content/60">{detail}</p>}
+      {detail && <p className="truncate text-xs text-base-content-dim">{detail}</p>}
     </div>
   );
 }
@@ -135,7 +135,7 @@ export default function TrunkRecorderPanel() {
   const closePanel = () => panel.close();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Trunk Recorder"
         subtitle="Live telemetry from your recorders over MQTT: decode rates, active calls, recorders and control-channel health."
@@ -180,11 +180,11 @@ export default function TrunkRecorderPanel() {
           <span>The recorder list could not be loaded.</span>
         </div>
       ) : isLoading ? (
-        <p className="text-sm text-base-content/60">Loading…</p>
+        <p className="text-sm text-base-content-dim">Loading…</p>
       ) : !selected ? (
-        <div className="rounded-box border border-dashed border-base-300 p-6 text-center">
+        <div className="rounded-box border border-dashed border-admin-line p-6 text-center">
           <p className="font-medium">No recorders yet</p>
-          <p className="mt-1 text-sm text-base-content/60">Add a trunk-recorder that runs the MQTT status plugin to see its decode rate, recorders and calls here.</p>
+          <p className="mt-1 text-sm text-base-content-dim">Add a trunk-recorder that runs the MQTT status plugin to see its decode rate, recorders and calls here.</p>
           <button type="button" className="btn btn-primary btn-sm mt-3" onClick={(e) => panel.open({ kind: "create" }, e.currentTarget)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Add instance
@@ -196,7 +196,7 @@ export default function TrunkRecorderPanel() {
             role="status"
             aria-label="Recorder connection"
             className={`flex flex-wrap items-center gap-3 rounded-box border px-3 py-2 text-sm ${
-              state === "connected" ? "border-success/30 bg-success/10" : state === "disabled" ? "border-base-300 bg-base-200" : "border-warning/40 bg-warning/10"
+              state === "connected" ? "border-success/30 bg-success/10" : state === "disabled" ? "border-admin-line bg-base-200" : "border-warning/40 bg-warning/10"
             }`}
           >
             <span
@@ -262,7 +262,7 @@ export default function TrunkRecorderPanel() {
           {tab === "messages" && <MessagesTab messages={live.trunkingMessages[id] ?? []} />}
           {tab === "config" && <ConfigTab payload={live.config[id]} />}
           {instances.length > 1 && (
-            <p className="text-xs text-base-content/60">{plural(instances.length, "instance")} configured; switch with the selector above.</p>
+            <p className="text-xs text-base-content-dim">{plural(instances.length, "instance")} configured; switch with the selector above.</p>
           )}
         </>
       )}

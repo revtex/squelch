@@ -8,7 +8,7 @@ export default function ConfigTab({ payload }: { payload: unknown }) {
   const facts = useMemo(() => configFacts(payload), [payload]);
   const sources = useMemo(() => sourceRows(payload), [payload]);
   if (!payload) {
-    return <p className="text-sm text-base-content/60">No config yet. The plugin publishes it once when it connects; reconnect the recorder to get it again.</p>;
+    return <p className="text-sm text-base-content-dim">No config yet. The plugin publishes it once when it connects; reconnect the recorder to get it again.</p>;
   }
   const columns: Column<SourceRow>[] = [
     { id: "driver", header: "Driver", phone: "title", sortValue: (r) => r.driver, cell: (r) => r.driver ?? "—" },
@@ -22,12 +22,12 @@ export default function ConfigTab({ payload }: { payload: unknown }) {
   ];
   return (
     <div className="space-y-4">
-      <section className="rounded-box border border-base-300 bg-base-100 p-3">
+      <section className="rounded-box border border-admin-line bg-base-100 p-3">
         <h3 className="mb-2 text-sm font-semibold">Recorder settings</h3>
-        {facts.length === 0 ? <p className="text-sm text-base-content/60">The config frame has none of the usual settings.</p> : <FactList facts={facts} />}
+        {facts.length === 0 ? <p className="text-sm text-base-content-dim">The config frame has none of the usual settings.</p> : <FactList facts={facts} />}
       </section>
       <DataTable columns={columns} rows={sources} rowKey={(r) => r.key} caption="SDR sources" empty="No SDR sources in the config." />
-      <details className="rounded-box border border-base-300 bg-base-100">
+      <details className="rounded-box border border-admin-line bg-base-100">
         <summary className="cursor-pointer p-3 text-sm font-semibold">Raw config</summary>
         <pre className="overflow-x-auto p-3 text-[11px]">{JSON.stringify(payload, null, 2)}</pre>
       </details>

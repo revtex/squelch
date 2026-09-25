@@ -46,7 +46,7 @@ export default function DevicesTab({
   const showCountry = data?.geoip.enabled ?? false;
   if (rows.length === 0) {
     return (
-      <div className="text-base-content/60 py-8 text-center">
+      <div className="text-base-content-dim py-8 text-center">
         {search ? "No devices match." : "No devices are signed in."}
       </div>
     );
@@ -54,12 +54,12 @@ export default function DevicesTab({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm text-base-content/60">
+      <p className="text-sm text-base-content-dim">
         Every device that can sign back in without a password, whether or not it
         is connected right now. The address is where it last refreshed its
         sign-in from.
       </p>
-      <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
+      <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
         <table className="table table-sm w-full [&_td]:px-2 [&_th]:px-2 sm:[&_td]:px-3 sm:[&_th]:px-3">
           <thead>
             <tr>
@@ -106,7 +106,7 @@ export default function DevicesTab({
                       )}
                     </div>
                     <div
-                      className="text-xs text-base-content/60"
+                      className="text-xs text-base-content-dim"
                       title={s.userAgent ?? undefined}
                     >
                       {clientLabel(s.native)}
@@ -147,7 +147,7 @@ export default function DevicesTab({
                     <div className="whitespace-nowrap">
                       {s.signedInAt ? formatDateTime(s.signedInAt) : "-"}
                     </div>
-                    <div className="whitespace-nowrap text-xs text-base-content/60">
+                    <div className="whitespace-nowrap text-xs text-base-content-dim">
                       Last used {formatDateTime(s.lastUsedAt)}
                     </div>
                   </td>

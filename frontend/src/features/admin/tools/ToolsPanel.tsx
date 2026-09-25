@@ -45,7 +45,7 @@ interface RadioRow {
 
 function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section aria-label={title} className="space-y-3 rounded-box border border-base-300 bg-base-100 p-4">
+    <section aria-label={title} className="space-y-3 rounded-box border border-admin-line bg-base-100 p-4">
       <h3 className="flex items-center gap-2 text-base font-semibold">
         {icon}
         {title}
@@ -151,7 +151,7 @@ export default function ToolsPanel() {
       cell: (r) => (
         <span className="tabular-nums">
           {r.count ?? "…"}
-          {r.detail && <span className="ml-1 text-xs text-base-content/60">{r.detail}</span>}
+          {r.detail && <span className="ml-1 text-xs text-base-content-dim">{r.detail}</span>}
         </span>
       ),
     },
@@ -195,14 +195,14 @@ export default function ToolsPanel() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Backup & import"
         subtitle="The whole configuration as one file, radio data as CSV, RadioReference enrichment, and the API docs."
       />
 
       <Card title="Configuration backup" icon={<ArchiveRestore className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content/70">
+        <p className="text-sm text-base-content-dim">
           Systems, talkgroups, units, groups, tags, users (no passwords) and settings, as one JSON file. API keys and forwarding secrets are
           in it too, so keep it private.
         </p>
@@ -223,11 +223,11 @@ export default function ToolsPanel() {
 
       <Card title="Radio data" icon={<Database className="h-4 w-4" aria-hidden="true" />}>
         <DataTable columns={columns} rows={rows} rowKey={(r) => r.entity} caption="Radio data" pageSize={0} loading={counts.isLoading && !c} />
-        <p className="text-xs text-base-content/60">Exports can be one system or all. Imports always preview before they write.</p>
+        <p className="text-xs text-base-content-dim">Exports can be one system or all. Imports always preview before they write.</p>
       </Card>
 
       <Card title="Enrich from RadioReference" icon={<FileText className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content/70">
+        <p className="text-sm text-base-content-dim">
           Bring labels, names, categories and tags in from a RadioReference talkgroup export. Same three-step wizard as Import, with a
           changes-only view.
         </p>
@@ -259,7 +259,7 @@ export default function ToolsPanel() {
       </Card>
 
       <Card title="API documentation" icon={<KeyRound className="h-4 w-4" aria-hidden="true" />}>
-        <p className="text-sm text-base-content/70">
+        <p className="text-sm text-base-content-dim">
           Swagger UI lists every endpoint and lets you try them as yourself. It opens in a new tab with a short-lived session of its own.
         </p>
         <div className="flex flex-wrap gap-2">

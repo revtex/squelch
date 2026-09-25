@@ -50,7 +50,7 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-base-content/60">
+        <p className="text-sm text-base-content-dim">
           Blocked addresses cannot reach this server at all, including uploads
           from recorders.
           {data.yourAddress && (
@@ -71,11 +71,11 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
       </div>
 
       {data.blocks.length === 0 ? (
-        <div className="text-base-content/60 py-6 text-center">
+        <div className="text-base-content-dim py-6 text-center">
           No addresses are blocked.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
+        <div className="overflow-x-auto rounded-xl border border-admin-line bg-base-200/40">
           <table className="table table-zebra table-sm w-full">
             <thead>
               <tr>
@@ -122,7 +122,7 @@ export default function BlocksTab({ actions }: { actions: ConnectionActions }) {
         <h3 id="never-blocked" className="font-semibold">
           Never blocked
         </h3>
-        <p className="text-sm text-base-content/60">
+        <p className="text-sm text-base-content-dim">
           These addresses can never be blocked from here. The list is set on the
           server with <code>--trusted-addresses</code>, so an admin account
           cannot change it.

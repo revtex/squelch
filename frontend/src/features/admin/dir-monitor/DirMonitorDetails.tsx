@@ -122,7 +122,7 @@ export default function DirMonitorDetails({
       value: s.lastFileAt ? (
         <span>
           <span className="font-mono">{fileName(s.lastFile)}</span>, {formatAgo(s.lastFileAt)}
-          {s.lastResult && <span className="block text-xs text-base-content/70">{s.lastResult}</span>}
+          {s.lastResult && <span className="block text-xs text-base-content-dim">{s.lastResult}</span>}
         </span>
       ) : (
         "None yet"
@@ -233,7 +233,7 @@ export default function DirMonitorDetails({
         </>
       )}
       {s.since !== null && s.state !== "disabled" && (
-        <p className="text-xs text-base-content/60">
+        <p className="text-xs text-base-content-dim">
           In this state since {formatDateTime(s.since)}.
         </p>
       )}

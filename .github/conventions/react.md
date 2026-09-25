@@ -45,6 +45,7 @@ shared rules and [PROJECT_LAYOUT.md](../PROJECT_LAYOUT.md) for structure.
 
 - Use DaisyUI component classes (`btn`, `card`, `modal`, `table`, `input input-bordered`, `toggle`, `badge`, `toast`, `menu`, `stats`, `dropdown`, `tooltip`, `range`) — do not hand-roll equivalents
 - Compose with Tailwind utilities; never write custom CSS unless a truly unique visual requires it
+- The admin restyles DaisyUI in one place, `src/admin.css`, scoped to `.admin-ui` (ADR 0010). Keep writing DaisyUI classes in admin pages and change their look there, not per page. In the admin, use `text-base-content-dim` for secondary text and the `admin-*` colours (`border-admin-line`, `bg-admin-ok-bg`, `text-admin-warn-fg`, …), not `text-base-content/60` or `border-base-300`
 - Theming: `data-theme="squelch-<name>"` on `<html>` (`classic` default, plus `midnight`, `graphite`, `ember`, `moss`, `plum`, `ash`); palette tokens (`base-100`, `primary`, `secondary`, `error`, plus the theme-owned `base-content-dim` and `lcd-*` colours) only — no raw hex in components. The palettes are generated from squelch-mobile's `design-tokens/tokens.json`; change them there first and regenerate, so the web and the app stay one palette
 - Mobile-first responsive: `sm` (<640px), `md` (640–1023px), `lg` (≥1024px)
 - Icons: import from `lucide-react` as individual named imports; never `import * as Icons`
@@ -159,7 +160,7 @@ frontend/
 
 Local-only design notes (in the gitignored `docs/plans/` working directory) may contain extended ASCII wireframes and palette spec. The canonical, in-repo summary follows. Key points:
 
-- **Dark only** — seven DaisyUI themes shared with the mobile app (Squelch classic default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name
+- **Dark only** — seven DaisyUI themes shared with the mobile app (Squelch classic default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name, and IBM Plex Sans and Mono for the admin only
 - **Scanner page** — vertically-stacked single column, max-width 672px, 24px padding, laid out like the mobile app:
   - LED bar: branding (left), LED, ⋮ menu (Theme, Display brightness, Bookmarks, Admin, Change password, About, Sign in/out)
   - Display panel: ink-block head (clock, counts, system + tag chip, group · label, auto-sized TG name), dither strip, then frequency/TGID, site/unit, and a badge row (HOLD/AVOID/PATCH, E/S chip, bookmark/share, call clock). Type steps up from the phone sizes at `sm`

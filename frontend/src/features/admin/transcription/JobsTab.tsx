@@ -68,8 +68,8 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
       cell: (j) => (
         <span className="flex flex-wrap items-center gap-2">
           {statusBadge(j)}
-          {j.error && <span className="text-xs text-base-content/70">{j.error}</span>}
-          {j.status === "done" && j.durationMs > 0 && <span className="text-xs text-base-content/60">{formatSecs(j.durationMs)}</span>}
+          {j.error && <span className="text-xs text-base-content-dim">{j.error}</span>}
+          {j.status === "done" && j.durationMs > 0 && <span className="text-xs text-base-content-dim">{formatSecs(j.durationMs)}</span>}
         </span>
       ),
     },
@@ -131,7 +131,7 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
         rowLabel={jobTitle}
         empty={filter === "all" ? "No calls have been through the transcriber yet." : `No ${JOB_STATUS_LABEL[filter]} jobs.`}
       />
-      <p className="text-xs text-base-content/60">Failed counts cover the last 24 hours; the list keeps 30 days.</p>
+      <p className="text-xs text-base-content-dim">Failed counts cover the last 24 hours; the list keeps 30 days.</p>
     </div>
   );
 }

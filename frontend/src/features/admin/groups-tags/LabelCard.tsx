@@ -154,16 +154,16 @@ export default function LabelCard({
   return (
     <section
       aria-labelledby={`${id}-title`}
-      className="rounded-box border border-base-300 bg-base-200"
+      className="rounded-box border border-admin-line bg-base-200"
     >
-      <div className="border-b border-base-300 px-4 py-3">
+      <div className="border-b border-admin-line px-4 py-3">
         <h3 id={`${id}-title`} className="font-semibold">
           {title}{" "}
-          <span className="text-sm font-normal text-base-content/60">
+          <span className="text-sm font-normal text-base-content-dim">
             {list.length} · {inUse} in use
           </span>
         </h3>
-        <p className="mt-0.5 text-xs text-base-content/60">{help}</p>
+        <p className="mt-0.5 text-xs text-base-content-dim">{help}</p>
       </div>
 
       <form onSubmit={(e) => void add(e)} className="flex gap-2 px-4 py-3">
@@ -198,11 +198,11 @@ export default function LabelCard({
           <span className="sr-only">Loading</span>
         </div>
       ) : list.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-base-content/60">
+        <p className="px-4 py-8 text-center text-sm text-base-content-dim">
           No {kind}s yet. Add one above.
         </p>
       ) : (
-        <ul className="divide-y divide-base-300" aria-label={title}>
+        <ul className="divide-y divide-admin-line" aria-label={title}>
           {list.map((item) => {
             const active = editing?.id === item.id ? editing.mode : null;
             const others = list.filter((i) => i.id !== item.id);

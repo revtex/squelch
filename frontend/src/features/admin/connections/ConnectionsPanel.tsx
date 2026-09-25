@@ -63,7 +63,7 @@ export default function ConnectionsPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-bold">Connections</h2>
         {(tab === "live" || tab === "devices") && (

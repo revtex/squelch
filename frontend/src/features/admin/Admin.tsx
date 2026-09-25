@@ -71,7 +71,7 @@ function useGuardedNavigate() {
 function Sidebar({ onSignOut }: { onSignOut: () => void }) {
   const go = useGuardedNavigate();
   return (
-    <aside className="sticky top-0 hidden h-screen w-24 shrink-0 flex-col border-r border-base-300 bg-base-200 md:flex lg:w-56">
+    <aside className="sticky top-0 hidden h-screen w-24 shrink-0 flex-col border-r border-admin-line bg-base-200 md:flex lg:w-56">
       <div className="flex h-12 items-center px-3 lg:px-4">
         <span className="font-sign text-2xl leading-none tracking-wide max-lg:sr-only">
           SQUELCH
@@ -112,7 +112,7 @@ function Sidebar({ onSignOut }: { onSignOut: () => void }) {
           ))}
         </ul>
       </nav>
-      <ul className="menu w-full gap-0.5 border-t border-base-300 px-2">
+      <ul className="menu w-full gap-0.5 border-t border-admin-line px-2">
         <li>
           <NavLink
             to="/"
@@ -179,11 +179,11 @@ function TopBar({
 }) {
   const go = useGuardedNavigate();
   return (
-    <header className="sticky top-0 z-30 flex min-h-12 items-center gap-2 border-b border-base-300 bg-base-100/95 px-3 backdrop-blur sm:px-4">
+    <header className="sticky top-0 z-30 flex min-h-12 items-center gap-2 border-b border-admin-line bg-base-100/95 px-3 backdrop-blur sm:px-4">
       <span className="font-sign text-xl leading-none tracking-wide md:hidden">
         SQUELCH
       </span>
-      <p className="truncate text-sm font-semibold text-base-content/70 max-md:sr-only">
+      <p className="truncate text-sm font-semibold text-base-content-dim max-md:sr-only">
         {title}
       </p>
       <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -211,7 +211,7 @@ function TopBar({
           </button>
           <ul
             role="menu"
-            className="dropdown-content menu z-40 mt-1 w-48 rounded-box border border-base-300 bg-base-100 p-2 shadow"
+            className="dropdown-content menu z-40 mt-1 w-48 rounded-box border border-admin-line bg-base-100 p-2 shadow"
           >
             <li role="none">
               <NavLink to="/" role="menuitem" onClick={go("/")}>
@@ -350,7 +350,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           onSearch={() => setPaletteOpen(true)}
           onSignOut={onSignOut}
         />
-        <main className="mx-auto w-full max-w-300 flex-1 p-4 pb-24 sm:p-6 md:pb-6">
+        <main className="flex w-full max-w-[1288px] flex-1 flex-col gap-[18px] px-4 pb-[100px] pt-3.5 sm:px-6 sm:pt-[22px] md:pb-[90px]">
           <LegacyUsageBanner />
           <Routes>
             <Route path="overview" element={<ActivityPanel />} />
@@ -411,10 +411,10 @@ export default function Admin() {
 
   if (role !== "admin") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
+      <div className="admin-ui flex min-h-screen flex-col items-center justify-center gap-4 p-8">
         <div className="text-5xl">🚫</div>
         <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p className="max-w-sm text-center text-base-content/70">
+        <p className="max-w-sm text-center text-base-content-dim">
           Your account does not have administrator privileges. Contact an admin
           if you believe this is a mistake.
         </p>
@@ -436,10 +436,12 @@ export default function Admin() {
   };
 
   return (
-    <NavigationGuardProvider>
-      <ToastProvider>
-        <Shell onSignOut={handleSignOut} />
-      </ToastProvider>
-    </NavigationGuardProvider>
+    <div className="admin-ui">
+      <NavigationGuardProvider>
+        <ToastProvider>
+          <Shell onSignOut={handleSignOut} />
+        </ToastProvider>
+      </NavigationGuardProvider>
+    </div>
   );
 }

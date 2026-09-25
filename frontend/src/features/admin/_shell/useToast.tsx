@@ -108,7 +108,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.kind === "error" ? "alert" : "status"}
-            className={`alert pointer-events-auto w-full text-sm shadow-lg ${
+            className={`alert pointer-events-auto flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 shadow-[0_10px_30px_rgb(0_0_0/0.4)] ${
               t.kind === "error"
                 ? "alert-error"
                 : t.kind === "success"
@@ -120,7 +120,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             {t.undo && (
               <button
                 type="button"
-                className="btn btn-sm"
+                className="cursor-pointer font-medium text-secondary"
                 onClick={() => {
                   dismiss(t.id);
                   void t.undo?.();
@@ -131,7 +131,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
             <button
               type="button"
-              className="btn btn-ghost btn-xs btn-square"
+              className="btn btn-ghost btn-xs btn-square text-current"
               aria-label="Dismiss"
               onClick={() => dismiss(t.id)}
             >

@@ -235,7 +235,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
             className="file-input w-full"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-          <p className="text-sm text-base-content/70">{HINT[entity]}</p>
+          <p className="text-sm text-base-content-dim">{HINT[entity]}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -282,7 +282,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
 
           {view === "problems" ? (
             review.problems.length === 0 ? (
-              <p className="text-sm text-base-content/60">Every row was read.</p>
+              <p className="text-sm text-base-content-dim">Every row was read.</p>
             ) : (
               <ul className="list-inside list-disc text-sm">
                 {review.problems.map((p) => (
@@ -316,7 +316,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
                 <tbody>
                   {visible.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center text-base-content/60">
+                      <td colSpan={5} className="text-center text-base-content-dim">
                         {review.hasModes ? "Nothing would change in this mode." : "Nothing new in the file."}
                       </td>
                     </tr>
@@ -350,7 +350,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
                               <td>
                                 <span className="badge badge-success badge-sm">new</span>
                               </td>
-                              <td className="text-base-content/40">—</td>
+                              <td className="text-admin-dim2">—</td>
                               <td>{r.summary}</td>
                             </>
                           ) : (
@@ -375,7 +375,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
                         <td>{i === 0 ? toggle : null}</td>
                         <td className="font-mono">{i === 0 ? r.id : ""}</td>
                         <td>{c.field}</td>
-                        <td className="text-base-content/60">{c.now || <span className="italic">blank</span>}</td>
+                        <td className="text-base-content-dim">{c.now || <span className="italic">blank</span>}</td>
                         <td>{c.after}</td>
                       </tr>
                     ));

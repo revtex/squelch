@@ -224,7 +224,7 @@ export default function InstanceForm({ editing, serverError, onSubmit, onDirty, 
         </select>
       </Field>
 
-      <div className="space-y-3 rounded-box border border-base-300 p-3">
+      <div className="space-y-3 rounded-box border border-admin-line p-3">
         <SwitchRow
           id="tr-tls-skip"
           label="Skip TLS verification"

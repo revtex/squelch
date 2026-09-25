@@ -131,7 +131,7 @@ export default function LogsPanel() {
               <span className="font-semibold">{parsed.method}</span>
               <span className="break-all">{parsed.path}</span>
               {parsed.status != null && <span className={statusClass(parsed.status)}>{parsed.status}</span>}
-              {parsed.latencyMs != null && <span className="text-base-content/50">{parsed.latencyMs} ms</span>}
+              {parsed.latencyMs != null && <span className="text-admin-dim2">{parsed.latencyMs} ms</span>}
             </span>
           );
         }
@@ -178,7 +178,7 @@ export default function LogsPanel() {
   const fetching = tab === "server" ? server.isFetching : audit.isFetching;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[18px]">
       <PageHeader
         title="Logs & audit"
         subtitle="What the server is doing, and who changed what."
@@ -243,7 +243,7 @@ export default function LogsPanel() {
           />
         )}
         <label className="flex items-center gap-2 text-sm">
-          <span className="text-base-content/70">Up to</span>
+          <span className="text-base-content-dim">Up to</span>
           <select className="select select-sm" aria-label="Lines to load" value={limit} onChange={(e) => setLimit(Number(e.target.value))}>
             {LIMITS.map((n) => (
               <option key={n} value={n}>
@@ -254,7 +254,7 @@ export default function LogsPanel() {
         </label>
       </div>
 
-      <div className="grid gap-3 rounded-box border border-base-300 p-3 sm:grid-cols-2">
+      <div className="grid gap-3 rounded-box border border-admin-line p-3 sm:grid-cols-2">
         <SwitchRow
           id="logs-following"
           label="Following"
@@ -267,7 +267,7 @@ export default function LogsPanel() {
           onChange={setFollowing}
         />
         {tab === "server" && (
-          <p className="text-xs text-base-content/60 sm:self-center">
+          <p className="text-xs text-base-content-dim sm:self-center">
             The server log level is set under{" "}
             <Link to="/admin/settings#settings-logging" className="link">
               Settings → Logging

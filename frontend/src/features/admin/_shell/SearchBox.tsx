@@ -16,8 +16,13 @@ export function SearchBox({
   className = "",
 }: SearchBoxProps) {
   return (
-    <label className={`input input-sm flex items-center gap-2 ${className}`}>
-      <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+    <label
+      className={`input flex items-center gap-2 rounded-md bg-base-200 ${className}`}
+    >
+      <Search
+        className="h-[18px] w-[18px] shrink-0 text-base-content-dim"
+        aria-hidden="true"
+      />
       <input
         type="search"
         className="grow"
