@@ -1,77 +1,84 @@
-import { useState } from "react";
-import { Pencil, Trash2, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { useAppSelector } from "@/app/store";
+import { selectUsername } from "@/features/auth";
 import {
-  useListUsersQuery,
-  useListSystemsQuery,
+  DataTable,
+  DetailsPanel,
+  FilterChips,
+  InlineConfirm,
+  PageHeader,
+  SearchBox,
+  formatAgo,
+  formatDate,
+  plural,
   useCreateUserMutation,
-  useUpdateUserMutation,
   useDeleteUserMutation,
+  useDetails,
+  useListSystemsQuery,
+  useListUsersQuery,
+  useSignOutUserMutation,
+  useToast,
+  useUpdateUserMutation,
+  type Column,
 } from "@/features/admin/_shell";
 import type { AdminUser, CreateUserPayload, UpdateUserPayload } from "@/types";
+import UserDetails, { type UserAction } from "./UserDetails";
+import UserForm from "./UserForm";
+import ResetPasswordForm from "./ResetPasswordForm";
+import LockoutsCard from "./LockoutsCard";
+import {
+  matchesSearch,
+  matchesStatus,
+  systemsSummary,
+  userStatus,
+  type StatusFilter,
+} from "./status";
 
-interface UserFormState {
-  username: string;
-  password: string;
-  role: "admin" | "listener";
-  disabled: number;
-  systemsJson: string;
-  expiration: string; // ISO date string for input
-  limit: string; // string for input
-}
+type Panel =
+  | { key: string; kind: "details"; id: number }
+  | { key: string; kind: "edit"; id: number }
+  | { key: string; kind: "create" }
+  | { key: string; kind: "reset"; id: number }
+  | { key: string; kind: "bulk"; action: BulkAction };
 
-const emptyForm: UserFormState = {
-  username: "",
-  password: "",
-  role: "listener",
-  disabled: 0,
-  systemsJson: "",
-  expiration: "",
-  limit: "",
+type BulkAction = "signout" | "disable" | "delete";
+
+const BULK: Record<BulkAction, { title: string; text: string; button: string; danger: boolean }> = {
+  signout: {
+    title: "Sign out on every device?",
+    text: "Each account's devices will need the password to sign in again.",
+    button: "Sign out",
+    danger: false,
+  },
+  disable: {
+    title: "Disable these accounts?",
+    text: "They are signed out everywhere and cannot sign in until enabled again. Nothing is deleted.",
+    button: "Disable",
+    danger: false,
+  },
+  delete: {
+    title: "Delete these accounts?",
+    text: "Their devices and bookmarks go with them. This cannot be undone.",
+    button: "Delete",
+    danger: true,
+  },
 };
 
-function userToForm(user: AdminUser): UserFormState {
-  return {
-    username: user.username,
-    password: "",
-    role: user.role,
-    disabled: user.disabled,
-    systemsJson: user.systemsJson ?? "",
-    expiration: user.expiration
-      ? new Date(user.expiration * 1000).toISOString().slice(0, 10)
-      : "",
-    limit: user.limit != null ? String(user.limit) : "",
-  };
+function messageOf(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
-function formToCreatePayload(form: UserFormState): CreateUserPayload {
+/** Everything the update op needs, from the row as it is now. */
+function basePayload(u: AdminUser): UpdateUserPayload {
   return {
-    username: form.username,
-    password: form.password,
-    role: form.role,
-    disabled: form.disabled,
-    systemsJson: form.systemsJson || null,
-    expiration: form.expiration
-      ? Math.floor(new Date(form.expiration).getTime() / 1000)
-      : null,
-    limit: form.limit ? Number(form.limit) : null,
+    username: u.username,
+    role: u.role,
+    disabled: u.disabled,
+    systemsJson: u.systemsJson,
+    expiration: u.expiration,
+    limit: u.limit,
   };
-}
-
-function formToUpdatePayload(form: UserFormState): UpdateUserPayload {
-  const payload: UpdateUserPayload = {
-    username: form.username,
-    role: form.role,
-    disabled: form.disabled,
-    systemsJson: form.systemsJson || null,
-    expiration: form.expiration
-      ? Math.floor(new Date(form.expiration).getTime() / 1000)
-      : null,
-    limit: form.limit ? Number(form.limit) : null,
-  };
-  if (form.password) {
-    payload.password = form.password;
-  }
-  return payload;
 }
 
 export default function UsersPanel() {
@@ -80,412 +87,409 @@ export default function UsersPanel() {
   const [createUser] = useCreateUserMutation();
   const [updateUser] = useUpdateUserMutation();
   const [deleteUser] = useDeleteUserMutation();
+  const [signOutUser] = useSignOutUserMutation();
+  const toast = useToast();
+  const myUsername = useAppSelector(selectUsername);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<UserFormState>(emptyForm);
-  const [toast, setToast] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const panel = useDetails<Panel>();
 
-  const showError = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 5000);
+  const now = Date.now() / 1000;
+  const all = useMemo(() => users ?? [], [users]);
+  const systemList = useMemo(() => systems ?? [], [systems]);
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (u) => matchesStatus(u, status, now) && matchesSearch(u, search, systemList),
+      ),
+    [all, status, search, systemList, now],
+  );
+  const counts = useMemo(() => {
+    const c = { all: all.length, active: 0, disabled: 0, expired: 0, temporary: 0 };
+    for (const u of all) {
+      c[userStatus(u, now).id]++;
+      if (u.passwordNeedChange === 1) c.temporary++;
+    }
+    return c;
+  }, [all, now]);
+
+  const byId = (id: number) => all.find((u) => u.id === id) ?? null;
+  const isSelf = (u: AdminUser) => u.username === myUsername;
+
+  const openDetails = (u: AdminUser, el?: HTMLElement) =>
+    panel.open({ key: `user:${u.id}`, kind: "details", id: u.id }, el);
+
+  const closeForm = () => {
+    setFormError(null);
+    panel.close();
   };
 
-  const openCreate = () => {
-    setEditingId(null);
-    setForm(emptyForm);
-    setModalOpen(true);
-  };
-
-  const openEdit = (user: AdminUser) => {
-    setEditingId(user.id);
-    setForm(userToForm(user));
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onCreate = async (payload: CreateUserPayload) => {
+    setBusy(true);
+    setFormError(null);
     try {
-      if (editingId != null) {
-        const payload = formToUpdatePayload(form);
-        if (editingId === 1) {
-          payload.systemsJson = null;
-        }
-        await updateUser({
-          id: editingId,
-          ...payload,
-        }).unwrap();
-      } else {
-        await createUser(formToCreatePayload(form)).unwrap();
+      await createUser(payload).unwrap();
+      toast.success(
+        payload.passwordNeedChange === 0
+          ? `Created ${payload.username}.`
+          : `Created ${payload.username}. They will pick a new password at first sign-in.`,
+      );
+      closeForm();
+    } catch (e) {
+      setFormError(messageOf(e, "Failed to create the user."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onUpdate = async (id: number, payload: UpdateUserPayload, done: string) => {
+    setBusy(true);
+    setFormError(null);
+    try {
+      await updateUser({ id, ...payload }).unwrap();
+      toast.success(done);
+      closeForm();
+    } catch (e) {
+      setFormError(messageOf(e, "Failed to save."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** One action on one user; resolves to the error, or null. */
+  const act = async (u: AdminUser, action: UserAction): Promise<string | null> => {
+    setBusy(true);
+    try {
+      switch (action) {
+        case "signout":
+          await signOutUser(u.id).unwrap();
+          toast.success(`Signed ${u.username} out on every device.`);
+          break;
+        case "disable":
+          await updateUser({ id: u.id, ...basePayload(u), disabled: 1 }).unwrap();
+          toast.success(`Disabled ${u.username}.`);
+          break;
+        case "enable":
+          await updateUser({ id: u.id, ...basePayload(u), disabled: 0 }).unwrap();
+          toast.success(`Enabled ${u.username}.`);
+          break;
+        case "delete":
+          await deleteUser(u.id).unwrap();
+          toast.success(`Deleted ${u.username}.`);
+          break;
       }
-      setModalOpen(false);
-    } catch {
-      showError(editingId ? "Failed to update user" : "Failed to create user");
+      return null;
+    } catch (e) {
+      const text = messageOf(e, "That did not work.");
+      toast.error(text);
+      return text;
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleDelete = async (user: AdminUser) => {
-    if (!window.confirm(`Delete user "${user.username}"?`)) return;
-    try {
-      await deleteUser(user.id).unwrap();
-    } catch {
-      showError("Failed to delete user");
-    }
-  };
-
-  const handleToggleDisabled = async (user: AdminUser) => {
-    if (user.id === 1) {
-      showError("Cannot disable the primary admin account");
-      return;
-    }
+  const setNeedChange = async (u: AdminUser, on: boolean): Promise<string | null> => {
+    setBusy(true);
     try {
       await updateUser({
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        disabled: user.disabled ? 0 : 1,
-        systemsJson: user.systemsJson ?? null,
-        expiration: user.expiration ?? null,
-        limit: user.limit ?? null,
+        id: u.id,
+        ...basePayload(u),
+        passwordNeedChange: on ? 1 : 0,
       }).unwrap();
-    } catch {
-      showError("Failed to update user");
+      toast.success(
+        on
+          ? `${u.username} must pick a new password at next sign-in.`
+          : `${u.username} keeps their current password.`,
+      );
+      return null;
+    } catch (e) {
+      const text = messageOf(e, "Failed to change the flag.");
+      toast.error(text);
+      return text;
+    } finally {
+      setBusy(false);
     }
   };
 
-  const updateField = <K extends keyof UserFormState>(
-    key: K,
-    value: UserFormState[K],
-  ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const runBulk = async (action: BulkAction) => {
+    const targets = all.filter(
+      (u) =>
+        selected.has(u.id) &&
+        !(action !== "signout" && (u.id === 1 || isSelf(u))),
+    );
+    setBusy(true);
+    let failed = 0;
+    for (const u of targets) {
+      try {
+        if (action === "signout") await signOutUser(u.id).unwrap();
+        else if (action === "disable")
+          await updateUser({ id: u.id, ...basePayload(u), disabled: 1 }).unwrap();
+        else await deleteUser(u.id).unwrap();
+      } catch {
+        failed++;
+      }
+    }
+    setBusy(false);
+    const done = targets.length - failed;
+    const verb = action === "signout" ? "Signed out" : action === "disable" ? "Disabled" : "Deleted";
+    if (failed === 0) toast.success(`${verb} ${plural(done, "user")}.`);
+    else toast.error(`${verb} ${done} of ${targets.length}; ${failed} failed.`);
+    setSelected(new Set());
+    panel.close();
   };
 
-  const selectedSystems: number[] = form.systemsJson
-    ? (() => {
-        try {
-          return JSON.parse(form.systemsJson) as number[];
-        } catch {
-          return [];
-        }
-      })()
-    : [];
+  const columns: Column<AdminUser>[] = [
+    {
+      id: "username",
+      header: "User",
+      phone: "title",
+      sortValue: (u) => u.username,
+      cell: (u) => (
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className="font-medium">{u.username}</span>
+          {u.role === "admin" && (
+            <span className="badge badge-primary badge-xs">admin</span>
+          )}
+          {isSelf(u) && <span className="badge badge-ghost badge-xs">you</span>}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      sortValue: (u) => userStatus(u, now).label,
+      cell: (u) => {
+        const s = userStatus(u, now);
+        return (
+          <span className="flex flex-wrap gap-1">
+            <span className={`badge badge-sm ${s.badge}`}>{s.label}</span>
+            {u.passwordNeedChange === 1 && (
+              <span className="badge badge-info badge-sm">temporary password</span>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      id: "systems",
+      header: "Systems",
+      cell: (u) => (
+        <span className="text-base-content/80">{systemsSummary(u, systemList)}</span>
+      ),
+    },
+    {
+      id: "live",
+      header: "Live",
+      align: "right",
+      sortValue: (u) => u.liveConnections,
+      cell: (u) => (u.liveConnections > 0 ? u.liveConnections : "—"),
+    },
+    {
+      id: "devices",
+      header: "Devices",
+      align: "right",
+      sortValue: (u) => u.devices,
+      cell: (u) => (u.devices > 0 ? u.devices : "—"),
+    },
+    {
+      id: "lastSeen",
+      header: "Last seen",
+      sortValue: (u) => u.lastSeenAt ?? 0,
+      cell: (u) =>
+        u.lastSeenAt ? (
+          <span title={u.lastSeenIp ?? undefined}>{formatAgo(u.lastSeenAt, now)}</span>
+        ) : (
+          <span className="text-base-content/50">—</span>
+        ),
+    },
+    {
+      id: "expiration",
+      header: "Expires",
+      phone: "hide",
+      sortValue: (u) => u.expiration ?? Number.MAX_SAFE_INTEGER,
+      cell: (u) =>
+        u.expiration ? formatDate(u.expiration) : <span className="text-base-content/50">Never</span>,
+    },
+  ];
 
-  const toggleSystem = (systemId: number) => {
-    const updated = selectedSystems.includes(systemId)
-      ? selectedSystems.filter((id) => id !== systemId)
-      : [...selectedSystems, systemId];
-    updateField(
-      "systemsJson",
-      updated.length > 0 ? JSON.stringify(updated) : "",
-    );
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
+  const p = panel.selected;
+  const current = p && "id" in p ? byId(p.id) : null;
+  const selectedUsers = all.filter((u) => selected.has(u.id));
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold mb-4">Users</h1>
-      <p className="text-sm text-base-content/70 mb-4">
-        Manage user accounts that can access the scanner. Each user has a role
-        (admin or listener), and can optionally be restricted to specific
-        systems, given an expiration date, or rate-limited.
-      </p>
-      <div className="card bg-base-200">
-        <div className="card-body">
-          <div className="overflow-x-auto">
-            <table className="table table-zebra w-full">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Role</th>
-                  <th>Disabled</th>
-                  <th>Expiration</th>
-                  <th>Limit</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users?.map((user) => (
-                  <tr key={user.id}>
-                    <td>{user.username}</td>
-                    <td>
-                      <span
-                        className={`badge ${user.role === "admin" ? "badge-primary" : "badge-secondary"}`}
-                      >
-                        {user.role}
-                      </span>
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        className="toggle toggle-primary toggle-sm"
-                        checked={user.disabled === 1}
-                        disabled={user.id === 1}
-                        onChange={() => handleToggleDisabled(user)}
-                        title={
-                          user.id === 1
-                            ? "Cannot disable the primary admin"
-                            : undefined
-                        }
-                      />
-                    </td>
-                    <td>
-                      {user.expiration
-                        ? new Date(user.expiration * 1000).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td>{user.limit != null ? user.limit : "—"}</td>
-                    <td className="flex gap-1">
-                      <button
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => openEdit(user)}
-                        aria-label="Edit user"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      {user.id !== 1 && (
-                        <button
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => handleDelete(user)}
-                          aria-label="Delete user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {users?.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center opacity-60">
-                      No users found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Users"
+        subtitle="Who can sign in, what they can hear, and where they are signed in."
+        actions={
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={(e) =>
+              panel.open({ key: "create", kind: "create" }, e.currentTarget)
+            }
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add user
+          </button>
+        }
+      />
 
-          <div className="mt-4">
-            <button className="btn btn-primary" onClick={openCreate}>
-              <Plus className="w-4 h-4" />
-              Add User
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchBox
+          value={search}
+          onChange={setSearch}
+          label="Search by name, role or system"
+          className="w-full sm:w-72"
+        />
+        <FilterChips
+          label="Status"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { id: "all", label: "All", count: counts.all },
+            { id: "active", label: "Active", count: counts.active },
+            { id: "disabled", label: "Disabled", count: counts.disabled },
+            { id: "expired", label: "Expired", count: counts.expired },
+            { id: "temporary", label: "Temporary password", count: counts.temporary },
+          ]}
+        />
       </div>
 
-      {/* Create / Edit Modal */}
-      <dialog className={`modal ${modalOpen ? "modal-open" : ""}`}>
-        <div className="modal-box max-w-lg">
-          <h3 className="font-bold text-lg mb-1">
-            {editingId != null ? "Edit User" : "Create User"}
-          </h3>
-          <p className="text-sm text-base-content/60 mb-4">
-            {editingId != null
-              ? "Update this user's account settings and access controls."
-              : "Add a new user account. They can log in immediately after creation."}
-          </p>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* Account section */}
-            <fieldset className="fieldset bg-base-200 border-base-300 rounded-box border p-4">
-              <legend className="fieldset-legend px-1 text-sm font-semibold">
-                Account
-              </legend>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Username</span>
-                  <input
-                    type="text"
-                    className="input w-full"
-                    value={form.username}
-                    onChange={(e) => updateField("username", e.target.value)}
-                    required
-                  />
-                </label>
+      <DataTable
+        caption="Users"
+        columns={columns}
+        rows={rows}
+        rowKey={(u) => u.id}
+        loading={isLoading}
+        empty={
+          all.length === 0 ? "No users yet." : "No user matches that search."
+        }
+        defaultSort={{ id: "username", dir: "asc" }}
+        selected={selected}
+        onSelectedChange={setSelected}
+        bulkActions={
+          <>
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "signout" })}
+            >
+              Sign out
+            </button>
+            <button
+              type="button"
+              className="btn btn-xs"
+              onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "disable" })}
+            >
+              Disable
+            </button>
+            <button
+              type="button"
+              className="btn btn-xs btn-error btn-outline"
+              onClick={() => panel.open({ key: "bulk", kind: "bulk", action: "delete" })}
+            >
+              Delete
+            </button>
+          </>
+        }
+        onOpen={openDetails}
+        rowLabel={(u) => u.username}
+        openKey={p?.kind === "details" ? p.id : null}
+      />
 
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Password</span>
-                  <input
-                    type="password"
-                    className="input w-full"
-                    value={form.password}
-                    onChange={(e) => updateField("password", e.target.value)}
-                    required={editingId == null}
-                  />
-                  {editingId != null && (
-                    <span className="text-xs text-base-content/50 mt-1">
-                      Leave blank to keep current.
-                    </span>
-                  )}
-                </label>
+      <LockoutsCard />
 
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Role</span>
-                  <select
-                    className="select w-full"
-                    value={form.role}
-                    disabled={editingId === 1}
-                    onChange={(e) =>
-                      updateField(
-                        "role",
-                        e.target.value as "admin" | "listener",
-                      )
-                    }
-                  >
-                    <option value="listener">Listener</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </label>
+      {p?.kind === "details" && current && (
+        <UserDetails
+          key={current.id}
+          user={current}
+          systems={systemList}
+          self={isSelf(current)}
+          busy={busy}
+          onEdit={() => panel.replace({ key: `edit:${current.id}`, kind: "edit", id: current.id })}
+          onResetPassword={() =>
+            panel.replace({ key: `reset:${current.id}`, kind: "reset", id: current.id })
+          }
+          onNeedChange={(on) => setNeedChange(current, on)}
+          onAction={(action) => act(current, action)}
+          onClose={panel.close}
+        />
+      )}
 
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Disabled</span>
-                  <div className="flex items-center h-12">
-                    <input
-                      type="checkbox"
-                      className="toggle toggle-primary"
-                      checked={form.disabled === 1}
-                      disabled={editingId === 1}
-                      onChange={(e) =>
-                        updateField("disabled", e.target.checked ? 1 : 0)
-                      }
-                    />
-                  </div>
-                </label>
+      {p?.kind === "create" && (
+        <UserForm
+          user={null}
+          systems={systemList}
+          busy={busy}
+          error={formError}
+          onCreate={(payload) => void onCreate(payload)}
+          onUpdate={() => {}}
+          onClose={closeForm}
+        />
+      )}
+
+      {p?.kind === "edit" && current && (
+        <UserForm
+          key={current.id}
+          user={current}
+          systems={systemList}
+          busy={busy}
+          error={formError}
+          onCreate={() => {}}
+          onUpdate={(id, payload) =>
+            void onUpdate(id, payload, `Saved ${payload.username ?? current.username}.`)
+          }
+          onClose={closeForm}
+        />
+      )}
+
+      {p?.kind === "reset" && current && (
+        <ResetPasswordForm
+          key={current.id}
+          user={current}
+          self={isSelf(current)}
+          busy={busy}
+          error={formError}
+          onSubmit={(payload) =>
+            void onUpdate(
+              current.id,
+              payload,
+              payload.signOut
+                ? `Password set for ${current.username}; they are signed out everywhere.`
+                : `Password set for ${current.username}.`,
+            )
+          }
+          onClose={closeForm}
+        />
+      )}
+
+      {p?.kind === "bulk" && (
+        <DetailsPanel
+          title={`${plural(selectedUsers.length, "user")} selected`}
+          subtitle={selectedUsers.map((u) => u.username).join(", ")}
+          onClose={panel.close}
+        >
+          {p.action !== "signout" &&
+            selectedUsers.some((u) => u.id === 1 || isSelf(u)) && (
+              <div className="alert text-sm">
+                The primary admin and your own account are skipped.
               </div>
-            </fieldset>
-
-            {/* Access Controls section */}
-            <fieldset className="fieldset bg-base-200 border-base-300 rounded-box border p-4">
-              <legend className="fieldset-legend px-1 text-sm font-semibold">
-                Access Controls
-              </legend>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Expiration</span>
-                  <input
-                    type="date"
-                    className="input w-full"
-                    value={form.expiration}
-                    disabled={editingId === 1}
-                    onChange={(e) => updateField("expiration", e.target.value)}
-                  />
-                  <span className="text-xs text-base-content/50 mt-1">
-                    {editingId === 1
-                      ? "Locked for primary admin."
-                      : "Optional. Account disabled after this date."}
-                  </span>
-                </label>
-
-                <label className="flex flex-col w-full">
-                  <span className="text-sm font-medium mb-1">Max Sessions</span>
-                  <input
-                    type="number"
-                    className="input w-full"
-                    value={form.limit}
-                    disabled={editingId === 1}
-                    onChange={(e) => updateField("limit", e.target.value)}
-                    min={0}
-                    placeholder="Unlimited"
-                  />
-                  <span className="text-xs text-base-content/50 mt-1">
-                    {editingId === 1
-                      ? "Locked for primary admin."
-                      : "Simultaneous logins. Empty = unlimited."}
-                  </span>
-                </label>
-              </div>
-
-              {/* System badges */}
-              {systems && systems.length > 0 && (
-                <div className="flex flex-col gap-1 mt-3">
-                  <span className="text-sm font-medium">Allowed Systems</span>
-                  <span className="text-xs text-base-content/60">
-                    {editingId === 1
-                      ? "The primary admin always has access to all systems."
-                      : "Select which systems this user can access. If none selected, all systems are allowed."}
-                  </span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {systems
-                      .slice()
-                      .sort((a, b) => a.order - b.order)
-                      .map((sys) => {
-                        const selected =
-                          editingId === 1 || selectedSystems.includes(sys.id);
-                        const locked = editingId === 1;
-                        return (
-                          <button
-                            key={sys.id}
-                            type="button"
-                            disabled={locked}
-                            aria-disabled={locked}
-                            className={`badge badge-lg gap-1.5 transition-colors ${
-                              locked
-                                ? "cursor-not-allowed opacity-60"
-                                : "cursor-pointer"
-                            } ${
-                              selected
-                                ? "badge-primary"
-                                : "badge-ghost hover:badge-outline"
-                            }`}
-                            onClick={() => {
-                              if (!locked) toggleSystem(sys.id);
-                            }}
-                            title={
-                              locked
-                                ? "The primary admin always has access to all systems."
-                                : undefined
-                            }
-                          >
-                            <span
-                              className={`inline-block w-2 h-2 rounded-full ${
-                                selected
-                                  ? "bg-primary-content"
-                                  : "bg-base-content/30"
-                              }`}
-                            />
-                            {sys.label}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
-            </fieldset>
-
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {editingId != null ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={() => setModalOpen(false)}>
-            close
-          </button>
-        </form>
-      </dialog>
-
-      {toast && (
-        <div className="toast toast-end">
-          <div className="alert alert-error">
-            <span>{toast}</span>
-          </div>
-        </div>
+            )}
+          <InlineConfirm
+            title={BULK[p.action].title}
+            text={BULK[p.action].text}
+            button={BULK[p.action].button}
+            danger={BULK[p.action].danger}
+            busy={busy}
+            onCancel={panel.close}
+            onConfirm={() => void runBulk(p.action)}
+          />
+        </DetailsPanel>
       )}
     </div>
   );

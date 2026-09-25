@@ -64,3 +64,18 @@ UPDATE users SET
     preferences_json = :preferences_json,
     updated_at       = :updated_at
 WHERE id = :id;
+
+-- name: AdminSetUserPassword :exec
+-- An admin's reset: the new hash, and whether the user must pick their own
+-- password at the next sign-in.
+UPDATE users SET
+    password_hash        = :password_hash,
+    password_need_change = :password_need_change,
+    updated_at           = :updated_at
+WHERE id = :id;
+
+-- name: SetUserPasswordNeedChange :exec
+UPDATE users SET
+    password_need_change = :password_need_change,
+    updated_at           = :updated_at
+WHERE id = :id;

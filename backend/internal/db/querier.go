@@ -10,6 +10,9 @@ import (
 )
 
 type Querier interface {
+	// An admin's reset: the new hash, and whether the user must pick their own
+	// password at the next sign-in.
+	AdminSetUserPassword(ctx context.Context, arg AdminSetUserPasswordParams) error
 	CloseConnectionLog(ctx context.Context, arg CloseConnectionLogParams) error
 	// At startup: rows still open were left by a process that did not shut
 	// down cleanly. Their real end time is unknown.
@@ -132,12 +135,17 @@ type Querier interface {
 	ListTags(ctx context.Context) ([]Tag, error)
 	ListTalkgroupsBySystem(ctx context.Context, systemID int64) ([]Talkgroup, error)
 	ListUnitsBySystem(ctx context.Context, systemID int64) ([]Unit, error)
+	// One row per account that has ever signed in (within the token retention
+	// window): where it was last seen, when, and how many devices can still
+	// sign back in. Backed by idx_refresh_tokens_user_id.
+	ListUserSessionStats(ctx context.Context, now int64) ([]ListUserSessionStatsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error
 	SetSetupComplete(ctx context.Context, setupComplete int64) error
+	SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error
 	TouchTRInstanceLastSeen(ctx context.Context, arg TouchTRInstanceLastSeenParams) error
 	TranscriptionStats(ctx context.Context, since int64) (TranscriptionStatsRow, error)
 	TranscriptionsByLanguage(ctx context.Context) ([]TranscriptionsByLanguageRow, error)

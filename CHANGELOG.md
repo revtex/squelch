@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Users, rebuilt.** The table shows each account's status (active,
+  disabled, expired, temporary password), its systems by name, open
+  connections, signed-in devices and when it was last seen, with search,
+  status filters, sortable columns and bulk sign-out, disable and delete. The
+  **›** button opens the account's details with every action explained and
+  confirmed in place. New accounts get a temporary password (with a
+  **Generate** button) and, by default, must pick their own at first sign-in;
+  that requirement is now visible and can be switched on or off per user.
+- **Reset a user's password from Admin → Users.** Set a temporary password,
+  choose whether they must change it at their next sign-in, and whether to
+  sign them out everywhere. Each reset is recorded in **Logs**.
+- **Sign-in lockouts are visible.** Addresses locked out after failed
+  sign-ins are listed under Admin → Users, and an admin can clear one to let
+  it try again.
 - **A new admin shell.** The sidebar is grouped into Overview, People &
   access, Radio data, Ingest & delivery and Server, with **Webhooks** finally
   listed (the page existed but nothing linked to it) and **Trunk Recorder**
@@ -133,6 +147,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Changing a user's password from Admin → Users now works.** The edit
+  form sent the new password but the server dropped it, so the old password
+  stayed in force.
 - **Disabling an account now signs its devices out for good.** Before, a
   disabled account's browsers and phones stayed signed in behind the scenes.
   If the account was enabled again, they came straight back without the

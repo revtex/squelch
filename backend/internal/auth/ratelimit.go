@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
@@ -139,6 +140,59 @@ func (r *RateLimiter) Reset(ip string) {
 		return
 	}
 	delete(r.entries, ip)
+}
+
+// Lockout is an address that is refused sign-in, or on its way there.
+type Lockout struct {
+	IP       string
+	Failures int
+	// LockedUntil is zero while the address still has attempts left.
+	LockedUntil time.Time
+	LastFailure time.Time
+}
+
+// List returns every address with a recorded failure, locked-out ones
+// first, so an admin can see who is being kept out and let them back in.
+func (r *RateLimiter) List() []Lockout {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	out := make([]Lockout, 0, len(r.entries))
+	for ip, e := range r.entries {
+		if e.failures == 0 {
+			continue
+		}
+		l := Lockout{IP: ip, Failures: e.failures, LastFailure: e.lastFailure}
+		if now.Before(e.lockedUntil) {
+			l.LockedUntil = e.lockedUntil
+		}
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		li, lj := !out[i].LockedUntil.IsZero(), !out[j].LockedUntil.IsZero()
+		if li != lj {
+			return li
+		}
+		return out[i].LastFailure.After(out[j].LastFailure)
+	})
+	return out
+}
+
+// Clear forgets an address's failures, ending its lockout. It reports
+// whether there was anything to clear.
+func (r *RateLimiter) Clear(ip string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e, ok := r.entries[ip]
+	if !ok || e.failures == 0 {
+		return false
+	}
+	if e.inFlight > 0 {
+		*e = loginEntry{inFlight: e.inFlight}
+		return true
+	}
+	delete(r.entries, ip)
+	return true
 }
 
 // cleanup periodically removes stale entries to bound memory usage.

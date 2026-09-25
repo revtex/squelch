@@ -10,6 +10,28 @@ export interface AdminUser {
   limit: number | null; // concurrent connection limit
   createdAt: number;
   updatedAt: number;
+  /** 1 when the user has a temporary password and must pick their own. */
+  passwordNeedChange: number;
+  /** Open LIVE, BKGND and admin connections right now. */
+  liveConnections: number;
+  /** Browsers and phones that can still sign back in without a password. */
+  devices: number;
+  /** When and from where the account last renewed its sign-in. */
+  lastSeenAt: number | null;
+  lastSeenIp: string | null;
+}
+
+/** An address the sign-in limiter is counting failures for or keeping out. */
+export interface AdminLockout {
+  ip: string;
+  failures: number;
+  /** Unix seconds; null while the address still has attempts left. */
+  lockedUntil: number | null;
+  lastFailure: number;
+}
+
+export interface AdminLockoutsList {
+  lockouts: AdminLockout[];
 }
 
 export interface AdminSystem {
@@ -135,16 +157,22 @@ export interface CreateUserPayload {
   systemsJson?: string | null;
   expiration?: number | null;
   limit?: number | null;
+  /** Default 1: the user picks their own password at first sign-in. */
+  passwordNeedChange?: number;
 }
 
 export interface UpdateUserPayload {
   username?: string;
+  /** Resets the password; an admin reset asks for a change next time. */
   password?: string;
   role?: "admin" | "listener";
   disabled?: number;
   systemsJson?: string | null;
   expiration?: number | null;
   limit?: number | null;
+  passwordNeedChange?: number;
+  /** Also sign the account out on every device. */
+  signOut?: boolean;
 }
 
 export interface AdminDirMonitor {

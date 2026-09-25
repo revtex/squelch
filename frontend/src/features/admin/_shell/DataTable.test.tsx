@@ -45,7 +45,7 @@ function Selectable() {
       selected={selected}
       onSelectedChange={setSelected}
       bulkActions={<button type="button">Delete</button>}
-      openLabel={(r) => r.name}
+      rowLabel={(r) => r.name}
     />
   );
 }
@@ -118,7 +118,7 @@ describe("DataTable", () => {
         rows={rows.slice(0, 2)}
         rowKey={(r) => r.id}
         onOpen={onOpen}
-        openLabel={(r) => `Details for ${r.name}`}
+        rowLabel={(r) => r.name}
         openKey={2}
       />,
     );

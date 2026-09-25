@@ -218,6 +218,54 @@ func (q *Queries) ListActiveSessions(ctx context.Context, arg ListActiveSessions
 	return items, nil
 }
 
+const listUserSessionStats = `-- name: ListUserSessionStats :many
+SELECT rt.user_id,
+       rt.ip           AS last_seen_ip,
+       rt.created_at   AS last_seen_at,
+       (SELECT COUNT(DISTINCT r3.family_id) FROM refresh_tokens r3
+         WHERE r3.user_id = rt.user_id AND r3.revoked = 0 AND r3.expires_at > ?1) AS devices
+FROM refresh_tokens rt
+WHERE rt.id = (SELECT MAX(r2.id) FROM refresh_tokens r2 WHERE r2.user_id = rt.user_id)
+`
+
+type ListUserSessionStatsRow struct {
+	UserID     int64          `db:"user_id" json:"user_id"`
+	LastSeenIp sql.NullString `db:"last_seen_ip" json:"last_seen_ip"`
+	LastSeenAt int64          `db:"last_seen_at" json:"last_seen_at"`
+	Devices    int64          `db:"devices" json:"devices"`
+}
+
+// One row per account that has ever signed in (within the token retention
+// window): where it was last seen, when, and how many devices can still
+// sign back in. Backed by idx_refresh_tokens_user_id.
+func (q *Queries) ListUserSessionStats(ctx context.Context, now int64) ([]ListUserSessionStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserSessionStats, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserSessionStatsRow{}
+	for rows.Next() {
+		var i ListUserSessionStatsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.LastSeenIp,
+			&i.LastSeenAt,
+			&i.Devices,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAllRefreshTokensForUser = `-- name: RevokeAllRefreshTokensForUser :exec
 UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?
 `

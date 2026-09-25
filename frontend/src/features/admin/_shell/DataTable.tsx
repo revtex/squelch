@@ -52,8 +52,11 @@ export interface DataTableProps<T, K extends string | number> {
   bulkActions?: ReactNode;
   /** A row can open its details; adds the › column. */
   onOpen?: (row: T, trigger: HTMLElement) => void;
-  /** Names the open button, e.g. "Details for alice". */
-  openLabel?: (row: T) => string;
+  /**
+   * How a row is named to assistive tech: its checkbox reads "Select <name>"
+   * and its › button "Details for <name>". Falls back to the key.
+   */
+  rowLabel?: (row: T) => string;
   /** The key whose panel is open, to mark its row. */
   openKey?: K | null;
   rowClassName?: (row: T) => string;
@@ -93,7 +96,7 @@ export function DataTable<T, K extends string | number>({
   onSelectedChange,
   bulkActions,
   onOpen,
-  openLabel,
+  rowLabel,
   openKey = null,
   rowClassName,
 }: DataTableProps<T, K>) {
@@ -269,6 +272,7 @@ export function DataTable<T, K extends string | number>({
               const k = rowKey(row);
               const isOpen = openKey !== null && openKey === k;
               const isSelected = selectable && selected.has(k);
+              const name = rowLabel?.(row) ?? String(k);
               return (
                 <tr
                   key={k}
@@ -283,7 +287,7 @@ export function DataTable<T, K extends string | number>({
                       <input
                         type="checkbox"
                         className="checkbox checkbox-sm"
-                        aria-label={`Select ${openLabel?.(row) ?? String(k)}`}
+                        aria-label={`Select ${name}`}
                         checked={isSelected}
                         onChange={() => toggleOne(k)}
                       />
@@ -310,7 +314,7 @@ export function DataTable<T, K extends string | number>({
                   {onOpen && (
                     <td className="text-right max-sm:absolute max-sm:right-0 max-sm:top-2 max-sm:p-0">
                       <OpenButton
-                        label={openLabel?.(row) ?? `Details for ${String(k)}`}
+                        label={`Details for ${name}`}
                         open={isOpen}
                         onOpen={(el) => onOpen(row, el)}
                       />

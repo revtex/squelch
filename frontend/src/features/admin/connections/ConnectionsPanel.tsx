@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useDetails,
   useListConnectionsQuery,
@@ -24,9 +25,16 @@ const TABS = [
 type Tab = (typeof TABS)[number]["id"];
 
 export default function ConnectionsPanel() {
-  const [tab, setTab] = useState<Tab>("live");
+  // Users links here with ?user=<id>&name=<username> to show one account.
+  const [params] = useSearchParams();
+  const linkedUser = Number(params.get("user"));
+  const linked: HistoryScope | null =
+    linkedUser > 0
+      ? { userId: linkedUser, label: params.get("name") ?? `user #${linkedUser}` }
+      : null;
+  const [tab, setTab] = useState<Tab>(linked ? "history" : "live");
   const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<HistoryScope>({});
+  const [scope, setScope] = useState<HistoryScope>(linked ?? {});
   const actions = useConnectionActions();
   const { setNotice, blockAddress, closeBlock } = actions;
   const details = useDetails<Selection>();

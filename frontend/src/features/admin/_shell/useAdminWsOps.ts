@@ -28,6 +28,7 @@ import type {
   AdminConnectionHistoryPage,
   ConnectionHistoryFilter,
   AdminIPBlocksList,
+  AdminLockoutsList,
   CreateIPBlockPayload,
   CreateIPBlockResult,
 } from "@/types";
@@ -115,6 +116,22 @@ export function useDeleteIPBlockMutation() {
 export function useSignOutUserMutation() {
   return useWsMutation<void, number>("users.signout", {
     transformArg: (id) => ({ id }),
+  });
+}
+
+// Lockouts are in memory on the server and end on their own, so poll.
+export function useListLockoutsQuery() {
+  return useWsQuery<AdminLockoutsList>(
+    "lockouts.list",
+    undefined,
+    "lockouts.updated",
+    30_000,
+  );
+}
+
+export function useClearLockoutMutation() {
+  return useWsMutation<void, string>("lockouts.clear", {
+    transformArg: (ip) => ({ ip }),
   });
 }
 

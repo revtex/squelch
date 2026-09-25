@@ -10,6 +10,33 @@ import (
 	"database/sql"
 )
 
+const adminSetUserPassword = `-- name: AdminSetUserPassword :exec
+UPDATE users SET
+    password_hash        = ?1,
+    password_need_change = ?2,
+    updated_at           = ?3
+WHERE id = ?4
+`
+
+type AdminSetUserPasswordParams struct {
+	PasswordHash       string `db:"password_hash" json:"-"`
+	PasswordNeedChange int64  `db:"password_need_change" json:"password_need_change"`
+	UpdatedAt          int64  `db:"updated_at" json:"updated_at"`
+	ID                 int64  `db:"id" json:"id"`
+}
+
+// An admin's reset: the new hash, and whether the user must pick their own
+// password at the next sign-in.
+func (q *Queries) AdminSetUserPassword(ctx context.Context, arg AdminSetUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, adminSetUserPassword,
+		arg.PasswordHash,
+		arg.PasswordNeedChange,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     username,
@@ -165,6 +192,24 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setUserPasswordNeedChange = `-- name: SetUserPasswordNeedChange :exec
+UPDATE users SET
+    password_need_change = ?1,
+    updated_at           = ?2
+WHERE id = ?3
+`
+
+type SetUserPasswordNeedChangeParams struct {
+	PasswordNeedChange int64 `db:"password_need_change" json:"password_need_change"`
+	UpdatedAt          int64 `db:"updated_at" json:"updated_at"`
+	ID                 int64 `db:"id" json:"id"`
+}
+
+func (q *Queries) SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error {
+	_, err := q.db.ExecContext(ctx, setUserPasswordNeedChange, arg.PasswordNeedChange, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const updateUser = `-- name: UpdateUser :exec

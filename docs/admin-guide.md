@@ -72,21 +72,38 @@ See the [Trunk Recorder MQTT guide](tr-mqtt-guide.md) for the full plugin config
 
 ## Users
 
-Manage who can access Squelch.
+Who can sign in, what they can hear, and where they are signed in.
 
-Each user has:
+The table shows each account's role, status, systems, how many connections it has open right now, how many browsers and phones can sign back in without a password (**Devices**), and when it was last seen. Search by name, role or system, and use the status chips to show only active, disabled, expired or temporary-password accounts. Tick rows to sign out, disable or delete several accounts at once.
+
+Choose **Add user** to create an account. You set a temporary password (or **Generate** one) and hand it to the user; by default they must pick their own password the first time they sign in. Turn **Require a new password at first sign-in** off if the user chose the password themselves.
+
+Choose the **›** button on a row for the account's details and actions:
+
+| Action | What it does |
+| --- | --- |
+| Edit | Change the name, role, systems, expiry date and connection limit. |
+| Reset password | Set a new temporary password for someone who lost theirs. By default they must change it at their next sign-in and are signed out everywhere, so anyone holding the old password is out. |
+| Require password change | A switch. On, the user is asked for a new password the next time they sign in. Accounts with it on show a **temporary password** badge in the table. |
+| Sign out everywhere | Every device needs the password again. Use it if you think someone else has the account. |
+| Disable / Enable | Disabling keeps the account but refuses sign-in and signs it out everywhere. Nothing is deleted. |
+| Delete | Removes the account, its devices and its bookmarks for good. |
+
+Each account has:
 
 | Field            | Description                                                     |
 | ---------------- | --------------------------------------------------------------- |
 | Username         | Login name                                                      |
-| Password         | Set on create; leave blank when editing to keep unchanged       |
 | Role             | **Admin** (full access) or **Listener** (scanner only)          |
-| Disabled         | Temporarily block access without deleting the account           |
-| Expiration       | Optional date after which the account is locked out             |
-| Connection Limit | Optional cap on simultaneous sessions for this user             |
-| System Selection | Optional — restrict which systems/talkgroups this user can hear |
+| Expires          | Optional date after which the account is locked out             |
+| Connection limit | Optional cap on simultaneous connections for this user          |
+| Systems          | Optional — restrict which systems this user can hear; none picked means all |
 
-The first admin account cannot be disabled. Disabling an account also signs it out on every device, so after you enable it again the user has to sign in with their password.
+The primary admin (the first account) cannot be disabled or deleted, and its role, expiry, limit and systems are fixed. You cannot disable or delete your own account.
+
+### Sign-in lockouts
+
+After three failed sign-ins an address is locked out for ten minutes. While any address is locked out or counting failures, a **Sign-in lockouts** card appears under the table; **Clear** lets that address try again at once.
 
 ---
 

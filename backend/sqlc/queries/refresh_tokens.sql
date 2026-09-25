@@ -55,3 +55,15 @@ WHERE rt.family_id = sqlc.arg('family_id')
   AND rt.expires_at > sqlc.arg('now')
 ORDER BY rt.id DESC
 LIMIT 1;
+
+-- name: ListUserSessionStats :many
+-- One row per account that has ever signed in (within the token retention
+-- window): where it was last seen, when, and how many devices can still
+-- sign back in. Backed by idx_refresh_tokens_user_id.
+SELECT rt.user_id,
+       rt.ip           AS last_seen_ip,
+       rt.created_at   AS last_seen_at,
+       (SELECT COUNT(DISTINCT r3.family_id) FROM refresh_tokens r3
+         WHERE r3.user_id = rt.user_id AND r3.revoked = 0 AND r3.expires_at > sqlc.arg('now')) AS devices
+FROM refresh_tokens rt
+WHERE rt.id = (SELECT MAX(r2.id) FROM refresh_tokens r2 WHERE r2.user_id = rt.user_id);

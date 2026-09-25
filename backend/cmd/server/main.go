@@ -945,6 +945,7 @@ func (p *program) run() {
 		EncryptionKey:     cfg.EncryptionKey,
 		IPBlocks:          ipBlocks,
 		GeoIP:             geoDB,
+		LoginLimiter:      rateLimiter,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
 	// reports here, for the admin's connection list.

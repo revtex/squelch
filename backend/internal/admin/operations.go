@@ -76,6 +76,9 @@ type Deps struct {
 	IPBlocks *ipblock.Matcher
 	// GeoIP resolves addresses to countries; nil hides the country column.
 	GeoIP *geoip.DB
+	// LoginLimiter is the sign-in rate limiter; nil leaves the lockout
+	// list empty.
+	LoginLimiter *auth.RateLimiter
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -317,6 +320,9 @@ func mapUser(u db.User) map[string]any {
 		"limit":       nullInt(u.Limit),
 		"createdAt":   u.CreatedAt,
 		"updatedAt":   u.UpdatedAt,
+		// The user has a temporary password and must pick their own at
+		// the next sign-in.
+		"passwordNeedChange": u.PasswordNeedChange,
 	}
 }
 
