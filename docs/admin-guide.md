@@ -68,7 +68,7 @@ The page shows one instance at a time; the selector in the header switches betwe
 
 | Tab           | Shows                                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dashboard** | Two cards: the decode-rate chart for the last five minutes, and one row per system with its rate, control channel, P25 identifiers and health (**ok** while it decodes, **not decoding** at zero, **waiting** before the first rate frame). |
+| **Dashboard** | Two cards: the decode-rate chart for the last five minutes, and one row per system with its rate, control channel, P25 identifiers and health: **ok** while it decodes, **not decoding** at zero, **waiting** before the first rate frame, **no recent rate** when rate frames stop for 30 seconds, and **no feed** while the broker is disconnected. |
 | **Calls**     | Calls in progress, or the ones that started and ended since the page opened. Sortable, with an **Export CSV** button.                        |
 | **Recorders** | Every recorder with its state, frequency and call count, so a stuck one stands out. Sortable, with **Export CSV**.                          |
 | **Units**     | Affiliations, calls and data events as radios key up. Search by unit, talkgroup or system; **Hold** freezes the list and counts what arrives.|

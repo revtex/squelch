@@ -163,6 +163,8 @@ export interface SystemRow {
   controlChannel?: number;
   rate?: number;
   rateInterval?: number;
+  /** When the last rate frame for this system arrived (ms). */
+  rateAt?: number;
 }
 
 /** Systems from the systems frame (or the config's list) with each one's decode rate. */
@@ -184,6 +186,7 @@ export function systemRows(systems: unknown, config: unknown, rates: Record<stri
       controlChannel: num(r.control_channel) ?? rate?.controlChannel,
       rate: rate?.decoderate,
       rateInterval: rate?.decoderateInterval,
+      rateAt: rate?.at,
     };
   });
   // A rates frame can name a system the systems frame has not listed yet.
@@ -196,6 +199,7 @@ export function systemRows(systems: unknown, config: unknown, rates: Record<stri
         controlChannel: r.controlChannel,
         rate: r.decoderate,
         rateInterval: r.decoderateInterval,
+        rateAt: r.at,
       });
     }
   }
@@ -390,9 +394,19 @@ export function csvName(instance: TrInstance, what: string): string {
 
 export { fmtFreqMHz };
 
-/** Decoding means the control channel is being heard; zero means it is not. */
-export function systemHealth(r: SystemRow): { label: string; badge: string } {
+/** A rate older than this (or three of the plugin's intervals) no longer says the system is healthy. */
+export const RATE_STALE_MS = 30_000;
+
+/**
+ * Decoding means the control channel is being heard; zero means it is not.
+ * A rate held from before a disconnect, or one that stopped arriving, says
+ * nothing about now, so it never reads "ok".
+ */
+export function systemHealth(r: SystemRow, connected: boolean, now: number): { label: string; badge: string } {
+  if (!connected) return { label: "no feed", badge: "badge-neutral" };
   if (r.rate == null) return { label: "waiting", badge: "badge-neutral" };
+  const limit = Math.max(RATE_STALE_MS, (r.rateInterval ?? 0) * 3000);
+  if (r.rateAt == null || now - r.rateAt > limit) return { label: "no recent rate", badge: "badge-warning" };
   if (r.rate > 0) return { label: "ok", badge: "badge-success" };
   return { label: "not decoding", badge: "badge-warning" };
 }

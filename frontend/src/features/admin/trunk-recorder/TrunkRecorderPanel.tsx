@@ -56,7 +56,8 @@ export default function TrunkRecorderPanel() {
   const { data: instances = [], error, isLoading } = useListTrInstancesQuery();
   const live = useTrMqttState();
   const panel = useDetails<Panel>();
-  const now = useNow(1000);
+  // The shell clock ticks in unix seconds; frame times here are in ms.
+  const now = useNow(1000) * 1000;
 
   const tab = tabFrom(search.get("tab"));
   const callsView = search.get("calls") === "recent" ? "recent" : "active";
@@ -231,7 +232,14 @@ export default function TrunkRecorderPanel() {
             ))}
           </div>
 
-          {tab === "dashboard" && <DashboardTab samples={samples} systemRates={systemRates} systems={live.systems[id]} config={live.config[id]} />}
+          {tab === "dashboard" && <DashboardTab
+              samples={samples}
+              systemRates={systemRates}
+              systems={live.systems[id]}
+              config={live.config[id]}
+              connected={state === "connected"}
+              now={now}
+            />}
           {tab === "calls" && (
             <CallsTab
               instance={selected}

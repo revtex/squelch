@@ -48,8 +48,10 @@ function makeStore() {
   return configureStore({ reducer: { trMqtt: reducer } });
 }
 
+const SEED_AT = 1_758_800_000; // unix seconds; the slice scales to ms
+
 function seed(store: ReturnType<typeof makeStore>) {
-  const at = 1_758_800_000; // unix seconds; the slice scales to ms
+  const at = SEED_AT;
   const env = (payload: unknown) => ({ instanceId: 1, label: "tr-lake-north", payload });
   store.dispatch(applyTrEvent({ topic: "tr.instance.connected", envelope: env(null), at }));
   store.dispatch(applyTrEvent({ topic: "tr.pluginStatus", envelope: env({ status: "connected" }), at }));
@@ -113,12 +115,15 @@ beforeEach(() => {
 
 describe("TrunkRecorderPanel", () => {
   it("shows the banner, tiles and the instance from the URL", () => {
+    // Rates are only "ok" while they are recent.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime((SEED_AT + 5) * 1000);
     const store = makeStore();
     seed(store);
     renderPage(store, "/admin/trunk-recorder?instance=1");
     const banner = screen.getByRole("status", { name: "Recorder connection" });
     expect(banner).toHaveTextContent("tr-lake-north");
-    expect(banner).toHaveTextContent("tr-lake-north · broker tcp://mqtt:1883 connected · plugin connected · last frame");
+    expect(banner).toHaveTextContent("tr-lake-north · broker tcp://mqtt:1883 connected · plugin connected · last frame 5 s ago");
     expect(screen.getByText("Systems", { selector: "dt" }).nextSibling).toHaveTextContent("2");
     expect(screen.getByText("Recorders", { selector: "dt" }).nextSibling).toHaveTextContent("1 / 2");
     expect(screen.getByText("Active calls", { selector: "dt" }).nextSibling).toHaveTextContent("2");
@@ -129,8 +134,40 @@ describe("TrunkRecorderPanel", () => {
     const table = screen.getByRole("table", { name: "Systems" });
     expect(within(table).getByText("MARCS Lake")).toBeInTheDocument();
     expect(within(table).getByText("25.0 /s")).toBeInTheDocument();
-    expect(within(table).getAllByText("ok").length).toBeGreaterThan(0);
+    expect(within(table).getAllByText("ok")).toHaveLength(2);
     expect(api.snapshot).toHaveBeenCalledWith(1, { skip: false });
+    vi.useRealTimers();
+  });
+
+  it("never calls a system ok on a rate that stopped arriving", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime((SEED_AT + 120) * 1000);
+    const store = makeStore();
+    seed(store);
+    renderPage(store, "/admin/trunk-recorder?instance=1");
+    const table = within(screen.getByRole("table", { name: "Systems" }));
+    expect(table.queryByText("ok")).not.toBeInTheDocument();
+    expect(table.getAllByText("no recent rate")).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("never calls a system ok while the broker is disconnected", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime((SEED_AT + 5) * 1000);
+    const store = makeStore();
+    seed(store);
+    store.dispatch(
+      applyTrEvent({
+        topic: "tr.instance.disconnected",
+        envelope: { instanceId: 1, label: "tr-lake-north", payload: null, error: "broker went away" },
+        at: SEED_AT + 3,
+      }),
+    );
+    renderPage(store, "/admin/trunk-recorder?instance=1");
+    const table = within(screen.getByRole("table", { name: "Systems" }));
+    expect(table.queryByText("ok")).not.toBeInTheDocument();
+    expect(table.getAllByText("no feed")).toHaveLength(2);
+    vi.useRealTimers();
   });
 
   it("switches instance from the header and keeps it in the URL", () => {

@@ -52,9 +52,12 @@ export interface DashboardTabProps {
   systemRates: Record<string, SystemRateInfo>;
   systems: unknown;
   config: unknown;
+  /** The broker connection is up; without it no rate is current. */
+  connected: boolean;
+  now: number;
 }
 
-export default function DashboardTab({ samples, systemRates, systems, config }: DashboardTabProps) {
+export default function DashboardTab({ samples, systemRates, systems, config, connected, now }: DashboardTabProps) {
   const rows = useMemo(() => systemRows(systems, config, systemRates), [systems, config, systemRates]);
   const columns: Column<SystemRow>[] = [
     {
@@ -104,9 +107,9 @@ export default function DashboardTab({ samples, systemRates, systems, config }: 
       id: "health",
       header: "Health",
       phone: "show",
-      sortValue: (r) => (r.rate == null ? 2 : r.rate > 0 ? 0 : 1),
+      sortValue: (r) => systemHealth(r, connected, now).label,
       cell: (r) => {
-        const h = systemHealth(r);
+        const h = systemHealth(r, connected, now);
         return <span className={`badge ${h.badge}`}>{h.label}</span>;
       },
     },
