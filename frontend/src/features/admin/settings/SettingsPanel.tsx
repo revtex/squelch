@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import {
   PageHeader,
@@ -34,7 +34,8 @@ export default function SettingsPanel() {
   const { data: config, isLoading } = useGetConfigQuery();
   const [updateConfig, { isLoading: saving }] = useUpdateConfigMutation();
   const toast = useToast();
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
   // Only the keys the admin has touched; everything else reads from the server.
   const [draft, setDraft] = useState<Record<string, string>>({});
 

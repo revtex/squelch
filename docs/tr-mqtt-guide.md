@@ -23,7 +23,7 @@ trunk-recorder ── publishes ──▶  MQTT broker  ◀── subscribes ─
                                  EMQX / HiveMQ / …)                eclipse/paho.golang)
 ```
 
-Squelch runs the MQTT subscriber inside its main Go process — there is no separate sidecar. Each configured TR instance opens one supervised connection to the broker, subscribes to the topics defined below, and routes parsed frames to the admin WebSocket so the **Dashboards → Trunk Recorder** view updates live. Snapshot state is held in-memory only; nothing from the MQTT feed is persisted to the database in v1.
+Squelch runs the MQTT subscriber inside its main Go process — there is no separate sidecar. Each configured TR instance opens one supervised connection to the broker, subscribes to the topics defined below, and routes parsed frames to the admin WebSocket so the **Trunk Recorder** page updates live. Snapshot state is held in memory; the only thing written to the database is when each instance was last heard from.
 
 ## Install the plugin in trunk-recorder
 
@@ -67,7 +67,7 @@ Recommended fields:
 
 1. Sign in to Squelch as an admin.
 2. Open **Admin → Settings → Integrations** and turn on **Trunk Recorder MQTT**. It is off by default; flip it on once and save.
-3. Open **Admin → Dashboards → Trunk Recorder → Instances** and click **Add instance**. Fill in:
+3. Open **Admin → Trunk Recorder** and click **Add instance**. Fill in:
 
 | Field           | Notes                                                                                                     |
 | --------------- | --------------------------------------------------------------------------------------------------------- |
@@ -82,21 +82,10 @@ Recommended fields:
 | TLS skip verify | Only check this for self-signed brokers in lab setups.                                                    |
 | Enabled         | Toggle without deleting.                                                                                  |
 
-4. Click **Test** to verify Squelch can reach the broker. It opens a real one-shot connection with the credentials you entered, waits for the broker's acknowledgement, and tears it down again; the result reports "Broker reachable" or a redacted error. Save once it succeeds.
-5. Switch to the **Dashboard** sub-tab. Within a few seconds you should see decode rate, recorders, and any active calls. **Units** and **Messages** populate as trunking traffic arrives.
+4. Click **Add**, then open **Instance settings** from the banner and click **Test broker**. It opens a real one-shot connection with the saved credentials, waits for the broker's acknowledgement, and tears it down again; the result shows next to the button, in words.
+5. Within a few seconds the banner should say connected and the **Dashboard** tab should show decode rate, recorders, and any active calls. **Units** and **Messages** populate as trunking traffic arrives.
 
-The Trunk Recorder view has eight sub-tabs:
-
-| Sub-tab | Shows |
-| --- | --- |
-| **Instances** | Your configured trunk-recorders, their connection status, and the Add/Test/Edit controls |
-| **Dashboard** | Control-channel decode rate, recorder states, and a live summary |
-| **Calls** | Calls currently being recorded |
-| **Recorders** | Per-recorder state and utilisation |
-| **Systems** | The system table the plugin reports |
-| **Units** | Unit affiliation events (on, off, join, call, location, …) |
-| **Messages** | Raw trunking control-channel messages, for debugging |
-| **Config** | The configuration payload the plugin published |
+The page's tabs are described in the [Admin Guide](admin-guide.md#trunk-recorder): Dashboard (rates and systems), Calls, Recorders, Units, Messages and Config, each a real table that sorts and stacks on phones, with CSV export for calls and recorders.
 
 The instance row's status badge reflects the live MQTT connection: `connected` (green), `disconnected` (yellow), `error` (red — hover for the most recent broker error), or `disabled` (grey) when the row's **Enabled** toggle is off.
 
@@ -223,8 +212,8 @@ Pick whichever matches your operational style. Always set `instance_id` — it c
 
 **Squelch shows "processing lag" warning**
 
-- The internal MQTT message queue is filling faster than the dashboard reducer can drain it. Usually means a busy TR with QoS 1/2 over a slow link. Drop the plugin's `qos` to `0`, or simplify the dashboard view (close Units/Messages tabs).
+- The internal MQTT message queue is filling faster than the dashboard reducer can drain it. Usually means a busy TR with QoS 1/2 over a slow link. Drop the plugin's `qos` to `0`; the banner says when frames arrive faster than they can be shown.
 
-**The Trunk Recorder tab is missing from Dashboards**
+**The Trunk Recorder page says the integration is off**
 
-- Check **Admin → Settings → Integrations → Trunk Recorder MQTT** is enabled. The kill-switch returns 404 from the REST endpoints when off, which hides the dashboard entirely.
+- Check **Admin → Settings → Integrations → Trunk Recorder MQTT** is enabled; the page links straight there. The kill-switch returns 404 from the REST endpoints when off.

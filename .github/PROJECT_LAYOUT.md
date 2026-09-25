@@ -183,10 +183,14 @@ frontend/
                            TalkgroupsTab/TalkgroupDetails/TalkgroupForm/
                            TalkgroupFields, UnitsTab, BlockedTab, ImportWizard,
                            systems.ts helpers
-        dashboards/        sub-tab chrome
+        dashboards/        the old Dashboards page: a redirect, plus
           DashboardsPanel.tsx
           activity/        ActivityPanel + activitySlice + useAdminActivity
-          trmqtt/          trunk-recorder MQTT dashboard
+        trunk-recorder/    TrunkRecorderPanel (switcher, banner, tiles, tabs) +
+                           InstancePanel/InstanceForm, DashboardTab/CallsTab/
+                           RecordersTab/UnitsTab/MessagesTab/ConfigTab,
+                           trMqttSlice (tr.* events + snapshot hydration),
+                           trMqttApi (REST), trunk.ts row/CSV helpers
         logs/              LogsPanel + useAdminLogs
         legacy-usage/  radio-reference/  tools/  settings/
         dir-monitor/   forwarding/   shared-links/
@@ -232,7 +236,7 @@ Industry analogue: [Bulletproof React](https://github.com/alan2207/bulletproof-r
 ### 3.3 State
 
 - **Server data:** RTK Query, single shared `api` object in [frontend/src/app/api.ts](../frontend/src/app/api.ts). Feature-specific endpoints attach via `api.injectEndpoints` from inside the feature folder. **No per-feature `createApi`.**
-- **Client state:** Redux Toolkit slices live **next to the feature that owns them** (`features/scanner/scannerSlice.ts`, `features/admin/dashboards/activity/activitySlice.ts`, `features/admin/_shell/adminSlice.ts`). Slices that are genuinely cross-feature are rare; promote to `shared/` only when ≥ 2 features need them.
+- **Client state:** Redux Toolkit slices live **next to the feature that owns them** (`features/scanner/scannerSlice.ts`, `features/admin/dashboards/activity/activitySlice.ts`, `features/admin/trunk-recorder/trMqttSlice.ts`, `features/admin/_shell/adminSlice.ts`). Slices that are genuinely cross-feature are rare; promote to `shared/` only when ≥ 2 features need them.
 - WebSocket events dispatch into Redux via the WS client + middleware — components never parse WS frames.
 - JWT tokens live in **Redux memory only**. No `localStorage`, no `sessionStorage`. Refresh token is an httpOnly cookie scoped to `/api`.
 

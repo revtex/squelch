@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Trunk Recorder, its own page.** One recorder at a time, chosen with a
+  selector in the header that stays in the link; the old Instances tab is
+  gone. A banner says whether the broker is connected, whether the plugin
+  has reported in and how long ago the last frame arrived, with the reason
+  when the connection fails. Instance settings open beside the page with
+  Test broker (the result shows there), Reconnect and a guarded Remove.
+  Tiles show systems, recorders recording out of the total, calls in
+  progress with the encrypted count, and the decode rate with its range.
+  Dashboard, Calls, Recorders, Units, Messages and Config are real tables
+  that sort, page and stack on phones, with CSV export for calls and
+  recorders, a Hold for unit events and a Pause with a new-message count
+  for the message feed. A page opened mid-stream starts from what the
+  server already holds, including the last five minutes of decode rates.
+  When the integration is off, the page links to the setting. Each
+  instance's last-heard time is now written to the database.
 - **Transcription, rebuilt.** A connection banner says whether the go-whisper
   sidecar answers, its version when it reports one, the model in use and the
   worker count, or why it does not answer; **Test connection** tries it and

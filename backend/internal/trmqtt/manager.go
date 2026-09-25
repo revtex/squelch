@@ -2,6 +2,7 @@ package trmqtt
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,7 +42,16 @@ type Manager struct {
 	// Test hooks
 	clientFactory func(ClientConfig, *Snapshot, eventEmitter, Enricher) *Client
 	snapshots     map[int64]*Snapshot
+
+	// lastTouch is when each instance's last_seen_at was last written, so a
+	// busy feed costs one row update per touchInterval, not one per frame.
+	touchMu   sync.Mutex
+	lastTouch map[int64]time.Time
+	now       func() time.Time
 }
+
+// touchInterval is how often a live feed writes tr_instances.last_seen_at.
+const touchInterval = 30 * time.Second
 
 // NewManager constructs a Manager. encryptionKey is the same passphrase used
 // by other AES-256-GCM encrypted columns (downstreams API keys, VAPID, etc.).
@@ -57,6 +67,8 @@ func NewManager(queries Querier, encryptionKey string, enricher Enricher) *Manag
 		snapshots:     make(map[int64]*Snapshot),
 		events:        make(chan Event, eventChannelCap),
 		clientFactory: NewClient,
+		lastTouch:     make(map[int64]time.Time),
+		now:           time.Now,
 	}
 }
 
@@ -200,6 +212,9 @@ func (m *Manager) Subscribe() (<-chan Event, func()) {
 // channel is full, the oldest event is discarded and a one-shot lag warning
 // is emitted (best-effort, also drop-oldest).
 func (m *Manager) emit(ev Event) {
+	if isDataEvent(ev.Type) {
+		m.touchLastSeen(ev.InstanceID)
+	}
 	// When no consumer is registered, drop silently.
 	m.subMu.Lock()
 	subscribed := m.subscribed
@@ -291,3 +306,39 @@ func (m *Manager) decryptPassword(row db.TrInstance) (string, error) {
 type managerEmitter struct{ m *Manager }
 
 func (e managerEmitter) emit(ev Event) { e.m.emit(ev) }
+
+// isDataEvent reports whether an event proves the recorder is publishing,
+// as opposed to our own connection lifecycle and lag warnings.
+func isDataEvent(t EventType) bool {
+	switch t {
+	case EventInstanceConnected, EventInstanceDisconnected, EventSnapshot, EventWarnLag, EventType(""):
+		return false
+	}
+	return true
+}
+
+// touchLastSeen records that a frame arrived for id, at most once per
+// touchInterval. The write is small and synchronous; a failure is logged
+// and the next interval tries again.
+func (m *Manager) touchLastSeen(id int64) {
+	now := m.now()
+	m.touchMu.Lock()
+	if last, ok := m.lastTouch[id]; ok && now.Sub(last) < touchInterval {
+		m.touchMu.Unlock()
+		return
+	}
+	m.lastTouch[id] = now
+	m.touchMu.Unlock()
+
+	ctx := m.startCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := m.queries.TouchTRInstanceLastSeen(ctx, db.TouchTRInstanceLastSeenParams{
+		LastSeenAt: sql.NullInt64{Int64: now.Unix(), Valid: true}, ID: id,
+	}); err != nil {
+		slog.Warn("trmqtt: failed to record last seen", "instance_id", id, "error", err)
+	}
+}

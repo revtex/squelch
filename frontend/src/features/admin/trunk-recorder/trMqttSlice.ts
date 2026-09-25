@@ -67,6 +67,10 @@ function pushCapped<T>(arr: T[] | undefined, item: T, cap: number): T[] {
   return next;
 }
 
+function asArray(v: unknown): unknown[] {
+  return Array.isArray(v) ? v : [];
+}
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
 }
@@ -201,6 +205,112 @@ function unitKindFromTopic(topic: string): string {
   return last ?? topic;
 }
 
+function parseTime(v: unknown): number {
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    if (Number.isFinite(t)) return t;
+  }
+  if (typeof v === "number") return normalizeEventAt(v);
+  return Date.now();
+}
+
+/**
+ * Fills the live views from the server's snapshot, but only where nothing
+ * live has arrived yet: a page opened mid-stream catches up without
+ * clobbering frames it has already seen.
+ */
+function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotView): void {
+  const now = Date.now();
+  if (state.recorders[id] === undefined && asArray(asRecord(snapshot.Recorders)?.recorders).length > 0) {
+    state.recorders[id] = snapshot.Recorders;
+  }
+  if (state.callsActive[id] === undefined && asRecord(snapshot.CallsActive)?.calls !== undefined) {
+    state.callsActive[id] = snapshot.CallsActive;
+  }
+  if (state.systems[id] === undefined && asArray(asRecord(snapshot.Systems)?.systems).length > 0) {
+    state.systems[id] = snapshot.Systems;
+  }
+  if (state.config[id] === undefined && asRecord(snapshot.Config)?.config !== undefined) {
+    state.config[id] = snapshot.Config;
+  }
+  const status = asString(asRecord(snapshot.PluginStatus)?.status);
+  if (state.pluginStatus[id] === undefined && status) {
+    state.pluginStatus[id] = { status, at: now };
+  }
+  {
+    // Per-system samples, one per system per second: sum them by second,
+    // then put the ones older than anything seen live in front of it. The
+    // socket usually delivers a frame or two before the snapshot answers.
+    const live = state.rates[id] ?? [];
+    const firstLive = live.length > 0 ? live[0].at : Infinity;
+    const bySecond = new Map<number, number>();
+    for (const item of asArray(snapshot.RateSamples)) {
+      const r = asRecord(item);
+      const at = Math.floor(parseTime(r?.At) / 1000) * 1000;
+      if (at >= firstLive - 500) continue;
+      const rate = asNumber(r?.Rate) ?? 0;
+      bySecond.set(at, (bySecond.get(at) ?? 0) + rate);
+    }
+    if (bySecond.size > 0) {
+      const older = [...bySecond.entries()].sort((a, b) => a[0] - b[0]).map(([at, rate]) => ({ at, rate }));
+      state.rates[id] = [...older, ...live].slice(-RATE_CAP);
+    }
+    if (Object.keys(state.systemRates[id] ?? {}).length === 0 && asArray(asRecord(snapshot.Rates)?.rates).length > 0) {
+      state.systemRates[id] = extractSystemRates(snapshot.Rates, now);
+    }
+  }
+  if ((state.unitEvents[id] ?? []).length === 0) {
+    const entries: UnitEventEntry[] = [];
+    for (const item of asArray(snapshot.UnitEvents)) {
+      const e = asRecord(item);
+      const f = asRecord(e?.Frame);
+      if (!f) continue;
+      const kind = asString(f.kind) ?? "event";
+      entries.push({
+        at: parseTime(e?.ReceivedAt),
+        topic: `tr.unit.${kind}`,
+        kind,
+        shortname: asString(f.sys_name ?? f.shortname),
+        unitId: asString(f.unit ?? f.unit_id),
+        unitAlpha: asString(f.unit_alpha_tag),
+        talkgroupId: asString(f.talkgroup),
+        talkgroupAlpha: asString(f.talkgroup_alpha_tag),
+        talkgroupGroup: asString(f.talkgroup_group),
+        talkgroupTag: asString(f.talkgroup_tag),
+        talkgroupPatches: asString(f.talkgroup_patches),
+        freq: asNumber(f.freq),
+        callNum: asString(f.call_num),
+        encrypted: asBool(f.encrypted),
+        raw: f,
+      });
+    }
+    if (entries.length > 0) state.unitEvents[id] = entries.slice(-UNIT_EVENT_CAP);
+  }
+  if ((state.trunkingMessages[id] ?? []).length === 0) {
+    const entries: MessageEntry[] = [];
+    for (const item of asArray(snapshot.Messages)) {
+      const e = asRecord(item);
+      const f = asRecord(e?.Frame);
+      const msg = asRecord(f?.message) ?? f;
+      if (!msg) continue;
+      entries.push({
+        at: parseTime(e?.ReceivedAt),
+        topic: "tr.message",
+        type: asString(msg.trunk_msg_type ?? msg.message_type),
+        trunkMsg: asString(msg.trunk_msg),
+        opcode: asString(msg.opcode),
+        opcodeType: asString(msg.opcode_type),
+        opcodeDesc: asString(msg.opcode_desc),
+        shortname: asString(msg.sys_name ?? msg.shortname),
+        sysNum: asNumber(msg.sys_num),
+        meta: asString(msg.meta),
+        raw: f,
+      });
+    }
+    if (entries.length > 0) state.trunkingMessages[id] = entries.slice(-MESSAGE_CAP);
+  }
+}
+
 export interface ApplyTrEventArgs {
   topic: string;
   envelope: TrEventEnvelope;
@@ -223,6 +333,7 @@ export const trMqttSlice = createSlice({
         lastError: snapshot.Connection?.LastError || undefined,
         lastSeenAt: state.instances[id]?.lastSeenAt,
       };
+      hydrateFromSnapshot(state, id, snapshot);
     },
     /** Drop all per-instance state (e.g. when an instance is deleted). */
     forgetInstance: (state, action: PayloadAction<number>) => {

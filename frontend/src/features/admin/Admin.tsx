@@ -46,10 +46,8 @@ import ForwardingPanel from "@/features/admin/forwarding";
 import SettingsPanel from "@/features/admin/settings";
 import LogsPanel from "@/features/admin/logs";
 import ToolsPanel from "@/features/admin/tools";
-import DashboardsPanel, {
-  ActivityPanel,
-  TrMqttPanel,
-} from "@/features/admin/dashboards";
+import DashboardsPanel, { ActivityPanel } from "@/features/admin/dashboards";
+import { TrunkRecorderPanel } from "@/features/admin/trunk-recorder";
 import SharedLinksPanel from "@/features/admin/shared-links";
 import TranscriptionPanel from "@/features/admin/transcription";
 import LegacyUsageBanner from "@/features/admin/legacy-usage";
@@ -374,7 +372,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             <Route path="settings" element={<SettingsPanel />} />
             <Route path="options" element={<Navigate to="/admin/settings" replace />} />
             <Route path="logs" element={<LogsPanel />} />
-            <Route path="trunk-recorder" element={<TrMqttPanel />} />
+            <Route path="trunk-recorder" element={<TrunkRecorderPanel />} />
             <Route path="tools" element={<ToolsPanel />} />
             <Route path="*" element={<Navigate to="overview" replace />} />
           </Routes>

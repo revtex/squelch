@@ -139,6 +139,24 @@ func (s *Snapshot) setRates(f RatesFrame) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rates = f
+	// Keep a rolling window per system so a page opened later can draw the
+	// last few minutes instead of starting from an empty chart.
+	var rates []struct {
+		SysName    string      `json:"sys_name"`
+		SysNum     json.Number `json:"sys_num"`
+		Decoderate float64     `json:"decoderate"`
+	}
+	if len(f.Rates) == 0 || json.Unmarshal(f.Rates, &rates) != nil {
+		return
+	}
+	now := time.Now()
+	for _, r := range rates {
+		name := r.SysName
+		if name == "" {
+			name = r.SysNum.String()
+		}
+		s.rateSamps.Push(RateSample{At: now, System: name, Rate: r.Decoderate})
+	}
 }
 
 func (s *Snapshot) setRecorders(f RecordersFrame) {

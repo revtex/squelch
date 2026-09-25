@@ -459,4 +459,49 @@ describe("trMqttSlice", () => {
     expect(s.pluginStatus[ID]?.status).toBe("connected");
     expect(s.pluginStatus[ID]?.clientId).toBe("c1");
   });
+
+  it("setSnapshot fills empty views from the REST snapshot without clobbering live frames", () => {
+    const snap: SnapshotView = {
+      InstanceID: ID,
+      Label: "test",
+      PluginInstanceID: "tr1",
+      Connection: { Connected: true },
+      Recorders: { recorders: [{ id: "0_0", rec_state_type: "RECORDING" }] },
+      CallsActive: { calls: [] },
+      Systems: { systems: [{ sys_name: "lake" }] },
+      Config: { config: { instance_id: "tr1", sources: [] } },
+      PluginStatus: { status: "connected" },
+      Rates: { rates: [{ sys_name: "lake", decoderate: 20 }, { sys_name: "geauga", decoderate: 15 }] },
+      RateSamples: [
+        { At: "2026-09-25T12:00:00Z", System: "lake", Rate: 20 },
+        { At: "2026-09-25T12:00:00Z", System: "geauga", Rate: 15 },
+        { At: "2026-09-25T12:00:01Z", System: "lake", Rate: 22 },
+      ],
+      UnitEvents: [{ ReceivedAt: "2026-09-25T12:00:01Z", Topic: "tr/units/lake/on", Frame: { kind: "on", sys_name: "lake", unit: 7100101 } }],
+      Messages: [{ ReceivedAt: "2026-09-25T12:00:01Z", Topic: "tr/messages", Frame: { message: { sys_name: "lake", opcode: "0x03", trunk_msg_type: "GRANT" } } }],
+    };
+    const next = reducer(emptyState(), setSnapshot({ id: ID, snapshot: snap }));
+    expect(next.recorders[ID]).toBe(snap.Recorders);
+    expect(next.systems[ID]).toBe(snap.Systems);
+    expect(next.config[ID]).toBe(snap.Config);
+    expect(next.pluginStatus[ID]?.status).toBe("connected");
+    expect(next.rates[ID].map((s) => s.rate)).toEqual([35, 22]);
+    expect(next.systemRates[ID].lake.decoderate).toBe(20);
+    expect(next.unitEvents[ID][0]).toMatchObject({ kind: "on", shortname: "lake", unitId: "7100101" });
+    expect(next.trunkingMessages[ID][0]).toMatchObject({ opcode: "0x03", type: "GRANT", shortname: "lake" });
+
+    // Live frames already seen win over the snapshot; older rate samples
+    // from the snapshot go in front of the live ones.
+    let liveFirst = reducer(
+      emptyState(),
+      applyTrEvent({ topic: "tr.recorders", envelope: envelope({ recorders: [{ id: "live" }] }) }),
+    );
+    liveFirst = reducer(
+      liveFirst,
+      applyTrEvent({ topic: "tr.rates", envelope: envelope({ rates: [{ sys_name: "lake", decoderate: 30 }] }), at: Date.parse("2026-09-25T12:00:01Z") }),
+    );
+    const merged = reducer(liveFirst, setSnapshot({ id: ID, snapshot: snap }));
+    expect(merged.recorders[ID]).toEqual({ recorders: [{ id: "live" }] });
+    expect(merged.rates[ID].map((s) => s.rate)).toEqual([35, 30]);
+  });
 });

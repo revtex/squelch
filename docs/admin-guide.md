@@ -10,7 +10,7 @@ The admin dashboard is at `/admin` and requires signing in with an admin account
 
 - [Navigation](#navigation)
 - [Overview](#overview)
-- [Trunk Recorder Dashboard](#trunk-recorder-dashboard)
+- [Trunk Recorder](#trunk-recorder)
 - [Users](#users)
 - [Connections](#connections)
 - [Systems](#systems)
@@ -58,15 +58,28 @@ The **Scanner** link in the sidebar and in the account menu returns you to the l
 
 ---
 
-## Trunk Recorder Dashboard
+## Trunk Recorder
 
-If you run [trunk-recorder](https://github.com/robotastic/trunk-recorder) with the [MQTT status plugin](https://github.com/taclane/trunk-recorder-mqtt-status), Squelch can subscribe to its broker and surface live operational data — control-channel decode rate, recorder states, active calls, system tables, unit affiliation, and trunking-message debugging — under **Trunk Recorder**.
+If you run [trunk-recorder](https://github.com/robotastic/trunk-recorder) with the [MQTT status plugin](https://github.com/taclane/trunk-recorder-mqtt-status), Squelch can subscribe to its broker and show what the recorder is doing: control-channel decode rate, recorders, calls in progress, unit affiliations and the trunking messages themselves.
 
-The Trunk Recorder integration is opt-in. Enable it under **Settings → Integrations → Trunk Recorder MQTT**, then add one instance row per trunk-recorder under **Trunk Recorder → Instances**.
+The integration is off by default. Turn it on under **Settings → Integrations → Trunk Recorder MQTT** (the page links there while it is off), then **Add instance** for each trunk-recorder: a label, the `instance_id` from its config, the broker URL and base topic, and credentials if the broker needs them. The units and messages topics follow from the base topic unless you change them.
 
-> Audio is **not** consumed over MQTT — calls keep flowing through your existing dirmonitor or `/api/v1/calls` upload pipeline. The MQTT feed only powers the live dashboard.
+The page shows one instance at a time; the selector in the header switches between them and the choice stays in the link. A banner says whether Squelch is connected to the broker, whether the plugin has reported in, and how long ago the last frame arrived; when the connection fails it says why. **Instance settings** opens the broker settings beside the page, with **Test broker** (the result shows there, in words) and **Reconnect**, and **Remove instance** after asking. Four tiles follow: systems, recorders recording out of the total, calls in progress with how many are encrypted, and the decode rate with its range over the last five minutes.
 
-See the [Trunk Recorder MQTT guide](tr-mqtt-guide.md) for the full plugin config, multi-TR layout patterns, and bundled mosquitto compose profile (`docker compose --profile mqtt up -d`).
+| Tab           | Shows                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dashboard** | The decode-rate chart for the last five minutes and one row per system with its rate, control channel and P25 identifiers.                 |
+| **Calls**     | Calls in progress, or the ones that started and ended since the page opened. Sortable, with an **Export CSV** button.                        |
+| **Recorders** | Every recorder with its state, frequency and call count, so a stuck one stands out. Sortable, with **Export CSV**.                          |
+| **Units**     | Affiliations, calls and data events as radios key up. Search by unit, talkgroup or system; **Hold** freezes the list and counts what arrives.|
+| **Messages**  | Control-channel messages counted by opcode, or the live feed with **Pause** and a count of new messages waiting.                            |
+| **Config**    | The recorder's own settings and SDR sources as the plugin published them on connect, with the raw JSON underneath.                          |
+
+Every table stacks into cards on a phone. A page opened while the recorder is already running starts from what the server has held in memory, so the chart and tables are not empty until the next frame.
+
+> Audio is **not** consumed over MQTT — calls keep flowing through your existing folder monitor or `/api/v1/calls` upload pipeline. The MQTT feed only powers this page.
+
+See the [Trunk Recorder MQTT guide](tr-mqtt-guide.md) for the plugin config, multi-recorder layouts and the bundled mosquitto compose profile (`docker compose --profile mqtt up -d`).
 
 ---
 
