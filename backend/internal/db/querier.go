@@ -24,8 +24,10 @@ type Querier interface {
 	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
 	CountLogsSince(ctx context.Context, since int64) (int64, error)
 	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
+	CountTalkgroupsPerSystem(ctx context.Context) ([]CountTalkgroupsPerSystemRow, error)
 	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
+	CountUnitsPerSystem(ctx context.Context) ([]CountUnitsPerSystemRow, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error)
 	CreateBookmark(ctx context.Context, arg CreateBookmarkParams) (int64, error)
 	CreateCall(ctx context.Context, arg CreateCallParams) (int64, error)
@@ -162,18 +164,26 @@ type Querier interface {
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error
 	RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error
 	SetSetupComplete(ctx context.Context, setupComplete int64) error
+	SetTalkgroupGroup(ctx context.Context, arg SetTalkgroupGroupParams) error
+	SetTalkgroupLed(ctx context.Context, arg SetTalkgroupLedParams) error
+	SetTalkgroupTag(ctx context.Context, arg SetTalkgroupTagParams) error
 	SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error
+	SystemCallStats(ctx context.Context, since int64) ([]SystemCallStatsRow, error)
+	TalkgroupCallStats(ctx context.Context, arg TalkgroupCallStatsParams) ([]TalkgroupCallStatsRow, error)
 	TouchAPIKeyUsed(ctx context.Context, arg TouchAPIKeyUsedParams) error
 	TouchSharedLinkOpened(ctx context.Context, arg TouchSharedLinkOpenedParams) error
 	TouchTRInstanceLastSeen(ctx context.Context, arg TouchTRInstanceLastSeenParams) error
 	TranscriptionStats(ctx context.Context, since int64) (TranscriptionStatsRow, error)
 	TranscriptionsByLanguage(ctx context.Context) ([]TranscriptionsByLanguageRow, error)
 	TranscriptionsByModel(ctx context.Context) ([]TranscriptionsByModelRow, error)
+	UnitCallStats(ctx context.Context, systemID int64) ([]UnitCallStatsRow, error)
 	UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) error
 	UpdateDirMonitor(ctx context.Context, arg UpdateDirMonitorParams) error
 	UpdateDownstream(ctx context.Context, arg UpdateDownstreamParams) error
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) error
 	UpdateSystem(ctx context.Context, arg UpdateSystemParams) error
+	UpdateSystemBlacklists(ctx context.Context, arg UpdateSystemBlacklistsParams) error
+	UpdateSystemOrder(ctx context.Context, arg UpdateSystemOrderParams) error
 	UpdateTRInstance(ctx context.Context, arg UpdateTRInstanceParams) (TrInstance, error)
 	UpdateTRInstancePassword(ctx context.Context, arg UpdateTRInstancePasswordParams) error
 	UpdateTag(ctx context.Context, arg UpdateTagParams) error

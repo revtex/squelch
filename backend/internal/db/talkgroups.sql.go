@@ -201,6 +201,48 @@ func (q *Queries) ListTalkgroupsBySystem(ctx context.Context, systemID int64) ([
 	return items, nil
 }
 
+const setTalkgroupGroup = `-- name: SetTalkgroupGroup :exec
+UPDATE talkgroups SET group_id = ? WHERE id = ?
+`
+
+type SetTalkgroupGroupParams struct {
+	GroupID sql.NullInt64 `db:"group_id" json:"group_id"`
+	ID      int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) SetTalkgroupGroup(ctx context.Context, arg SetTalkgroupGroupParams) error {
+	_, err := q.db.ExecContext(ctx, setTalkgroupGroup, arg.GroupID, arg.ID)
+	return err
+}
+
+const setTalkgroupLed = `-- name: SetTalkgroupLed :exec
+UPDATE talkgroups SET led = ? WHERE id = ?
+`
+
+type SetTalkgroupLedParams struct {
+	Led sql.NullString `db:"led" json:"led"`
+	ID  int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) SetTalkgroupLed(ctx context.Context, arg SetTalkgroupLedParams) error {
+	_, err := q.db.ExecContext(ctx, setTalkgroupLed, arg.Led, arg.ID)
+	return err
+}
+
+const setTalkgroupTag = `-- name: SetTalkgroupTag :exec
+UPDATE talkgroups SET tag_id = ? WHERE id = ?
+`
+
+type SetTalkgroupTagParams struct {
+	TagID sql.NullInt64 `db:"tag_id" json:"tag_id"`
+	ID    int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) SetTalkgroupTag(ctx context.Context, arg SetTalkgroupTagParams) error {
+	_, err := q.db.ExecContext(ctx, setTalkgroupTag, arg.TagID, arg.ID)
+	return err
+}
+
 const updateTalkgroup = `-- name: UpdateTalkgroup :exec
 UPDATE talkgroups SET
     talkgroup_id = ?1,

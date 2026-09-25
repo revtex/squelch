@@ -24,9 +24,9 @@ This guide walks you through connecting your radio recorder to Squelch. Each rec
 Before connecting a recorder, make sure:
 
 1. **Squelch is running** and accessible from the machine running your recorder (e.g. `http://192.168.1.100:3022`).
-2. **Create your systems** in **Admin → Systems**. There are two auto-populate options to help with initial setup:
-   - **Auto-Populate Systems** (global toggle at the top of the Systems panel) — automatically creates new systems from incoming calls.
-   - **TG Auto-Populate** (per-system toggle) — automatically creates talkgroups within that system as calls arrive.
+2. **Create your systems** in **Admin → Systems**, or let uploads create them. Two auto-populate options help with initial setup:
+   - **Create systems from uploads** (**Settings → Radio data**) — new systems are created from incoming calls.
+   - **Auto-populate talkgroups** (per system, under **System settings**) — talkgroups within that system are created as calls arrive, unlabeled, and the **N unlabeled** button on the Systems page finds them for naming.
 3. **Create an API key** if your recorder uploads over HTTP. Go to **Admin → API keys → Add key**, give it a label, and copy the secret (it is shown once, with a test command and a Trunk-Recorder snippet). You can restrict which systems the key is allowed to send calls for.
 
 > **Tip:** If you're migrating from rdio-scanner, Squelch's upload API is backward-compatible. You only need to change the server URL in your recorder config.
@@ -62,7 +62,7 @@ This uses Trunk-Recorder's built-in `rdioscanner_uploader` plugin to send calls 
 5. Each entry in `"systems"` maps a Trunk-Recorder system (by `shortName`) to a Squelch system:
    - `shortName` — must match the `"shortName"` of a system in your Trunk-Recorder config.
    - `apiKey` — the API key you created in **Admin → API keys**. Multiple systems can share the same key.
-   - `systemId` — the radio system ID that identifies this system. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Auto-Populate Systems** is enabled, you can use any number and Squelch will create the system automatically on the first upload.
+   - `systemId` — the radio system ID that identifies this system. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch will create the system automatically on the first upload.
 6. If you have multiple Trunk-Recorder systems (e.g. multi-site), add an entry for each one. They can all use the same API key and even the same `systemId` if they belong to the same logical system.
 7. Restart Trunk-Recorder. Calls should start appearing in Squelch within seconds.
 
@@ -90,7 +90,7 @@ SDRTrunk can send calls to Squelch using its built-in Rdio Scanner streaming fea
 2. Add a new **Rdio Scanner** streaming target.
 3. Set the **Server URL** to `http://<your-squelch-address>:3022/api/call-upload`.
 4. Enter your **API Key** from Squelch.
-5. Set the **System ID** to the radio system ID. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Auto-Populate Systems** is enabled, you can use any number and Squelch will create the system automatically on the first upload.
+5. Set the **System ID** to the radio system ID. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch will create the system automatically on the first upload.
 6. Enable the stream. SDRTrunk will upload calls as they are recorded.
 
 > **Note:** SDRTrunk sends a test request when you first connect to verify the API key. Squelch handles this automatically.

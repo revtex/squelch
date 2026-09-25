@@ -1,5 +1,5 @@
 import { api } from "@/app/api";
-import type { RRPreviewResponse } from "@/types";
+import type { RRPreviewResponse, TalkgroupImportPreview } from "@/types";
 
 // --- Admin RTK Query endpoints (file-upload only; all other admin ops use WebSocket) ---
 
@@ -80,6 +80,13 @@ const adminApi = api.injectEndpoints({
         body,
       }),
     }),
+    previewTalkgroupImport: builder.mutation<TalkgroupImportPreview, FormData>({
+      query: (body) => ({
+        url: "/admin/import/talkgroups/preview",
+        method: "POST",
+        body,
+      }),
+    }),
   }),
 });
 
@@ -89,4 +96,5 @@ export const {
   useImportGroupsMutation,
   useImportTagsMutation,
   useRrPreviewCSVMutation,
+  usePreviewTalkgroupImportMutation,
 } = adminApi;

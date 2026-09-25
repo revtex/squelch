@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Systems, rebuilt.** The systems sit on the left with their LED colour,
+  auto/manual marker, talkgroup count and calls in the last 24 hours; the
+  chosen one shows its **Talkgroups**, **Units** and **Blocked** tabs on the
+  right (a phone shows the list first). Talkgroups carry calls in 24 hours
+  and last heard, filter by group, tag or **unlabeled**, and take bulk
+  changes from a selection bar (set group, tag or LED; block; delete). A
+  talkgroup opens with its activity and fields to edit in place, a **Listen
+  to recent calls** link into the scanner search, and block and delete
+  actions. **Add talkgroup** has **Save and add another**. Import moves onto
+  the system: choose a Squelch, rdio-scanner or RadioReference CSV, review
+  what is new, what changes field by field and which rows were skipped, pick
+  **Fill in blanks only** or **Overwrite**, untick rows, then apply. System
+  settings warn when the number changes and ask for the label before a
+  delete; **Reorder** replaces the order field. Units show when each radio
+  was last heard. Every change is written to the audit trail in plain words.
 - **Settings, rebuilt.** One page of named groups (General, Scanner, Radio
   data, Ingest & audio, Storage, Sharing, Access & security, Integrations,
   Logging) with a **Find a setting** box, group links under the title, and a

@@ -177,32 +177,49 @@ A block is only as reliable as the client address Squelch sees. A device that Sq
 
 ## Systems
 
-Systems represent your radio systems (e.g. a county trunked system, a conventional channel group). Each system contains **talkgroups** and **units**.
+A system is one radio system: a county trunked system, a set of conventional channels, an SDRTrunk source. Each system owns its **talkgroups** and **units**. The page lists your systems on the left (on a phone, the list comes first and a system opens over it) with an LED swatch, whether talkgroups are created automatically (**auto**) or only by you (**manual**), how many talkgroups it has and its calls in the last 24 hours. Choosing a system shows its talkgroups, units and blocked list on the right.
 
-### System Settings
+Most systems appear on their own the first time a recorder uploads to them, when **Settings → Radio data → Create systems from uploads** allows it. **Add system** is for setting one up before the first call arrives. **Reorder** moves systems up and down the scanner's display order.
 
-- **Label** — display name shown in the scanner
-- **Order** — controls display position (lower numbers appear first)
-- **TG Auto-Populate** — when enabled, talkgroups are automatically created from incoming calls for this system. If the incoming call includes additional metadata (talkgroup name, label, group, tag, or unit information), those are created or updated automatically as well.
+### System settings
+
+- **System number** — must match what your recorder sends. Changing it stops uploads that still use the old number; the field warns you when you do.
+- **Label** — shown on the scanner display and in the admin.
+- **LED colour** — lights when a call on this system plays; talkgroups without their own colour use it.
+- **Auto-populate talkgroups** — unknown talkgroups on this system are created from uploads, unlabeled, so you can name them later. With it off, calls for unknown talkgroups are dropped.
+- **Delete system** — removes the system, its talkgroups and its units; you type the label to confirm. Calls stay and show their numbers only.
 
 ### Talkgroups
 
-Each talkgroup has:
+The table shows each talkgroup's number, label and name, group, tag, calls in the last 24 hours and when it was last heard. Search matches numbers, labels, names, groups and tags; the group and tag menus narrow the list, and the **N unlabeled** button shows only the talkgroups auto-populate created that nobody has named yet. A **blocked** marker means uploads for that number are dropped.
 
-| Field        | Description                                      |
-| ------------ | ------------------------------------------------ |
-| Talkgroup ID | Numeric identifier matching your recorder output |
-| Label        | Short display label (e.g. "FD Dispatch")         |
-| Name         | Longer descriptive name                          |
-| Frequency    | Optional frequency in Hz                         |
-| Group        | Category grouping (from Groups panel)            |
-| Tag          | Classification tag (from Tags panel)             |
+Opening a talkgroup shows its activity (calls in 24 hours, last heard, average call length) with the fields below it to edit in place:
 
-You can search talkgroups by ID, label, or name. Large lists are virtualized for performance.
+| Field            | Description                                      |
+| ---------------- | ------------------------------------------------ |
+| Talkgroup number | Decimal ID matching your recorder output         |
+| Label            | Short display label (e.g. "FD Dispatch")         |
+| Name             | Longer descriptive name                          |
+| Group            | Category (from Groups & Tags)                    |
+| Tag              | Classification tag (from Groups & Tags)          |
+| LED colour       | Overrides the system's colour for this talkgroup |
+| Frequency        | Optional, in MHz                                 |
+
+Under **More**, **Listen to recent calls** opens the scanner's search on that talkgroup, **Block from uploads** drops future calls on it, and **Delete talkgroup** removes it (its calls stay, labelled by number). **Add talkgroup** has **Save and add another**, which keeps the group, tag and colour for the next one.
+
+Ticking rows shows a selection bar for bulk changes: set the group, tag or LED colour for all of them, block them, or delete them.
+
+#### Import
+
+**Import** on a system takes a CSV in Squelch, rdio-scanner or RadioReference format; the format is detected from the header. Nothing changes until you review the result: the wizard lists what is new, what would change (field by field, now and after) and which rows it could not read. **Fill in blanks only** sets only fields that are empty today; **Overwrite** replaces label, name, group and tag with the file's values. Untick any talkgroup you want left alone, then **Apply**. Groups and tags named in the file are created if they do not exist. **Export** downloads the system's talkgroups as CSV.
 
 ### Units
 
-Each unit has a **Unit ID** and **Label**. Units represent individual radios on a system. You can search by ID or label.
+Units name individual radios. Each has a **Unit number**, a **Label** and when it was last heard. Search by number or label; open one to rename or delete it.
+
+### Blocked
+
+Talkgroup numbers whose uploads are dropped before they are stored, for talkgroups auto-populate keeps creating that you never want. Add a number to block it; the ✕ on a chip unblocks it. Blocking keeps the talkgroup and its calls; delete them separately if you want them gone.
 
 ---
 
@@ -479,8 +496,8 @@ Utilities for bulk data management and maintenance.
 
 ### CSV Import
 
-- **Import Talkgroups** — upload a CSV to bulk-create or update talkgroups for a system. Choose between overwrite (update existing) or skip (keep existing) for duplicates.
-- **Import Units** — same as above for unit records.
+- **Import Talkgroups** — the same reviewed import as **Systems → Import**, for when you want to pick the system here.
+- **Import Units** — upload a CSV to bulk-create or update unit records for a system.
 
 Both report how many records were inserted, updated, and skipped.
 

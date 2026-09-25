@@ -1,10 +1,11 @@
 import { readStored } from "@/shared/utils/storage";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useGetSetupStatusQuery } from "@/app/api";
 import { useAppDispatch, useAppSelector } from "@/app/store";
 import { setSetupStatus, selectToken } from "@/features/auth";
 import { expireAvoids, setPaused, setLive, resetDisplay } from "./scannerSlice";
+import { setSystemFilters, setTalkgroupFilters } from "./callsSlice";
 import { useScanner } from "./hooks/useScanner";
 import { useTGSelectionSync } from "./hooks/useTGSelectionSync";
 import { useKeypadBeeps } from "./hooks/useKeypadBeeps";
@@ -16,6 +17,12 @@ import SelectTGPanel from "./components/SelectTGPanel";
 import SearchPanel from "./components/SearchPanel";
 import BookmarksPanel from "./components/BookmarksPanel";
 import { isMobilePlatform } from "@/shared/utils/platform";
+
+function idParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 export default function Scanner() {
   const navigate = useNavigate();
@@ -48,8 +55,19 @@ export default function Scanner() {
     return {};
   });
 
+  // `/?system=<id>&talkgroup=<id>` (from the admin) opens the search on one
+  // talkgroup. The ids are row ids, the same ones the search filters use.
+  const [searchParams] = useSearchParams();
+  const deepSystem = idParam(searchParams.get("system"));
+  const deepTalkgroup = idParam(searchParams.get("talkgroup"));
+  const hasDeepLink = deepSystem != null || deepTalkgroup != null;
+  useEffect(() => {
+    if (deepSystem != null) dispatch(setSystemFilters([deepSystem]));
+    if (deepTalkgroup != null) dispatch(setTalkgroupFilters([deepTalkgroup]));
+  }, [dispatch, deepSystem, deepTalkgroup]);
+
   const [selectTGOpen, setSelectTGOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(hasDeepLink);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
 
   const handleToggleSelectTG = useCallback(() => {

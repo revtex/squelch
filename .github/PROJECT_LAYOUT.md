@@ -177,8 +177,12 @@ frontend/
                            useAdminWebSocket, useNavigationGuard, useWsQuery, …)
                            — underscore prefix marks "not a feature"
         users/             one folder per admin tab; each has <Panel>.tsx,
-        systems/           index.ts barrel, optional sub-feature hooks, slice,
-        api-keys/          components, and colocated tests
+        api-keys/          index.ts barrel, optional sub-feature hooks, slice,
+        groups-tags/       components, and colocated tests
+        systems/           SystemsPanel (master–detail) + SystemList/SystemForm,
+                           TalkgroupsTab/TalkgroupDetails/TalkgroupForm/
+                           TalkgroupFields, UnitsTab, BlockedTab, ImportWizard,
+                           systems.ts helpers
         dashboards/        sub-tab chrome
           DashboardsPanel.tsx
           activity/        ActivityPanel + activitySlice + useAdminActivity
@@ -186,7 +190,7 @@ frontend/
         logs/              LogsPanel + useAdminLogs
         legacy-usage/  radio-reference/  tools/  settings/
         dir-monitor/   forwarding/   shared-links/
-        groups-tags/   transcription/
+        transcription/
     shared/                lowest layer — cross-feature primitives. No imports
                            from features/ (a few documented exceptions live in
                            eslint.config.js for the WS / Call-type debt).

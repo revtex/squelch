@@ -42,7 +42,17 @@ export interface AdminSystem {
   blacklistsJson: string | null;
   led: string | null;
   order: number;
+  /** Counts and activity, from systems.list. */
+  talkgroups: number;
+  units: number;
+  calls24h: number;
+  lastCall: number | null;
+  /** Talkgroup numbers auto-populate skips. */
+  blocked: number[];
 }
+
+/** What create and update take: the fields the admin edits. */
+export type AdminSystemInput = Pick<AdminSystem, "systemId" | "label" | "autoPopulateTalkgroups" | "blacklistsJson" | "led" | "order">;
 
 export interface AdminTalkgroup {
   id: number;
@@ -55,7 +65,13 @@ export interface AdminTalkgroup {
   groupId: number | null;
   tagId: number | null;
   order: number;
+  /** Activity, present when one system's talkgroups were asked for. */
+  calls24h?: number;
+  lastHeard?: number | null;
+  avgDurationMs?: number;
 }
+
+export type AdminTalkgroupInput = Pick<AdminTalkgroup, "systemId" | "talkgroupId" | "label" | "name" | "frequency" | "led" | "groupId" | "tagId" | "order">;
 
 export interface AdminUnit {
   id: number;
@@ -63,6 +79,65 @@ export interface AdminUnit {
   unitId: number;
   label: string | null;
   order: number;
+  /** Present when one system's units were asked for. */
+  lastHeard?: number | null;
+}
+
+export type AdminUnitInput = Pick<AdminUnit, "systemId" | "unitId" | "label" | "order">;
+
+/** Fields talkgroups.bulk may set; null clears, absent leaves alone. */
+export interface TalkgroupBulkPayload {
+  ids: number[];
+  groupId?: number | null;
+  tagId?: number | null;
+  led?: string | null;
+}
+
+/** One talkgroup read from a CSV, in the file's own words. */
+export interface ImportRow {
+  row: number;
+  talkgroupId: number;
+  label?: string;
+  name?: string;
+  group?: string;
+  tag?: string;
+  led?: string;
+  frequency?: number;
+  order?: number;
+}
+
+export interface ImportProblem {
+  row: number;
+  reason: string;
+}
+
+export interface ImportChange {
+  field: string;
+  now: string;
+  after: string;
+}
+
+export interface ImportPreviewRow extends ImportRow {
+  status: "new" | "unchanged" | "changed";
+  changes: ImportChange[];
+}
+
+export interface TalkgroupImportPreview {
+  format: "squelch" | "rdio-scanner" | "radioreference";
+  rows: ImportPreviewRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
+  changed: number;
+}
+
+export type ImportMode = "fill" | "overwrite";
+
+export interface TalkgroupImportResult {
+  ok: boolean;
+  created: number;
+  updated: number;
+  unchanged: number;
 }
 
 export interface AdminGroup {

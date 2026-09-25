@@ -1,1162 +1,575 @@
-import { useState, useRef, useCallback, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { Pencil, Trash2, Plus, ChevronDown, Radio, Users } from "lucide-react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowUpDown, ChevronLeft, Download, Plus, Settings2, Upload } from "lucide-react";
 import {
-  useListSystemsQuery,
+  PageHeader,
+  formatAgo,
+  plural,
+  useBlockTalkgroupMutation,
+  useBulkTalkgroupsMutation,
   useCreateSystemMutation,
-  useUpdateSystemMutation,
-  useDeleteSystemMutation,
-  useListTalkgroupsQuery,
   useCreateTalkgroupMutation,
-  useUpdateTalkgroupMutation,
-  useDeleteTalkgroupMutation,
-  useListUnitsQuery,
   useCreateUnitMutation,
-  useUpdateUnitMutation,
+  useDeleteSystemMutation,
+  useDeleteTalkgroupMutation,
+  useDeleteTalkgroupsMutation,
   useDeleteUnitMutation,
+  useDetails,
+  useLazyExportTalkgroupsQuery,
   useListGroupsQuery,
+  useListSystemsQuery,
   useListTagsQuery,
+  useListTalkgroupsQuery,
+  useListUnitsQuery,
+  useReorderSystemsMutation,
+  useToast,
+  useUnblockTalkgroupMutation,
+  useUpdateSystemMutation,
+  useUpdateTalkgroupMutation,
+  useUpdateUnitMutation,
 } from "@/features/admin/_shell";
-import type { AdminSystem, AdminTalkgroup, AdminUnit } from "@/types";
+import type { AdminSystemInput, AdminTalkgroup, AdminTalkgroupInput, AdminUnit, AdminUnitInput } from "@/types";
+import BlockedTab from "./BlockedTab";
+import ImportWizard from "./ImportWizard";
+import SystemForm from "./SystemForm";
+import SystemList from "./SystemList";
+import TalkgroupDetails from "./TalkgroupDetails";
+import TalkgroupForm from "./TalkgroupForm";
+import TalkgroupsTab, { type BulkChange } from "./TalkgroupsTab";
+import UnitsTab, { UnitForm } from "./UnitsTab";
+import { systemsInOrder, tabFrom, type Tab } from "./systems";
 
-// ─── System card ───
+type Panel =
+  | { kind: "system-create" }
+  | { kind: "system-edit" }
+  | { kind: "import" }
+  | { kind: "talkgroup"; id: number }
+  | { kind: "talkgroup-create" }
+  | { kind: "unit"; id: number }
+  | { kind: "unit-create" };
 
-function SystemCard({
-  system,
-  expanded,
-  onToggle,
-  onEdit,
-  onDelete,
-  onToggleAutoPopulate,
-  talkgroups,
-  units,
-  onEditTg,
-  onDeleteTg,
-  onCreateTg,
-  onEditUnit,
-  onDeleteUnit,
-  onCreateUnit,
-  unitSearchFilter,
-  onUnitSearchChange,
-  talkgroupSearchFilter,
-  onTalkgroupSearchChange,
-}: {
-  system: AdminSystem;
-  expanded: boolean;
-  onToggle: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggleAutoPopulate: () => void;
-  talkgroups: AdminTalkgroup[];
-  units: AdminUnit[];
-  onEditTg: (tg: AdminTalkgroup) => void;
-  onDeleteTg: (tg: AdminTalkgroup) => void;
-  onCreateTg: () => void;
-  onEditUnit: (u: AdminUnit) => void;
-  onDeleteUnit: (u: AdminUnit) => void;
-  onCreateUnit: () => void;
-  unitSearchFilter: string;
-  onUnitSearchChange: (value: string) => void;
-  talkgroupSearchFilter: string;
-  onTalkgroupSearchChange: (value: string) => void;
-}) {
-  return (
-    <div className="card bg-base-200">
-      <div className="card-body p-4">
-        {/* Header row — always visible */}
-        <div className="flex flex-col gap-2">
-          <button
-            className="flex items-center gap-3 min-w-0 text-left cursor-pointer"
-            onClick={onToggle}
-          >
-            <ChevronDown
-              className={`w-5 h-5 shrink-0 transition-transform ${expanded ? "" : "-rotate-90"}`}
-            />
-            <div className="min-w-0">
-              <span className="font-semibold text-base">{system.label}</span>
-              <span className="text-sm text-base-content/60 ml-2">
-                ID {system.systemId}
-              </span>
-            </div>
-          </button>
+const TABS: { id: Tab; label: string }[] = [
+  { id: "talkgroups", label: "Talkgroups" },
+  { id: "units", label: "Units" },
+  { id: "blocked", label: "Blocked" },
+];
 
-          <div className="flex items-center gap-3 flex-wrap pl-8">
-            <div
-              className="tooltip tooltip-bottom flex items-center gap-2 text-xs text-base-content/60"
-              data-tip="Talkgroups"
-            >
-              <Radio className="w-3.5 h-3.5" />
-              {talkgroups.length}
-            </div>
-            <div
-              className="tooltip tooltip-bottom flex items-center gap-2 text-xs text-base-content/60"
-              data-tip="Units"
-            >
-              <Users className="w-3.5 h-3.5" />
-              {units.length}
-            </div>
-            <label className="flex items-center gap-1 cursor-pointer">
-              <span className="text-xs text-base-content/60">
-                TG Auto Populate
-              </span>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary toggle-xs"
-                checked={system.autoPopulateTalkgroups === 1}
-                onChange={onToggleAutoPopulate}
-              />
-            </label>
-            <div className="flex-1" />
-            <button
-              className="btn btn-ghost btn-sm btn-square"
-              onClick={onEdit}
-              aria-label="Edit system"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button
-              className="btn btn-ghost btn-sm btn-square"
-              onClick={onDelete}
-              aria-label="Delete system"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Expanded content */}
-        {expanded && (
-          <div className="mt-4 flex flex-col gap-6">
-            {/* Talkgroups */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  <Radio className="w-4 h-4" />
-                  Talkgroups ({talkgroups.length})
-                </h4>
-                <button className="btn btn-primary btn-xs" onClick={onCreateTg}>
-                  <Plus className="w-3 h-3" />
-                  Add
-                </button>
-              </div>
-              <div className="mb-3">
-                <input
-                  type="text"
-                  placeholder="Search by ID, label, or name..."
-                  value={talkgroupSearchFilter}
-                  onChange={(e) => onTalkgroupSearchChange(e.target.value)}
-                  className="input input-sm input-bordered w-full"
-                />
-              </div>
-              <TalkgroupList
-                talkgroups={talkgroups}
-                onEdit={onEditTg}
-                onDelete={onDeleteTg}
-                searchFilter={talkgroupSearchFilter}
-              />
-            </div>
-
-            {/* Units */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-semibold text-sm flex items-center gap-2">
-                  <Users className="w-4 h-4" />
-                  Units ({units.length})
-                </h4>
-                <button
-                  className="btn btn-primary btn-xs"
-                  onClick={onCreateUnit}
-                >
-                  <Plus className="w-3 h-3" />
-                  Add
-                </button>
-              </div>
-              <div className="mb-3">
-                <input
-                  type="text"
-                  placeholder="Search by ID or label..."
-                  value={unitSearchFilter}
-                  onChange={(e) => onUnitSearchChange(e.target.value)}
-                  className="input input-sm input-bordered w-full"
-                />
-              </div>
-              {units.length === 0 ? (
-                <p className="text-sm opacity-60 py-2">No units</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="table table-zebra table-xs w-full">
-                    <thead>
-                      <tr>
-                        <th>Unit ID</th>
-                        <th>Label</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {units
-                        .filter((u) => {
-                          if (unitSearchFilter === "") return true;
-                          const q = unitSearchFilter.toLowerCase();
-                          return (
-                            String(u.unitId).includes(q) ||
-                            (u.label ?? "").toLowerCase().includes(q)
-                          );
-                        })
-                        .map((u) => (
-                          <tr key={u.id}>
-                            <td>{u.unitId}</td>
-                            <td>{u.label ?? "—"}</td>
-                            <td className="flex gap-1">
-                              <button
-                                className="btn btn-ghost btn-xs"
-                                onClick={() => onEditUnit(u)}
-                                aria-label="Edit unit"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
-                              <button
-                                className="btn btn-ghost btn-xs"
-                                onClick={() => onDeleteUnit(u)}
-                                aria-label="Delete unit"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+const desktopQuery = "(min-width: 768px)";
+function subscribeDesktop(cb: () => void) {
+  if (typeof window.matchMedia !== "function") return () => undefined;
+  const mq = window.matchMedia(desktopQuery);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+function isDesktop() {
+  return typeof window.matchMedia !== "function" || window.matchMedia(desktopQuery).matches;
 }
 
-// ─── Virtualized talkgroup list ───
-
-function TalkgroupList({
-  talkgroups,
-  onEdit,
-  onDelete,
-  searchFilter,
-}: {
-  talkgroups: AdminTalkgroup[];
-  onEdit: (tg: AdminTalkgroup) => void;
-  onDelete: (tg: AdminTalkgroup) => void;
-  searchFilter: string;
-}) {
-  const parentRef = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(() => {
-    if (!searchFilter) return talkgroups;
-    const q = searchFilter.toLowerCase();
-    return talkgroups.filter(
-      (tg) =>
-        String(tg.talkgroupId).includes(q) ||
-        (tg.label ?? "").toLowerCase().includes(q) ||
-        (tg.name ?? "").toLowerCase().includes(q),
-    );
-  }, [talkgroups, searchFilter]);
-
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: filtered.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 41,
-    overscan: 10,
-  });
-
-  if (filtered.length === 0) {
-    return <p className="text-sm opacity-60 py-2">No talkgroups</p>;
-  }
-
-  // For small lists, skip virtualization
-  if (filtered.length <= 50) {
-    return (
-      <div className="overflow-x-auto">
-        <table className="table table-zebra table-xs w-full">
-          <thead>
-            <tr>
-              <th>TG ID</th>
-              <th>Label</th>
-              <th>Name</th>
-              <th>Frequency</th>
-              <th>Group</th>
-              <th>Tag</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((tg) => (
-              <tr key={tg.id}>
-                <td>{tg.talkgroupId}</td>
-                <td>{tg.label ?? "—"}</td>
-                <td>{tg.name ?? "—"}</td>
-                <td>
-                  {tg.frequency != null
-                    ? `${(tg.frequency / 1e6).toFixed(4)} MHz`
-                    : "—"}
-                </td>
-                <td>{tg.groupId ?? "—"}</td>
-                <td>{tg.tagId ?? "—"}</td>
-                <td className="flex gap-1">
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => onEdit(tg)}
-                    aria-label="Edit talkgroup"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => onDelete(tg)}
-                    aria-label="Delete talkgroup"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="table table-zebra table-xs w-full">
-          <thead>
-            <tr>
-              <th>TG ID</th>
-              <th>Label</th>
-              <th>Name</th>
-              <th>Frequency</th>
-              <th>Group</th>
-              <th>Tag</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-        </table>
-      </div>
-      <div ref={parentRef} className="max-h-100 overflow-auto">
-        <div
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-            position: "relative",
-          }}
-        >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const tg = filtered[virtualRow.index];
-            return (
-              <div
-                key={tg.id}
-                className="flex items-center text-xs border-b border-base-300"
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                <span className="w-[14%] px-2 truncate">{tg.talkgroupId}</span>
-                <span className="w-[14%] px-2 truncate">{tg.label ?? "—"}</span>
-                <span className="w-[14%] px-2 truncate">{tg.name ?? "—"}</span>
-                <span className="w-[18%] px-2 truncate">
-                  {tg.frequency != null
-                    ? `${(tg.frequency / 1e6).toFixed(4)} MHz`
-                    : "—"}
-                </span>
-                <span className="w-[10%] px-2 truncate">
-                  {tg.groupId ?? "—"}
-                </span>
-                <span className="w-[10%] px-2 truncate">{tg.tagId ?? "—"}</span>
-                <span className="w-[20%] px-2 flex gap-1">
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => onEdit(tg)}
-                    aria-label="Edit talkgroup"
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => onDelete(tg)}
-                    aria-label="Delete talkgroup"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+function messageOf(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
-// ─── Main panel ───
-
-const LED_COLORS = [
-  "blue",
-  "cyan",
-  "green",
-  "magenta",
-  "red",
-  "white",
-  "yellow",
-] as const;
-
-interface SystemFormState {
-  systemId: string;
-  label: string;
-  led: string;
-  blacklists: string;
+function download(name: string, text: string) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-interface TgFormState {
-  talkgroupId: string;
-  label: string;
-  name: string;
-  frequency: string;
-  led: string;
-  groupId: string;
-  tagId: string;
+function numberParam(v: string | null): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
 }
 
-interface UnitFormState {
-  unitId: string;
-  label: string;
-}
-
+/** Systems on the left, the chosen one's talkgroups, units and blocked list on the right. */
 export default function SystemsPanel() {
-  const { data: systems, isLoading: loadingSystems } = useListSystemsQuery();
-  const { data: allTalkgroups } = useListTalkgroupsQuery();
-  const { data: allUnits } = useListUnitsQuery();
+  const [search, setSearch] = useSearchParams();
+  const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => true);
+  const toast = useToast();
+
+  const { data: systemsData, isLoading: loadingSystems } = useListSystemsQuery();
   const { data: groups } = useListGroupsQuery();
   const { data: tags } = useListTagsQuery();
+  const systems = useMemo(() => systemsInOrder(systemsData), [systemsData]);
+
+  const paramId = numberParam(search.get("system"));
+  const groupParam = numberParam(search.get("group"));
+  const tagParam = numberParam(search.get("tag"));
+  const tab = tabFrom(search.get("tab"));
+
   const [createSystem] = useCreateSystemMutation();
   const [updateSystem] = useUpdateSystemMutation();
   const [deleteSystem] = useDeleteSystemMutation();
+  const [reorderSystems] = useReorderSystemsMutation();
+  const [blockTalkgroup] = useBlockTalkgroupMutation();
+  const [unblockTalkgroup] = useUnblockTalkgroupMutation();
   const [createTalkgroup] = useCreateTalkgroupMutation();
   const [updateTalkgroup] = useUpdateTalkgroupMutation();
   const [deleteTalkgroup] = useDeleteTalkgroupMutation();
+  const [deleteTalkgroups] = useDeleteTalkgroupsMutation();
+  const [bulkTalkgroups] = useBulkTalkgroupsMutation();
   const [createUnit] = useCreateUnitMutation();
   const [updateUnit] = useUpdateUnitMutation();
   const [deleteUnit] = useDeleteUnitMutation();
+  const [exportTalkgroups] = useLazyExportTalkgroupsQuery();
 
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
-  const [unitSearchFilters, setUnitSearchFilters] = useState<
-    Map<number, string>
-  >(new Map());
-  const [talkgroupSearchFilters, setTalkgroupSearchFilters] = useState<
-    Map<number, string>
-  >(new Map());
+  const [reordering, setReordering] = useState(false);
+  const [order, setOrder] = useState<number[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const panel = useDetails<Panel>();
+  const p = panel.selected;
 
-  // System modal
-  const [sysModalOpen, setSysModalOpen] = useState(false);
-  const [editingSysId, setEditingSysId] = useState<number | null>(null);
-  const [sysForm, setSysForm] = useState<SystemFormState>({
-    systemId: "",
-    label: "",
-    led: "",
-    blacklists: "",
+  // A `?group=` / `?tag=` link from the Groups page lands on the first system
+  // that uses it; otherwise the URL's system, or on desktop the first one.
+  const talkgroupsForLink = useListTalkgroupsQuery(undefined, {
+    skip: groupParam == null && tagParam == null,
   });
+  const linkedSystem = useMemo(() => {
+    if (groupParam == null && tagParam == null) return null;
+    const hit = (talkgroupsForLink.data ?? []).find(
+      (t) => (groupParam != null && t.groupId === groupParam) || (tagParam != null && t.tagId === tagParam),
+    );
+    return hit ? hit.systemId : null;
+  }, [talkgroupsForLink.data, groupParam, tagParam]);
 
-  // Talkgroup modal
-  const [tgModalOpen, setTgModalOpen] = useState(false);
-  const [editingTgId, setEditingTgId] = useState<number | null>(null);
-  const [tgSystemId, setTgSystemId] = useState<number>(0);
-  const [tgForm, setTgForm] = useState<TgFormState>({
-    talkgroupId: "",
-    label: "",
-    name: "",
-    frequency: "",
-    led: "",
-    groupId: "",
-    tagId: "",
-  });
+  const selectedId = paramId ?? linkedSystem ?? (desktop && systems.length > 0 ? systems[0].id : null);
+  const system = systems.find((s) => s.id === selectedId) ?? null;
 
-  // Unit modal
-  const [unitModalOpen, setUnitModalOpen] = useState(false);
-  const [editingUnitId, setEditingUnitId] = useState<number | null>(null);
-  const [unitSystemId, setUnitSystemId] = useState<number>(0);
-  const [unitForm, setUnitForm] = useState<UnitFormState>({
-    unitId: "",
-    label: "",
-  });
+  const { data: talkgroupsData, isLoading: loadingTalkgroups } = useListTalkgroupsQuery(system?.id, { skip: !system });
+  const { data: unitsData, isLoading: loadingUnits } = useListUnitsQuery(system?.id, { skip: !system });
+  const talkgroups = useMemo(() => (system ? (talkgroupsData ?? []).filter((t) => t.systemId === system.id) : []), [talkgroupsData, system]);
+  const units = useMemo(() => (system ? (unitsData ?? []).filter((u) => u.systemId === system.id) : []), [unitsData, system]);
+  const blockedSet = useMemo(() => new Set(system?.blocked ?? []), [system]);
 
-  const showError = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 5000);
-  }, []);
-
-  const sortedSystems = useMemo(
-    () => (systems ? [...systems].sort((a, b) => a.order - b.order) : []),
-    [systems],
+  const setParams = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(search);
+      for (const [k, v] of Object.entries(patch)) {
+        if (v == null) next.delete(k);
+        else next.set(k, v);
+      }
+      setSearch(next, { replace: true });
+    },
+    [search, setSearch],
   );
 
-  const tgBySystem = useMemo(() => {
-    const map = new Map<number, AdminTalkgroup[]>();
-    if (allTalkgroups) {
-      for (const tg of allTalkgroups) {
-        const list = map.get(tg.systemId) ?? [];
-        list.push(tg);
-        map.set(tg.systemId, list);
-      }
-    }
-    return map;
-  }, [allTalkgroups]);
-
-  const unitsBySystem = useMemo(() => {
-    const map = new Map<number, AdminUnit[]>();
-    if (allUnits) {
-      for (const u of allUnits) {
-        const list = map.get(u.systemId) ?? [];
-        list.push(u);
-        map.set(u.systemId, list);
-      }
-    }
-    return map;
-  }, [allUnits]);
-
-  // ── Expand / collapse ──
-
-  const toggleExpand = (id: number) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const selectSystem = (id: number | null) => {
+    panel.reset();
+    setFormError(null);
+    setParams({ system: id == null ? null : String(id), group: null, tag: null, tab: null });
+  };
+  const selectTab = (next: Tab) => {
+    panel.reset();
+    setFormError(null);
+    setParams({ tab: next === "talkgroups" ? null : next });
   };
 
-  // ── System CRUD ──
-
-  const openCreateSystem = () => {
-    setEditingSysId(null);
-    setSysForm({ systemId: "", label: "", led: "", blacklists: "" });
-    setSysModalOpen(true);
-  };
-
-  const openEditSystem = (sys: AdminSystem) => {
-    setEditingSysId(sys.id);
-    setSysForm({
-      systemId: String(sys.systemId),
-      label: sys.label,
-      led: sys.led ?? "",
-      blacklists: sys.blacklistsJson
-        ? (() => {
-            try {
-              const arr = JSON.parse(sys.blacklistsJson) as number[];
-              return arr.join(",");
-            } catch {
-              return "";
-            }
-          })()
-        : "",
-    });
-    setSysModalOpen(true);
-  };
-
-  const handleSystemSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Parse blacklists CSV → JSON array
-    const blacklistIds = sysForm.blacklists
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s !== "")
-      .map(Number)
-      .filter((n) => !isNaN(n));
-    const blacklistsJson =
-      blacklistIds.length > 0 ? JSON.stringify(blacklistIds) : null;
+  const run = async (work: () => Promise<void>, fallback: string): Promise<boolean> => {
+    setBusy(true);
+    setFormError(null);
     try {
-      if (editingSysId != null) {
-        const existing = sortedSystems.find((s) => s.id === editingSysId);
-        if (!existing) {
-          showError("System not found");
-          return;
-        }
-        await updateSystem({
-          id: editingSysId,
-          systemId: Number(sysForm.systemId),
-          label: sysForm.label,
-          autoPopulateTalkgroups: existing.autoPopulateTalkgroups,
-          led: sysForm.led || null,
-          blacklistsJson,
-          order: existing.order,
-        }).unwrap();
-      } else {
-        await createSystem({
-          systemId: Number(sysForm.systemId),
-          label: sysForm.label,
-          autoPopulateTalkgroups: 1,
-          blacklistsJson,
-          led: sysForm.led || null,
-          order: sortedSystems.length,
-        }).unwrap();
-      }
-      setSysModalOpen(false);
-    } catch {
-      showError(
-        editingSysId ? "Failed to update system" : "Failed to create system",
-      );
+      await work();
+      return true;
+    } catch (e) {
+      const msg = messageOf(e, fallback);
+      setFormError(msg);
+      toast.error(msg);
+      return false;
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleDeleteSystem = async (sys: AdminSystem) => {
-    if (
-      !window.confirm(
-        `Delete system "${sys.label}" and all its talkgroups/units?`,
-      )
-    )
-      return;
-    try {
-      await deleteSystem(sys.id).unwrap();
-    } catch {
-      showError("Failed to delete system");
+  // ── systems ──
+  const saveSystem = async (values: AdminSystemInput) => {
+    if (p?.kind === "system-create") {
+      const ok = await run(async () => {
+        const created = await createSystem(values).unwrap();
+        toast.success(`Created ${values.label}.`);
+        panel.close();
+        setParams({ system: String(created.id), tab: null });
+      }, "The system could not be created.");
+      return ok;
     }
+    if (!system) return false;
+    return run(async () => {
+      await updateSystem({ ...values, id: system.id }).unwrap();
+      toast.success(`Saved ${values.label}.`);
+      panel.close();
+    }, "The system could not be saved.");
   };
+  const removeSystem = () =>
+    system &&
+    run(async () => {
+      const r = await deleteSystem(system.id).unwrap();
+      toast.success(`Deleted ${system.label} with ${plural(r.talkgroups, "talkgroup")} and ${plural(r.units, "unit")}.`);
+      panel.reset();
+      setParams({ system: null, tab: null });
+    }, "The system could not be deleted.");
 
-  const handleToggleAutoPopulate = async (sys: AdminSystem) => {
-    try {
-      await updateSystem({
-        id: sys.id,
-        systemId: sys.systemId,
-        label: sys.label,
-        autoPopulateTalkgroups: sys.autoPopulateTalkgroups ? 0 : 1,
-        led: sys.led ?? null,
-        blacklistsJson: sys.blacklistsJson ?? null,
-        order: sys.order,
-      }).unwrap();
-    } catch {
-      showError("Failed to update system");
+  const shown = order ? order.map((id) => systems.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s) : systems;
+  const move = (id: number, dir: -1 | 1) => {
+    const ids = shown.map((s) => s.id);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setOrder(ids);
+  };
+  const finishReorder = async () => {
+    if (order && order.join() !== systems.map((s) => s.id).join()) {
+      await run(async () => {
+        await reorderSystems(order).unwrap();
+        toast.success("Display order saved.");
+      }, "The order could not be saved.");
     }
+    setReordering(false);
+    setOrder(null);
   };
 
-  // ── Talkgroup CRUD ──
-
-  const openCreateTg = (systemId: number) => {
-    setEditingTgId(null);
-    setTgSystemId(systemId);
-    setTgForm({
-      talkgroupId: "",
-      label: "",
-      name: "",
-      frequency: "",
-      led: "",
-      groupId: "",
-      tagId: "",
-    });
-    setTgModalOpen(true);
+  // ── blocked ──
+  const block = (talkgroupId: number) =>
+    system
+      ? run(async () => {
+          await blockTalkgroup({ id: system.id, talkgroupId }).unwrap();
+          toast.success(`Blocked ${talkgroupId}.`);
+        }, "The talkgroup could not be blocked.")
+      : Promise.resolve(false);
+  const unblock = (talkgroupId: number) =>
+    system &&
+    void run(async () => {
+      await unblockTalkgroup({ id: system.id, talkgroupId }).unwrap();
+      toast.success(`Unblocked ${talkgroupId}.`);
+    }, "The talkgroup could not be unblocked.");
+  const blockMany = async (talkgroupIds: number[]) => {
+    if (!system) return false;
+    return run(async () => {
+      for (const talkgroupId of talkgroupIds) await blockTalkgroup({ id: system.id, talkgroupId }).unwrap();
+      toast.success(`Blocked ${plural(talkgroupIds.length, "talkgroup")}.`);
+    }, "The talkgroups could not be blocked.");
   };
 
-  const openEditTg = (tg: AdminTalkgroup) => {
-    setEditingTgId(tg.id);
-    setTgSystemId(tg.systemId);
-    setTgForm({
-      talkgroupId: String(tg.talkgroupId),
-      label: tg.label ?? "",
-      name: tg.name ?? "",
-      frequency: tg.frequency != null ? String(tg.frequency) : "",
-      led: tg.led ?? "",
-      groupId: tg.groupId != null ? String(tg.groupId) : "",
-      tagId: tg.tagId != null ? String(tg.tagId) : "",
-    });
-    setTgModalOpen(true);
-  };
-
-  const handleTgSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editingTgId != null) {
-        await updateTalkgroup({
-          id: editingTgId,
-          talkgroupId: Number(tgForm.talkgroupId),
-          label: tgForm.label || null,
-          name: tgForm.name || null,
-          frequency: tgForm.frequency ? Number(tgForm.frequency) : null,
-          led: tgForm.led || null,
-          groupId: tgForm.groupId ? Number(tgForm.groupId) : null,
-          tagId: tgForm.tagId ? Number(tgForm.tagId) : null,
-        }).unwrap();
-      } else {
-        await createTalkgroup({
-          systemId: tgSystemId,
-          talkgroupId: Number(tgForm.talkgroupId),
-          label: tgForm.label || null,
-          name: tgForm.name || null,
-          frequency: tgForm.frequency ? Number(tgForm.frequency) : null,
-          led: tgForm.led || null,
-          groupId: tgForm.groupId ? Number(tgForm.groupId) : null,
-          tagId: tgForm.tagId ? Number(tgForm.tagId) : null,
-          order: tgBySystem.get(tgSystemId)?.length ?? 0,
-        }).unwrap();
-      }
-      setTgModalOpen(false);
-    } catch {
-      showError(
-        editingTgId
-          ? "Failed to update talkgroup"
-          : "Failed to create talkgroup",
-      );
-    }
-  };
-
-  const handleDeleteTg = async (tg: AdminTalkgroup) => {
-    if (!window.confirm(`Delete talkgroup ${tg.talkgroupId}?`)) return;
-    try {
+  // ── talkgroups ──
+  const currentTalkgroup = p?.kind === "talkgroup" ? (talkgroups.find((t) => t.id === p.id) ?? null) : null;
+  const addTalkgroup = async (values: AdminTalkgroupInput, again: boolean) =>
+    run(async () => {
+      await createTalkgroup(values).unwrap();
+      toast.success(`Added ${values.talkgroupId}${values.label ? ` ${values.label}` : ""}.`);
+      if (!again) panel.close();
+    }, "The talkgroup could not be added.");
+  const saveTalkgroup = (tg: AdminTalkgroup, values: AdminTalkgroupInput) =>
+    void run(async () => {
+      await updateTalkgroup({ ...values, id: tg.id }).unwrap();
+      toast.success(`Saved ${values.talkgroupId}.`);
+    }, "The talkgroup could not be saved.");
+  const removeTalkgroup = (tg: AdminTalkgroup) =>
+    void run(async () => {
       await deleteTalkgroup(tg.id).unwrap();
-    } catch {
-      showError("Failed to delete talkgroup");
-    }
-  };
+      toast.success(`Deleted ${tg.talkgroupId}.`);
+      panel.close();
+    }, "The talkgroup could not be deleted.");
+  const removeTalkgroups = (ids: number[]) =>
+    run(async () => {
+      const r = await deleteTalkgroups(ids).unwrap();
+      toast.success(`Deleted ${plural(r.deleted, "talkgroup")}.`);
+    }, "The talkgroups could not be deleted.");
+  const bulk = (change: BulkChange) =>
+    run(async () => {
+      const r = await bulkTalkgroups(change).unwrap();
+      toast.success(`Updated ${plural(r.updated, "talkgroup")}.`);
+    }, "The talkgroups could not be updated.");
 
-  // ── Unit CRUD ──
-
-  const openCreateUnit = (systemId: number) => {
-    setEditingUnitId(null);
-    setUnitSystemId(systemId);
-    setUnitForm({ unitId: "", label: "" });
-    setUnitModalOpen(true);
-  };
-
-  const openEditUnit = (unit: AdminUnit) => {
-    setEditingUnitId(unit.id);
-    setUnitSystemId(unit.systemId);
-    setUnitForm({
-      unitId: String(unit.unitId),
-      label: unit.label ?? "",
-    });
-    setUnitModalOpen(true);
-  };
-
-  const handleUnitSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (editingUnitId != null) {
-        await updateUnit({
-          id: editingUnitId,
-          unitId: Number(unitForm.unitId),
-          label: unitForm.label || null,
-        }).unwrap();
-      } else {
-        await createUnit({
-          systemId: unitSystemId,
-          unitId: Number(unitForm.unitId),
-          label: unitForm.label || null,
-          order: unitsBySystem.get(unitSystemId)?.length ?? 0,
-        }).unwrap();
-      }
-      setUnitModalOpen(false);
-    } catch {
-      showError(
-        editingUnitId ? "Failed to update unit" : "Failed to create unit",
-      );
-    }
-  };
-
-  const handleDeleteUnit = async (unit: AdminUnit) => {
-    if (!window.confirm(`Delete unit ${unit.unitId}?`)) return;
-    try {
+  // ── units ──
+  const currentUnit = p?.kind === "unit" ? (units.find((u) => u.id === p.id) ?? null) : null;
+  const saveUnit = (unit: AdminUnit | null, values: AdminUnitInput) =>
+    void run(async () => {
+      if (unit) await updateUnit({ ...values, id: unit.id }).unwrap();
+      else await createUnit(values).unwrap();
+      toast.success(`${unit ? "Saved" : "Added"} unit ${values.unitId}.`);
+      panel.close();
+    }, "The unit could not be saved.");
+  const removeUnit = (unit: AdminUnit) =>
+    void run(async () => {
       await deleteUnit(unit.id).unwrap();
-    } catch {
-      showError("Failed to delete unit");
-    }
-  };
+      toast.success(`Deleted unit ${unit.unitId}.`);
+      panel.close();
+    }, "The unit could not be deleted.");
 
-  if (loadingSystems) {
-    return (
-      <div className="flex justify-center py-12">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
+  const exportCsv = () =>
+    system &&
+    void run(async () => {
+      const csv = await exportTalkgroups({ systemId: system.id }).unwrap();
+      download(`${system.label.replace(/[^\w-]+/g, "_")}-talkgroups.csv`, csv);
+    }, "The export failed.");
+
+  const showList = desktop || !system;
+  const showDetail = !!system && (desktop || paramId != null || linkedSystem != null);
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold mb-4">Systems</h1>
-      <p className="text-sm text-base-content/70 mb-4">
-        Define radio systems and their talkgroups. Systems represent a radio
-        network (e.g. a county or agency). Each system contains talkgroups and
-        units. Click a system to manage its talkgroups and units.
-      </p>
+    <div className="space-y-4">
+      <PageHeader
+        title="Systems"
+        subtitle={
+          <>
+            {plural(systems.length, "system")}. Unknown systems and talkgroups are created from uploads when{" "}
+            <Link to="/admin/settings#settings-radio" className="link">
+              Settings → Radio data
+            </Link>{" "}
+            allows it.
+          </>
+        }
+        actions={
+          <>
+            {systems.length > 1 &&
+              (reordering ? (
+                <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void finishReorder()}>
+                  Done reordering
+                </button>
+              ) : (
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => setReordering(true)}>
+                  <ArrowUpDown className="h-4 w-4" aria-hidden="true" />
+                  Reorder
+                </button>
+              ))}
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={(e) => {
+                setFormError(null);
+                panel.open({ kind: "system-create" }, e.currentTarget);
+              }}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add system
+            </button>
+          </>
+        }
+      />
 
-      <p className="text-xs text-base-content/60 mb-4">
-        Whether uploads may create systems that do not exist yet is set under{" "}
-        <Link to="/admin/settings#settings-radio" className="link">
-          Settings → Radio data
-        </Link>
-        .
-      </p>
+      <div className={desktop ? "grid grid-cols-[16rem_1fr] gap-4" : ""}>
+        {showList && (
+          <div className="rounded-box border border-base-300 bg-base-100">
+            {loadingSystems ? (
+              <p className="p-3 text-sm text-base-content/60">Loading…</p>
+            ) : (
+              <SystemList systems={shown} selectedId={selectedId} onSelect={selectSystem} reordering={reordering} onMove={move} />
+            )}
+          </div>
+        )}
 
-      <div className="flex flex-col gap-3">
-        {sortedSystems.map((sys) => (
-          <SystemCard
-            key={sys.id}
-            system={sys}
-            expanded={expandedIds.has(sys.id)}
-            onToggle={() => toggleExpand(sys.id)}
-            onEdit={() => openEditSystem(sys)}
-            onDelete={() => handleDeleteSystem(sys)}
-            onToggleAutoPopulate={() => handleToggleAutoPopulate(sys)}
-            talkgroups={tgBySystem.get(sys.id) ?? []}
-            units={unitsBySystem.get(sys.id) ?? []}
-            onEditTg={openEditTg}
-            onDeleteTg={handleDeleteTg}
-            onCreateTg={() => openCreateTg(sys.id)}
-            onEditUnit={openEditUnit}
-            onDeleteUnit={handleDeleteUnit}
-            onCreateUnit={() => openCreateUnit(sys.id)}
-            unitSearchFilter={unitSearchFilters.get(sys.id) ?? ""}
-            onUnitSearchChange={(value) => {
-              const next = new Map(unitSearchFilters);
-              if (value === "") {
-                next.delete(sys.id);
-              } else {
-                next.set(sys.id, value);
-              }
-              setUnitSearchFilters(next);
-            }}
-            talkgroupSearchFilter={talkgroupSearchFilters.get(sys.id) ?? ""}
-            onTalkgroupSearchChange={(value) => {
-              const next = new Map(talkgroupSearchFilters);
-              if (value === "") {
-                next.delete(sys.id);
-              } else {
-                next.set(sys.id, value);
-              }
-              setTalkgroupSearchFilters(next);
-            }}
-          />
-        ))}
-        {sortedSystems.length === 0 && (
-          <p className="text-center opacity-60 py-8">No systems found</p>
+        {showDetail && system && (
+          <section aria-label={system.label} className="min-w-0 space-y-3">
+            {!desktop && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => selectSystem(null)}>
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                All systems
+              </button>
+            )}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <div className="min-w-0 sm:flex-1">
+                <h2 className="truncate text-lg font-semibold">{system.label}</h2>
+                <p className="text-sm text-base-content/60">
+                  System {system.systemId} · {plural(system.talkgroups, "talkgroup")} · {plural(system.units, "unit")} ·{" "}
+                  {system.calls24h.toLocaleString()} {system.calls24h === 1 ? "call" : "calls"} / 24 h
+                  {system.lastCall ? ` · last call ${formatAgo(system.lastCall)}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={(e) => {
+                    setFormError(null);
+                    panel.open({ kind: "system-edit" }, e.currentTarget);
+                  }}
+                >
+                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                  System settings
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={(e) => {
+                    setFormError(null);
+                    panel.open({ kind: "import" }, e.currentTarget);
+                  }}
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  Import
+                </button>
+                <button type="button" className="btn btn-sm btn-ghost" disabled={busy || system.talkgroups === 0} onClick={exportCsv}>
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div role="tablist" aria-label="System contents" className="tabs tabs-border">
+              {TABS.map((t) => {
+                const count = t.id === "talkgroups" ? system.talkgroups : t.id === "units" ? system.units : system.blocked.length;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={t.id === tab}
+                    className={`tab ${t.id === tab ? "tab-active" : ""}`}
+                    onClick={() => selectTab(t.id)}
+                  >
+                    {t.label}
+                    <span className="badge badge-ghost badge-sm ml-2">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {tab === "talkgroups" && (
+              <TalkgroupsTab
+                key={`${system.id}-${groupParam ?? ""}-${tagParam ?? ""}`}
+                systemRowId={system.id}
+                talkgroups={talkgroups}
+                groups={groups ?? []}
+                tags={tags ?? []}
+                blocked={blockedSet}
+                loading={loadingTalkgroups}
+                busy={busy}
+                initialGroup={groupParam}
+                initialTag={tagParam}
+                openId={p?.kind === "talkgroup" ? p.id : null}
+                onOpen={(tg, el) => {
+                  setFormError(null);
+                  panel.open({ kind: "talkgroup", id: tg.id }, el);
+                }}
+                onAdd={() => {
+                  setFormError(null);
+                  panel.open({ kind: "talkgroup-create" });
+                }}
+                onBulk={bulk}
+                onBlockMany={blockMany}
+                onDeleteMany={removeTalkgroups}
+              />
+            )}
+            {tab === "units" && (
+              <UnitsTab
+                systemRowId={system.id}
+                units={units}
+                loading={loadingUnits}
+                openId={p?.kind === "unit" ? p.id : null}
+                onOpen={(u, el) => {
+                  setFormError(null);
+                  panel.open({ kind: "unit", id: u.id }, el);
+                }}
+                onAdd={() => {
+                  setFormError(null);
+                  panel.open({ kind: "unit-create" });
+                }}
+              />
+            )}
+            {tab === "blocked" && (
+              <BlockedTab
+                blocked={system.blocked}
+                talkgroups={talkgroups}
+                autoPopulate={system.autoPopulateTalkgroups === 1}
+                busy={busy}
+                onBlock={block}
+                onUnblock={unblock}
+              />
+            )}
+          </section>
+        )}
+
+        {desktop && !system && !loadingSystems && systems.length > 0 && (
+          <p className="p-4 text-sm text-base-content/60">Choose a system.</p>
         )}
       </div>
 
-      <div className="mt-4">
-        <button className="btn btn-primary" onClick={openCreateSystem}>
-          <Plus className="w-4 h-4" />
-          Add System
-        </button>
-      </div>
-
-      {/* System Modal */}
-      <dialog className={`modal ${sysModalOpen ? "modal-open" : ""}`}>
-        <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">
-            {editingSysId != null ? "Edit System" : "Create System"}
-          </h3>
-          <form onSubmit={handleSystemSubmit} className="flex flex-col gap-3">
-            <label className="flex flex-col w-full">
-              <span className="text-sm">System ID</span>
-              <span className="text-xs text-base-content/60">
-                Numeric identifier matching your radio recorder&apos;s system
-                number
-              </span>
-              <input
-                type="number"
-                className="input w-full"
-                value={sysForm.systemId}
-                onChange={(e) =>
-                  setSysForm((p) => ({ ...p, systemId: e.target.value }))
-                }
-                required
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Label</span>
-              <span className="text-xs text-base-content/60">
-                Display name shown in the scanner (e.g. &quot;Lake County
-                Fire&quot;)
-              </span>
-              <input
-                type="text"
-                className="input w-full"
-                value={sysForm.label}
-                onChange={(e) =>
-                  setSysForm((p) => ({ ...p, label: e.target.value }))
-                }
-                required
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">LED Color</span>
-              <span className="text-xs text-base-content/60">
-                Indicator color when playing audio from this system
-              </span>
-              <select
-                className="select w-full"
-                value={sysForm.led}
-                onChange={(e) =>
-                  setSysForm((p) => ({ ...p, led: e.target.value }))
-                }
-              >
-                <option value="">Default (green)</option>
-                {LED_COLORS.map((c) => (
-                  <option key={c} value={c}>
-                    {c.charAt(0).toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Blacklists</span>
-              <span className="text-xs text-base-content/60">
-                Comma-separated talkgroup IDs to exclude when auto-populate is
-                on
-              </span>
-              <textarea
-                className="textarea w-full"
-                rows={2}
-                placeholder="e.g. 1234,5678"
-                value={sysForm.blacklists}
-                onChange={(e) =>
-                  setSysForm((p) => ({ ...p, blacklists: e.target.value }))
-                }
-              />
-            </label>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setSysModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {editingSysId != null ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={() => setSysModalOpen(false)}>
-            close
-          </button>
-        </form>
-      </dialog>
-
-      {/* Talkgroup Modal */}
-      <dialog className={`modal ${tgModalOpen ? "modal-open" : ""}`}>
-        <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">
-            {editingTgId != null ? "Edit Talkgroup" : "Add Talkgroup"}
-          </h3>
-          <form onSubmit={handleTgSubmit} className="flex flex-col gap-3">
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Talkgroup ID</span>
-              <span className="text-xs text-base-content/60">
-                Numeric ID matching the talkgroup in your radio system
-              </span>
-              <input
-                type="number"
-                className="input w-full"
-                value={tgForm.talkgroupId}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, talkgroupId: e.target.value }))
-                }
-                required
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Label</span>
-              <span className="text-xs text-base-content/60">
-                Short label shown in the scanner display (e.g. &quot;FD
-                Dispatch&quot;)
-              </span>
-              <input
-                type="text"
-                className="input w-full"
-                value={tgForm.label}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, label: e.target.value }))
-                }
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Name</span>
-              <span className="text-xs text-base-content/60">
-                Full descriptive name (e.g. &quot;Fire Department
-                Dispatch&quot;)
-              </span>
-              <input
-                type="text"
-                className="input w-full"
-                value={tgForm.name}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, name: e.target.value }))
-                }
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Group</span>
-              <span className="text-xs text-base-content/60">
-                Category for organizing talkgroups in the scanner (e.g.
-                &quot;Fire&quot;, &quot;Police&quot;)
-              </span>
-              <select
-                className="select w-full"
-                value={tgForm.groupId}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, groupId: e.target.value }))
-                }
-              >
-                <option value="">— none —</option>
-                {(groups ?? []).map((g) => (
-                  <option key={g.id} value={String(g.id)}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Tag</span>
-              <span className="text-xs text-base-content/60">
-                Secondary classification for filtering (e.g. &quot;Law
-                Dispatch&quot;, &quot;EMS&quot;)
-              </span>
-              <select
-                className="select w-full"
-                value={tgForm.tagId}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, tagId: e.target.value }))
-                }
-              >
-                <option value="">— none —</option>
-                {(tags ?? []).map((t) => (
-                  <option key={t.id} value={String(t.id)}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">LED Color</span>
-              <span className="text-xs text-base-content/60">
-                Overrides system color
-              </span>
-              <select
-                className="select w-full"
-                value={tgForm.led}
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, led: e.target.value }))
-                }
-              >
-                <option value="">Default (system color)</option>
-                {LED_COLORS.map((c) => (
-                  <option key={c} value={c}>
-                    {c.charAt(0).toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Frequency (Hz)</span>
-              <span className="text-xs text-base-content/60">
-                Cosmetic frequency shown in the scanner display, not used for
-                tuning
-              </span>
-              <input
-                type="number"
-                className="input w-full"
-                value={tgForm.frequency}
-                min={0}
-                placeholder="e.g. 155325000"
-                onChange={(e) =>
-                  setTgForm((p) => ({ ...p, frequency: e.target.value }))
-                }
-              />
-            </label>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setTgModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {editingTgId != null ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={() => setTgModalOpen(false)}>
-            close
-          </button>
-        </form>
-      </dialog>
-
-      {/* Unit Modal */}
-      <dialog className={`modal ${unitModalOpen ? "modal-open" : ""}`}>
-        <div className="modal-box">
-          <h3 className="font-bold text-lg mb-4">
-            {editingUnitId != null ? "Edit Unit" : "Add Unit"}
-          </h3>
-          <form onSubmit={handleUnitSubmit} className="flex flex-col gap-3">
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Unit ID</span>
-              <input
-                type="number"
-                className="input w-full"
-                value={unitForm.unitId}
-                onChange={(e) =>
-                  setUnitForm((p) => ({ ...p, unitId: e.target.value }))
-                }
-                required
-              />
-            </label>
-            <label className="flex flex-col w-full">
-              <span className="text-sm">Label</span>
-              <input
-                type="text"
-                className="input w-full"
-                value={unitForm.label}
-                onChange={(e) =>
-                  setUnitForm((p) => ({ ...p, label: e.target.value }))
-                }
-              />
-            </label>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setUnitModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {editingUnitId != null ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={() => setUnitModalOpen(false)}>
-            close
-          </button>
-        </form>
-      </dialog>
-
-      {toast && (
-        <div className="toast toast-end">
-          <div className="alert alert-error">
-            <span>{toast}</span>
-          </div>
-        </div>
+      {p?.kind === "system-create" && (
+        <SystemForm
+          system={null}
+          nextOrder={systems.length}
+          busy={busy}
+          error={formError}
+          onSubmit={(v) => void saveSystem(v)}
+          onDelete={() => undefined}
+          onClose={panel.close}
+        />
+      )}
+      {p?.kind === "system-edit" && system && (
+        <SystemForm
+          key={system.id}
+          system={system}
+          nextOrder={systems.length}
+          busy={busy}
+          error={formError}
+          onSubmit={(v) => void saveSystem(v)}
+          onDelete={() => void removeSystem()}
+          onClose={panel.close}
+        />
+      )}
+      {p?.kind === "import" && system && (
+        <ImportWizard
+          system={system}
+          onClose={panel.close}
+          onDone={(r) => {
+            toast.success(`Imported: ${plural(r.created, "new talkgroup")}, ${r.updated} updated, ${r.unchanged} unchanged.`);
+            panel.close();
+          }}
+        />
+      )}
+      {p?.kind === "talkgroup-create" && system && (
+        <TalkgroupForm
+          systemId={system.id}
+          groups={groups ?? []}
+          tags={tags ?? []}
+          busy={busy}
+          error={formError}
+          onSubmit={addTalkgroup}
+          onClose={panel.close}
+        />
+      )}
+      {currentTalkgroup && system && (
+        <TalkgroupDetails
+          key={currentTalkgroup.id}
+          systemRowId={system.id}
+          talkgroup={currentTalkgroup}
+          groups={groups ?? []}
+          tags={tags ?? []}
+          blocked={blockedSet.has(currentTalkgroup.talkgroupId)}
+          busy={busy}
+          error={formError}
+          onSave={(v) => saveTalkgroup(currentTalkgroup, v)}
+          onBlock={() => void block(currentTalkgroup.talkgroupId)}
+          onDelete={() => removeTalkgroup(currentTalkgroup)}
+          onClose={panel.close}
+        />
+      )}
+      {p?.kind === "unit-create" && system && (
+        <UnitForm
+          systemId={system.id}
+          unit={null}
+          busy={busy}
+          error={formError}
+          onSubmit={(v) => saveUnit(null, v)}
+          onDelete={() => undefined}
+          onClose={panel.close}
+        />
+      )}
+      {currentUnit && system && (
+        <UnitForm
+          key={currentUnit.id}
+          systemId={system.id}
+          unit={currentUnit}
+          busy={busy}
+          error={formError}
+          onSubmit={(v) => saveUnit(currentUnit, v)}
+          onDelete={() => removeUnit(currentUnit)}
+          onClose={panel.close}
+        />
       )}
     </div>
   );

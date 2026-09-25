@@ -148,3 +148,25 @@ GROUP BY api_key_id;
 
 -- name: OldestCallTime :one
 SELECT CAST(COALESCE(MIN(date_time), 0) AS INTEGER) AS oldest FROM calls;
+
+-- name: SystemCallStats :many
+SELECT system_id,
+       CAST(SUM(CASE WHEN date_time >= @since THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+GROUP BY system_id;
+
+-- name: TalkgroupCallStats :many
+SELECT talkgroup_id,
+       CAST(SUM(CASE WHEN date_time >= @since THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call,
+       CAST(COALESCE(AVG(duration), 0) AS INTEGER) AS avg_duration
+FROM calls
+WHERE system_id = @system_id AND talkgroup_id IS NOT NULL
+GROUP BY talkgroup_id;
+
+-- name: UnitCallStats :many
+SELECT source, CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+WHERE system_id = @system_id AND source IS NOT NULL
+GROUP BY source;

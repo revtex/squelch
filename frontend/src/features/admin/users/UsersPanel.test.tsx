@@ -68,6 +68,11 @@ const systems: AdminSystem[] = [
     blacklistsJson: null,
     led: null,
     order: 0,
+    talkgroups: 0,
+    units: 0,
+    calls24h: 0,
+    lastCall: null,
+    blocked: [],
   },
 ];
 

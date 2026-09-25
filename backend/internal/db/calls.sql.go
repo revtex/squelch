@@ -548,3 +548,125 @@ func (q *Queries) OldestCallTime(ctx context.Context) (int64, error) {
 	err := row.Scan(&oldest)
 	return oldest, err
 }
+
+const systemCallStats = `-- name: SystemCallStats :many
+SELECT system_id,
+       CAST(SUM(CASE WHEN date_time >= ?1 THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+GROUP BY system_id
+`
+
+type SystemCallStatsRow struct {
+	SystemID    int64 `db:"system_id" json:"system_id"`
+	CallsRecent int64 `db:"calls_recent" json:"calls_recent"`
+	LastCall    int64 `db:"last_call" json:"last_call"`
+}
+
+func (q *Queries) SystemCallStats(ctx context.Context, since int64) ([]SystemCallStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, systemCallStats, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SystemCallStatsRow{}
+	for rows.Next() {
+		var i SystemCallStatsRow
+		if err := rows.Scan(&i.SystemID, &i.CallsRecent, &i.LastCall); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const talkgroupCallStats = `-- name: TalkgroupCallStats :many
+SELECT talkgroup_id,
+       CAST(SUM(CASE WHEN date_time >= ?1 THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call,
+       CAST(COALESCE(AVG(duration), 0) AS INTEGER) AS avg_duration
+FROM calls
+WHERE system_id = ?2 AND talkgroup_id IS NOT NULL
+GROUP BY talkgroup_id
+`
+
+type TalkgroupCallStatsParams struct {
+	Since    int64 `db:"since" json:"since"`
+	SystemID int64 `db:"system_id" json:"system_id"`
+}
+
+type TalkgroupCallStatsRow struct {
+	TalkgroupID sql.NullInt64 `db:"talkgroup_id" json:"talkgroup_id"`
+	CallsRecent int64         `db:"calls_recent" json:"calls_recent"`
+	LastCall    int64         `db:"last_call" json:"last_call"`
+	AvgDuration int64         `db:"avg_duration" json:"avg_duration"`
+}
+
+func (q *Queries) TalkgroupCallStats(ctx context.Context, arg TalkgroupCallStatsParams) ([]TalkgroupCallStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, talkgroupCallStats, arg.Since, arg.SystemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TalkgroupCallStatsRow{}
+	for rows.Next() {
+		var i TalkgroupCallStatsRow
+		if err := rows.Scan(
+			&i.TalkgroupID,
+			&i.CallsRecent,
+			&i.LastCall,
+			&i.AvgDuration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unitCallStats = `-- name: UnitCallStats :many
+SELECT source, CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+WHERE system_id = ?1 AND source IS NOT NULL
+GROUP BY source
+`
+
+type UnitCallStatsRow struct {
+	Source   sql.NullInt64 `db:"source" json:"source"`
+	LastCall int64         `db:"last_call" json:"last_call"`
+}
+
+func (q *Queries) UnitCallStats(ctx context.Context, systemID int64) ([]UnitCallStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, unitCallStats, systemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UnitCallStatsRow{}
+	for rows.Next() {
+		var i UnitCallStatsRow
+		if err := rows.Scan(&i.Source, &i.LastCall); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

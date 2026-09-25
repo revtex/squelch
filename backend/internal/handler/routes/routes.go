@@ -303,6 +303,7 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	v1Admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.MaxBodySize(2<<20))
 	{
 		v1Admin.POST("/import/talkgroups", importsHandler.ImportTalkgroups)
+		v1Admin.POST("/import/talkgroups/preview", importsHandler.PreviewTalkgroups)
 		v1Admin.POST("/import/units", importsHandler.ImportUnits)
 		v1Admin.POST("/import/groups", importsHandler.ImportGroups)
 		v1Admin.POST("/import/tags", importsHandler.ImportTags)

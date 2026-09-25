@@ -372,37 +372,44 @@ export default function SearchPanel({ isOpen, onClose }: SearchPanelProps) {
   }, [availableTags, tagFilterSearch]);
 
   // Keep selected filters valid when options are narrowed by other selections.
+  // Until the config has arrived there are no options at all, and filters set
+  // before it (a deep link from the admin) must survive that first render.
+  const optionsReady = filterRows.length > 0;
   useEffect(() => {
+    if (!optionsReady) return;
     const cleaned = selectedSystemIds.filter((id) =>
       availableSystemIds.has(id),
     );
     if (cleaned.length !== selectedSystemIds.length) {
       dispatch(setSystemFilters(cleaned));
     }
-  }, [dispatch, selectedSystemIds, availableSystemIds]);
+  }, [dispatch, optionsReady, selectedSystemIds, availableSystemIds]);
 
   useEffect(() => {
+    if (!optionsReady) return;
     const cleaned = selectedTalkgroupIds.filter((id) =>
       availableTalkgroupIds.has(id),
     );
     if (cleaned.length !== selectedTalkgroupIds.length) {
       dispatch(setTalkgroupFilters(cleaned));
     }
-  }, [dispatch, selectedTalkgroupIds, availableTalkgroupIds]);
+  }, [dispatch, optionsReady, selectedTalkgroupIds, availableTalkgroupIds]);
 
   useEffect(() => {
+    if (!optionsReady) return;
     const cleaned = selectedGroups.filter((g) => availableGroups.includes(g));
     if (cleaned.length !== selectedGroups.length) {
       dispatch(setGroupFilters(cleaned));
     }
-  }, [dispatch, selectedGroups, availableGroups]);
+  }, [dispatch, optionsReady, selectedGroups, availableGroups]);
 
   useEffect(() => {
+    if (!optionsReady) return;
     const cleaned = selectedTags.filter((t) => availableTags.includes(t));
     if (cleaned.length !== selectedTags.length) {
       dispatch(setTagFilters(cleaned));
     }
-  }, [dispatch, selectedTags, availableTags]);
+  }, [dispatch, optionsReady, selectedTags, availableTags]);
 
   // Build query params
   const queryParams = useMemo(() => {

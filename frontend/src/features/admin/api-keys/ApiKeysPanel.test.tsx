@@ -42,8 +42,8 @@ const keys: AdminApiKey[] = [
 ];
 
 const systems: AdminSystem[] = [
-  { id: 10, systemId: 1, label: "County PD", autoPopulateTalkgroups: 1, blacklistsJson: null, led: null, order: 0 },
-  { id: 11, systemId: 2, label: "Fire", autoPopulateTalkgroups: 1, blacklistsJson: null, led: null, order: 1 },
+  { id: 10, systemId: 1, label: "County PD", autoPopulateTalkgroups: 1, blacklistsJson: null, led: null, order: 0, talkgroups: 0, units: 0, calls24h: 0, lastCall: null, blocked: [] },
+  { id: 11, systemId: 2, label: "Fire", autoPopulateTalkgroups: 1, blacklistsJson: null, led: null, order: 1, talkgroups: 0, units: 0, calls24h: 0, lastCall: null, blocked: [] },
 ];
 
 type Op = (arg: unknown) => Promise<unknown>;

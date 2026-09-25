@@ -58,16 +58,21 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"ipblocks.delete":        o.IPBlocksDelete,
 
 		// Systems
-		"systems.list":   o.SystemsList,
-		"systems.create": o.SystemsCreate,
-		"systems.update": o.SystemsUpdate,
-		"systems.delete": o.SystemsDelete,
+		"systems.list":    o.SystemsList,
+		"systems.create":  o.SystemsCreate,
+		"systems.update":  o.SystemsUpdate,
+		"systems.delete":  o.SystemsDelete,
+		"systems.reorder": o.SystemsReorder,
+		"systems.block":   o.SystemsBlock,
+		"systems.unblock": o.SystemsUnblock,
 
 		// Talkgroups
 		"talkgroups.list":   o.TalkgroupsList,
 		"talkgroups.create": o.TalkgroupsCreate,
 		"talkgroups.update": o.TalkgroupsUpdate,
 		"talkgroups.delete": o.TalkgroupsDelete,
+		"talkgroups.bulk":   o.TalkgroupsBulk,
+		"talkgroups.import": o.TalkgroupsImport,
 
 		// Units
 		"units.list":   o.UnitsList,

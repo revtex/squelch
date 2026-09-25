@@ -2,8 +2,15 @@ import { useWsQuery, useWsMutation, useLazyWsQuery } from "./useWsQuery";
 import type {
   AdminUser,
   AdminSystem,
+  AdminSystemInput,
   AdminTalkgroup,
+  AdminTalkgroupInput,
   AdminUnit,
+  AdminUnitInput,
+  ImportMode,
+  ImportRow,
+  TalkgroupBulkPayload,
+  TalkgroupImportResult,
   AdminGroup,
   AdminTag,
   DeleteLabelPayload,
@@ -46,8 +53,6 @@ import type {
 
 // ─── Payload types ──────────────────────────────────────────────────────────
 
-type CreatePayload<T> = Omit<T, "id">;
-type UpdatePayload<T> = { id: number } & Partial<Omit<T, "id">>;
 
 type CreateApiKeyPayload = {
   ident: string | null;
@@ -179,41 +184,54 @@ export function useListSystemsQuery() {
 }
 
 export function useCreateSystemMutation() {
-  return useWsMutation<AdminSystem, CreatePayload<AdminSystem>>(
-    "systems.create",
-  );
+  return useWsMutation<AdminSystem, AdminSystemInput>("systems.create");
 }
 
 export function useUpdateSystemMutation() {
-  return useWsMutation<AdminSystem, UpdatePayload<AdminSystem>>(
+  return useWsMutation<AdminSystem, AdminSystemInput & { id: number }>(
     "systems.update",
   );
 }
 
 export function useDeleteSystemMutation() {
-  return useWsMutation<void, number>("systems.delete", {
+  return useWsMutation<{ ok: boolean; talkgroups: number; units: number }, number>("systems.delete", {
     transformArg: (id) => ({ id }),
   });
 }
 
+export function useReorderSystemsMutation() {
+  return useWsMutation<void, number[]>("systems.reorder", {
+    transformArg: (ids) => ({ ids }),
+  });
+}
+
+export function useBlockTalkgroupMutation() {
+  return useWsMutation<{ ok: boolean; blocked: number[] }, { id: number; talkgroupId: number }>("systems.block");
+}
+
+export function useUnblockTalkgroupMutation() {
+  return useWsMutation<{ ok: boolean; blocked: number[] }, { id: number; talkgroupId: number }>("systems.unblock");
+}
+
 // ─── Talkgroups ─────────────────────────────────────────────────────────────
 
-export function useListTalkgroupsQuery() {
+/** All talkgroups, or one system's with their recent activity. */
+export function useListTalkgroupsQuery(systemId?: number, options?: { skip?: boolean }) {
   return useWsQuery<AdminTalkgroup[]>(
     "talkgroups.list",
-    undefined,
+    systemId === undefined ? undefined : { systemId },
     "talkgroups.updated",
+    undefined,
+    options,
   );
 }
 
 export function useCreateTalkgroupMutation() {
-  return useWsMutation<AdminTalkgroup, CreatePayload<AdminTalkgroup>>(
-    "talkgroups.create",
-  );
+  return useWsMutation<AdminTalkgroup, AdminTalkgroupInput>("talkgroups.create");
 }
 
 export function useUpdateTalkgroupMutation() {
-  return useWsMutation<AdminTalkgroup, UpdatePayload<AdminTalkgroup>>(
+  return useWsMutation<AdminTalkgroup, AdminTalkgroupInput & { id: number }>(
     "talkgroups.update",
   );
 }
@@ -224,18 +242,41 @@ export function useDeleteTalkgroupMutation() {
   });
 }
 
+export function useDeleteTalkgroupsMutation() {
+  return useWsMutation<{ ok: boolean; deleted: number }, number[]>("talkgroups.delete", {
+    transformArg: (ids) => ({ ids }),
+  });
+}
+
+export function useBulkTalkgroupsMutation() {
+  return useWsMutation<{ ok: boolean; updated: number }, TalkgroupBulkPayload>("talkgroups.bulk");
+}
+
+export function useApplyTalkgroupImportMutation() {
+  return useWsMutation<TalkgroupImportResult, { systemId: number; mode: ImportMode; rows: ImportRow[] }>(
+    "talkgroups.import",
+  );
+}
+
 // ─── Units ──────────────────────────────────────────────────────────────────
 
-export function useListUnitsQuery() {
-  return useWsQuery<AdminUnit[]>("units.list", undefined, "units.updated");
+/** All units, or one system's with when each was last heard. */
+export function useListUnitsQuery(systemId?: number, options?: { skip?: boolean }) {
+  return useWsQuery<AdminUnit[]>(
+    "units.list",
+    systemId === undefined ? undefined : { systemId },
+    "units.updated",
+    undefined,
+    options,
+  );
 }
 
 export function useCreateUnitMutation() {
-  return useWsMutation<AdminUnit, CreatePayload<AdminUnit>>("units.create");
+  return useWsMutation<AdminUnit, AdminUnitInput>("units.create");
 }
 
 export function useUpdateUnitMutation() {
-  return useWsMutation<AdminUnit, UpdatePayload<AdminUnit>>("units.update");
+  return useWsMutation<AdminUnit, AdminUnitInput & { id: number }>("units.update");
 }
 
 export function useDeleteUnitMutation() {
@@ -243,7 +284,6 @@ export function useDeleteUnitMutation() {
     transformArg: (id) => ({ id }),
   });
 }
-
 // ─── Groups ─────────────────────────────────────────────────────────────────
 
 export function useListGroupsQuery() {
