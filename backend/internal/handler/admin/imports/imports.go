@@ -80,9 +80,11 @@ func detectTgColumns(header []string) *tgColumnMap {
 			m.tagID = i
 		case "group_id":
 			m.groupID = i
-		case "tag", "category":
+		case "tag":
 			m.tagName = i
-		case "group", "service_type":
+		// A RadioReference export's Category is the agency or county: the
+		// group, as the import wizard and rdio-scanner read it.
+		case "group", "service_type", "category":
 			m.groupName = i
 		case "frequency", "freq":
 			m.frequency = i
@@ -113,7 +115,7 @@ func col(record []string, i int) string {
 // ImportTalkgroups handles POST /api/admin/import/talkgroups.
 //
 //	@Summary      Import talkgroups from CSV
-//	@Description  Accepts a multipart CSV file with talkgroup data and a system_id form field. Supports Squelch format (talkgroup_id, label, name, tag_id, group_id, frequency, led, order) and rdio-scanner format (dec, hex, alpha_tag, description, tag, group, priority). Header rows are auto-detected; tag/group names are resolved to IDs automatically. Use mode=overwrite (default) to update existing talkgroups or mode=skip to leave existing talkgroups unchanged.
+//	@Description  Accepts a multipart CSV file with talkgroup data and a system_id form field. Supports Squelch format (talkgroup_id, label, name, tag_id, group_id, frequency, led, order), rdio-scanner format (dec, hex, alpha_tag, description, tag, group, priority) and RadioReference format (Decimal, Alpha Tag, Description, Tag, Category; Category becomes the group). Header rows are auto-detected; tag/group names are resolved to IDs automatically. Use mode=overwrite (default) to update existing talkgroups or mode=skip to leave existing talkgroups unchanged.
 //	@Tags         Admin,v1-Admin
 //	@Accept       multipart/form-data
 //	@Produce      json

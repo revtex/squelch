@@ -34,7 +34,7 @@ const DOCS_SESSION_URL = "/api/v1/admin/docs/session";
 
 type Panel =
   | { kind: "restore" }
-  | { kind: "import"; entity: ImportEntity; system?: AdminSystem; title?: string }
+  | { kind: "import"; entity: ImportEntity; system?: AdminSystem; title?: string; enrich?: boolean }
   | { kind: "token" };
 
 interface RadioRow {
@@ -260,7 +260,7 @@ export default function ToolsPanel() {
             type="button"
             className="btn"
             disabled={!rrSystem}
-            onClick={(e) => rrSystem && panel.open({ kind: "import", entity: "talkgroups", system: rrSystem, title: `Enrich ${rrSystem.label} from RadioReference` }, e.currentTarget)}
+            onClick={(e) => rrSystem && panel.open({ kind: "import", entity: "talkgroups", system: rrSystem, title: `Enrich ${rrSystem.label} from RadioReference`, enrich: true }, e.currentTarget)}
           >
             <Upload className="h-4 w-4" aria-hidden="true" />
             Choose CSV…
@@ -301,6 +301,7 @@ export default function ToolsPanel() {
           systems={systems}
           system={panel.selected.system}
           title={panel.selected.title}
+          enrich={panel.selected.enrich}
           onClose={panel.close}
           onDone={(summary) => {
             panel.close();

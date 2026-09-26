@@ -549,7 +549,7 @@ One table with a row for talkgroups, units, groups and tags, each with its count
 
 ### Enrich from RadioReference
 
-Pick a system and **Choose CSV…** to bring labels, names, categories and tags in from a RadioReference talkgroup export. It is the same wizard as Import, opened on that system with the changes-only view.
+Pick a system and **Choose CSV…** to bring labels, names, groups and tags in from a RadioReference talkgroup export: Alpha Tag becomes the label, Description the name, Category the group and Tag the tag. Only talkgroups the system already has are matched, by decimal ID. A statewide export lists thousands the system never hears, so the rest are counted ("200 of 6649 talkgroups are in this system") and left out rather than added; use **Import** to add talkgroups. The review and modes are the Import wizard's, and the counts follow the mode: in **Fill in blanks only**, a talkgroup whose fields are already set counts as unchanged.
 
 ### API documentation
 

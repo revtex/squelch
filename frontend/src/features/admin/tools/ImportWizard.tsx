@@ -41,6 +41,12 @@ export interface ImportWizardProps {
   system?: AdminSystem;
   /** A different title, e.g. for RadioReference enrichment. */
   title?: string;
+  /**
+   * RadioReference enrichment: only talkgroups the system already has are
+   * reviewed. A statewide export lists thousands the system never hears;
+   * those are counted and left out rather than offered as new.
+   */
+  enrich?: boolean;
   onClose: () => void;
   /** Called with the toast line once the rows are applied. */
   onDone: (summary: string) => void;
@@ -75,6 +81,9 @@ const HINT: Record<ImportEntity, string> = {
   tags: "One label per row, with or without a header. Labels that already exist are left alone.",
 };
 
+const ENRICH_HINT =
+  "Nothing changes until you review the result. Only talkgroups this system already has are matched, by decimal ID; the file's others are left out. Groups and tags named in the file are created if missing.";
+
 const SUBTITLE: Record<ImportEntity, string> = {
   talkgroups: "Squelch, rdio-scanner and RadioReference CSV files are recognised.",
   units: "unit_id, label and order columns; a Squelch export with a system column works too.",
@@ -82,7 +91,7 @@ const SUBTITLE: Record<ImportEntity, string> = {
   tags: "A CSV with one tag label per row.",
 };
 
-export default function ImportWizard({ entity, systems = [], system: preset, title, onClose, onDone }: ImportWizardProps) {
+export default function ImportWizard({ entity, systems = [], system: preset, title, enrich = false, onClose, onDone }: ImportWizardProps) {
   const id = useId();
   const [previewTalkgroups, tgPreview] = usePreviewTalkgroupImportMutation();
   const [previewUnits, unitPreview] = usePreviewUnitImportMutation();
@@ -98,6 +107,8 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
   const [review, setReview] = useState<Review | null>(null);
   const [raw, setRaw] = useState<{ talkgroups?: ImportPreviewRow[]; units?: UnitImportPreviewRow[] }>({});
   const [error, setError] = useState<string | null>(null);
+  /** Rows an enrichment left out because the system doesn't have them. */
+  const [leftOut, setLeftOut] = useState(0);
   const [mode, setMode] = useState<ImportMode>("fill");
   const [view, setView] = useState<View>("changes");
   const [excluded, setExcluded] = useState<Set<string>>(() => new Set());
@@ -110,12 +121,17 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
 
   const toApply = useMemo(() => (review ? reviewRowsToApply(review.rows, mode, excluded) : []), [review, mode, excluded]);
   const changeCount = useMemo(() => reviewChangeCount(toApply, mode), [toApply, mode]);
+  const changedRows = useMemo(() => (review ? reviewChanges(review.rows, mode) : []), [review, mode]);
+  // Existing rows this mode would update; the rest stay as they are (in
+  // fill mode that includes rows whose differing fields are already set).
+  const updating = changedRows.filter((r) => r.status !== "new").length;
+  const same = review ? review.changed + review.unchanged - updating : 0;
   const visible: ReviewRow[] = useMemo(() => {
     if (!review) return [];
     if (view === "all") return review.rows;
-    if (view === "changes") return reviewChanges(review.rows, mode);
+    if (view === "changes") return changedRows;
     return [];
-  }, [review, view, mode]);
+  }, [review, view, changedRows]);
 
   const runPreview = async () => {
     if (!file || (needsSystem && !system)) return;
@@ -127,8 +143,10 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
       let next: Review;
       if (entity === "talkgroups") {
         const p = await previewTalkgroups(body).unwrap();
-        setRaw({ talkgroups: p.rows });
-        next = reviewTalkgroups(p);
+        const rows = enrich ? p.rows.filter((r) => r.status !== "new") : p.rows;
+        setRaw({ talkgroups: rows });
+        setLeftOut(enrich ? p.new : 0);
+        next = reviewTalkgroups(enrich ? { ...p, rows, new: 0 } : p);
       } else if (entity === "units") {
         const p = await previewUnits(body).unwrap();
         setRaw({ units: p.rows });
@@ -168,8 +186,11 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
 
   const noun = ENTITY_LABEL[entity];
   const heading = title ?? (system && needsSystem ? `Import ${noun} into ${system.label}` : `Import ${noun}`);
+  const format = review?.format ? `${FORMAT_LABEL[review.format] ?? review.format} file · ` : "";
   const subtitle = review
-    ? `${review.format ? `${FORMAT_LABEL[review.format] ?? review.format} file · ` : ""}${plural(review.rows.length, "row")}`
+    ? enrich
+      ? `${format}${review.rows.length} of ${plural(review.rows.length + leftOut, "talkgroup")} are in this system`
+      : `${format}${plural(review.rows.length, "row")}`
     : SUBTITLE[entity];
   const idHeader = entity === "talkgroups" ? "TG" : entity === "units" ? "Unit" : "Label";
   const newNoun = entity === "talkgroups" ? "new talkgroup" : entity === "units" ? "new unit" : entity === "groups" ? "new group" : "new tag";
@@ -235,18 +256,19 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
             className="file-input w-full"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           />
-          <p className="text-sm text-base-content-dim">{HINT[entity]}</p>
+          <p className="text-sm text-base-content-dim">{enrich ? ENRICH_HINT : HINT[entity]}</p>
         </div>
       ) : (
         <div className="space-y-3">
           <p className="text-sm">
-            <strong>{plural(review.new, newNoun)}</strong>
+            {!enrich && <strong>{plural(review.new, newNoun)}</strong>}
             {review.hasModes && (
               <>
-                , <strong>{plural(review.changed, "change")}</strong>
+                {!enrich && ", "}
+                <strong>{updating} to update</strong>
               </>
             )}
-            , {review.unchanged} unchanged
+            , {review.hasModes ? same : review.unchanged} unchanged
             {review.problems.length > 0 && (
               <>
                 , <strong className="text-warning">{plural(review.problems.length, "row")} skipped</strong>
@@ -254,6 +276,12 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
             )}
             .
           </p>
+          {enrich && leftOut > 0 && (
+            <p className="text-sm text-base-content-dim">
+              {plural(leftOut, "talkgroup")} in the file {leftOut === 1 ? "isn't" : "aren't"} in this system and{" "}
+              {leftOut === 1 ? "is" : "are"} left out. Import on the system's page adds talkgroups.
+            </p>
+          )}
 
           {review.hasModes && (
             <fieldset className="space-y-1">
@@ -274,7 +302,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
             value={view}
             onChange={setView}
             options={[
-              { id: "changes", label: "Changes only", count: review.new + review.changed },
+              { id: "changes", label: "Changes only", count: changedRows.length },
               { id: "all", label: "All rows", count: review.rows.length },
               { id: "problems", label: "Problems", count: review.problems.length },
             ]}

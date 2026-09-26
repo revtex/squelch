@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import ToolsPanel from "./ToolsPanel";
 import { ToastProvider } from "@/features/admin/_shell";
-import type { AdminSystem, BackupCounts, BackupPreview, LabelImportPreview, UnitImportPreview } from "@/types";
+import type { AdminSystem, BackupCounts, BackupPreview, LabelImportPreview, TalkgroupImportPreview, UnitImportPreview } from "@/types";
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -202,6 +202,48 @@ describe("ToolsPanel", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "System to enrich" }), "11");
     await user.click(screen.getByRole("button", { name: "Choose CSV…" }));
     expect(screen.getByRole("dialog", { name: "Enrich City from RadioReference" })).toBeInTheDocument();
+  });
+
+  it("enriches only the talkgroups the system has, leaving the file's others out", async () => {
+    const user = userEvent.setup();
+    const preview: TalkgroupImportPreview = {
+      format: "radioreference",
+      rows: [
+        { row: 2, talkgroupId: 101, label: "FD01DISP", name: "County Fire Dispatch", group: "Adams County", status: "changed", changes: [
+          { field: "label", now: "", after: "FD01DISP" },
+          { field: "name", now: "", after: "County Fire Dispatch" },
+          { field: "group", now: "", after: "Adams County" },
+        ] },
+        { row: 3, talkgroupId: 102, label: "PD Dispatch", status: "changed", changes: [{ field: "label", now: "PD Disp", after: "PD Dispatch" }] },
+        { row: 4, talkgroupId: 103, label: "EMS", status: "unchanged", changes: [] },
+        { row: 5, talkgroupId: 5000, label: "FD02DISP", status: "new", changes: [] },
+        { row: 6, talkgroupId: 5001, label: "FD02TAC", status: "new", changes: [] },
+      ],
+      problems: [],
+      new: 2,
+      changed: 2,
+      unchanged: 1,
+    };
+    ops.previewTalkgroups.mockResolvedValue(preview);
+    ops.applyTalkgroups.mockResolvedValue({ ok: true, created: 0, updated: 1, unchanged: 0 });
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: "Choose CSV…" }));
+    const wizard = within(screen.getByRole("dialog", { name: "Enrich County from RadioReference" }));
+    await user.upload(wizard.getByLabelText("CSV file"), new File(["Decimal,Alpha Tag\n"], "rr.csv", { type: "text/csv" }));
+    await user.click(wizard.getByRole("button", { name: "Review changes" }));
+    // Fill mode: 101 gets its blanks; 102's label is already set, so it stays.
+    expect(await wizard.findByText("1 to update")).toBeInTheDocument();
+    expect(wizard.getByText(/2 unchanged/)).toBeInTheDocument();
+    expect(wizard.getByText(/2 talkgroups in the file aren't in this system and are left out/)).toBeInTheDocument();
+    expect(wizard.getByText("RadioReference file · 3 of 5 talkgroups are in this system")).toBeInTheDocument();
+    expect(wizard.queryByText(/new talkgroup/)).toBeNull();
+    expect(wizard.queryByText("5000")).toBeNull();
+    await user.click(wizard.getByRole("button", { name: "Apply 3 changes" }));
+    expect(ops.applyTalkgroups).toHaveBeenCalledWith({
+      systemId: 10,
+      mode: "fill",
+      rows: [{ row: 2, talkgroupId: 101, label: "FD01DISP", name: "County Fire Dispatch", group: "Adams County" }],
+    });
   });
 
   it("restores only after a review, a mode and the typed word", async () => {

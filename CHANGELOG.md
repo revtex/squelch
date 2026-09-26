@@ -395,6 +395,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restart date no longer breaks across lines, and a long address in the
   Transcription and Trunk Recorder banners wraps instead of running under
   the button.
+- **Enrich from RadioReference fills in only the talkgroups a system has.**
+  It opened the ordinary import, so a statewide RadioReference export
+  offered to add every talkgroup the system didn't have (thousands on a
+  MARCS system). Enrich now matches existing talkgroups only and says how
+  many in the file it left out. Import review counts follow the chosen
+  mode, so "Fill in blanks only" no longer counts talkgroups it would
+  leave as they are.
+- **The talkgroup import API reads RadioReference's Category as the
+  group.** `POST /api/v1/admin/import/talkgroups` (and the deprecated
+  `/api/admin/import/talkgroups`) stored Category as the tag and dropped
+  the Tag column; it now matches the import wizard: Category is the group
+  and Tag the tag.
 - **Admin pages hold their shape with real data.** On Systems & talkgroups
   a long talkgroup name no longer pushes Calls 24 h and Last heard out of
   view: the label is cut short (full name on hover), the columns sit
