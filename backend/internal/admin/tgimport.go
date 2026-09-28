@@ -282,12 +282,18 @@ func importChanges(tg db.Talkgroup, row ImportRow, groups, tags map[int64]string
 		after := strconv.FormatInt(*row.Frequency, 10)
 		add("frequency", now, &after)
 	}
+	// Order is never blank, so Fill leaves it alone and only Overwrite
+	// takes the file's.
+	if row.Order != nil {
+		after := strconv.FormatInt(*row.Order, 10)
+		add("order", strconv.FormatInt(tg.Order, 10), &after)
+	}
 	return out
 }
 
 // TalkgroupsImport applies rows from the wizard to a system. Mode "fill"
 // sets only fields that are empty today; "overwrite" replaces label, name,
-// group, tag, led and frequency with what the file has. New talkgroups are
+// group, tag, led, frequency and order with what the file has. New talkgroups are
 // always created. Group and tag names that do not exist yet are created.
 func (o *Operations) TalkgroupsImport(ctx context.Context, params json.RawMessage, callerID int64) (any, error) {
 	var req struct {
@@ -416,6 +422,9 @@ func (o *Operations) TalkgroupsImport(ctx context.Context, params json.RawMessag
 		setStr(&next.Led, row.Led)
 		if row.Frequency != nil && (overwrite || !next.Frequency.Valid) && next.Frequency.Int64 != *row.Frequency {
 			next.Frequency, changed = ptrToNullInt(row.Frequency), true
+		}
+		if row.Order != nil && overwrite && next.Order != *row.Order {
+			next.Order, changed = *row.Order, true
 		}
 		if row.Group != nil && (overwrite || !next.GroupID.Valid) {
 			gid, gerr := groupFor(row.Group)

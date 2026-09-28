@@ -71,6 +71,8 @@ export function useAdminWebSocket(): void {
           "dirmonitors.updated": ["DirMonitors"],
           "downstreams.updated": ["Downstreams"],
           "webhooks.updated": ["Webhooks"],
+          // Not "tr.*": those are MQTT frames for the live dashboard.
+          "trinstances.updated": ["TrInstances"],
           "config.updated": ["Config"],
           "shared-links.updated": ["SharedLinks"],
         };

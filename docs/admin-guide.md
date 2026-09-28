@@ -240,7 +240,7 @@ Ticking rows shows a selection bar for bulk changes: set the group, tag or LED c
 
 #### Import
 
-**Import** on a system takes a CSV in Squelch, rdio-scanner or RadioReference format; the format is detected from the header. Nothing changes until you review the result: the wizard lists what is new, what would change (field by field, now and after) and which rows it could not read. **Fill in blanks only** sets only fields that are empty today; **Overwrite** replaces label, name, group and tag with the file's values. Untick any talkgroup you want left alone, then **Apply**. Groups and tags named in the file are created if they do not exist. **Export** downloads the system's talkgroups as CSV.
+**Import** on a system takes a CSV in Squelch, rdio-scanner or RadioReference format; the format is detected from the header. Nothing changes until you review the result: the wizard lists what is new, what would change (field by field, now and after) and which rows it could not read. **Fill in blanks only** sets only fields that are empty today; **Overwrite** replaces every field the file has (label, name, group, tag, colour, frequency and order) with the file's values. Untick any talkgroup you want left alone, then **Apply**. Groups and tags named in the file are created if they do not exist. **Export** downloads the system's talkgroups as CSV.
 
 ### Units
 
@@ -530,13 +530,13 @@ The whole configuration in and out as one file, radio data in and out as CSV, Ra
 
 ### Configuration backup
 
-**Download backup** saves systems, talkgroups, units, groups, tags, users and settings as one JSON file, named after the date. Users come without their passwords. API keys (hashed), forwarding keys and webhook secrets are in the file too, so keep it private. If secrets encryption is on, encrypted values keep their `enc::` form and can only be restored on a server with the same `--encryption-key`. The card says when a backup was last downloaded from this server.
+**Download backup** saves systems, talkgroups, units, groups, tags, users, Trunk Recorder brokers and settings as one JSON file, named after the date. Users come without their passwords. API keys (hashed), forwarding keys, webhook secrets and broker passwords are in the file too, so keep it private. If secrets encryption is on, encrypted values keep their `enc::` form and can only be restored on a server with the same `--encryption-key`. The card says when a backup was last downloaded from this server.
 
 **Restore from backup…** is guarded in three steps:
 
 1. **Choose file** — a backup from this page, or from another Squelch.
 2. **Review** — a table compares the file with what is live, one row per kind of data: how many are in the file, how many are here now, and the result: *n added* (in the file, not here), *n differ* (in both, different), and what is here but not in the file, with a few names. A kind of data the file does not carry is left alone. Choose **Merge** (add and update, never delete) or **Replace everything** (the tables in the file end up exactly as the file has them; what the file lacks is removed). Settings are only ever added or updated. Your own account and the primary admin are never removed or demoted.
-3. **Restore** — type `RESTORE` and confirm. Squelch first saves the current configuration to a `backups/` folder beside the database (`pre-restore-<time>.json`, the ten newest kept), then applies the file in one transaction and tells you where the previous configuration went. Folder monitors, forwarding and transcription pick up the restored settings without a restart.
+3. **Restore** — type `RESTORE` and confirm. Squelch first saves the current configuration to a `backups/` folder beside the database (`pre-restore-<time>.json`, the ten newest kept), then applies the file in one transaction and tells you where the previous configuration went. Folder monitors, forwarding, transcription and Trunk Recorder brokers pick up the restored settings without a restart. The count of what was removed includes the talkgroups and units that went with a removed system, as the review listed them.
 
 Rows are matched by what stays the same between two servers, not by database ids: system number, talkgroup number within a system, unit number, label, username, API key, folder, URL. A user the restore adds has no password until an admin sets one under **Users**.
 

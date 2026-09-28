@@ -153,7 +153,7 @@ describe("ToolsPanel", () => {
     expect(await wizard.findByText("1 new unit")).toBeInTheDocument();
     // Fill mode leaves the existing label alone; overwrite takes it.
     expect(wizard.getByRole("button", { name: "Apply 1 change" })).toBeInTheDocument();
-    await user.click(wizard.getByRole("radio", { name: "Overwrite labels" }));
+    await user.click(wizard.getByRole("radio", { name: "Overwrite with the file's values" }));
     await user.click(wizard.getByRole("button", { name: "Apply 2 changes" }));
     expect(ops.applyUnits).toHaveBeenCalledWith({
       systemId: 11,
@@ -163,7 +163,8 @@ describe("ToolsPanel", () => {
         { row: 4, unitId: 4003, label: "Chief" },
       ],
     });
-    expect(await screen.findByText("Imported: 1 new unit, 1 updated, 0 unchanged.")).toBeInTheDocument();
+    // 4001 was never sent; the toast still counts it, as the review did.
+    expect(await screen.findByText("Imported: 1 new unit, 1 updated, 1 unchanged.")).toBeInTheDocument();
   });
 
   it("imports groups as labels, only the new ones", async () => {
@@ -179,7 +180,7 @@ describe("ToolsPanel", () => {
       unchanged: 1,
     };
     ops.previewGroups.mockResolvedValue(preview);
-    ops.applyGroups.mockResolvedValue({ ok: true, created: 1, unchanged: 1 });
+    ops.applyGroups.mockResolvedValue({ ok: true, created: 1, unchanged: 0 });
     renderPanel();
     const table = within(screen.getByRole("table", { name: "Radio data" }));
     await user.click(table.getAllByRole("button", { name: "Import" })[2]);
@@ -193,7 +194,8 @@ describe("ToolsPanel", () => {
     await user.click(wizard.getByRole("checkbox", { name: "Apply Roads" }));
     await user.click(wizard.getByRole("button", { name: "Apply 1 change" }));
     expect(ops.applyGroups).toHaveBeenCalledWith({ labels: ["EMS"] });
-    expect(await screen.findByText("Imported: 1 new group, 1 unchanged.")).toBeInTheDocument();
+    // Fire already existed and Roads was unticked: neither was sent.
+    expect(await screen.findByText("Imported: 1 new group, 2 unchanged.")).toBeInTheDocument();
   });
 
   it("opens the RadioReference wizard on the chosen system", async () => {

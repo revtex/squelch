@@ -1022,6 +1022,7 @@ func (p *program) run() {
 	if err := trManager.Start(ctx); err != nil {
 		slog.Error("trmqtt: failed to start manager", "error", err)
 	}
+	hub.SetTRInstanceSync(trManager)
 	trEvents, trUnsubscribe := trManager.Subscribe()
 	go func() {
 		defer trUnsubscribe()

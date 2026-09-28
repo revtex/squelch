@@ -47,12 +47,13 @@ type backupFile struct {
 	DirMonitors []db.Dirmonitor    `json:"dirmonitors"`
 	Downstreams []importDownstream `json:"downstreams"`
 	Webhooks    []importWebhook    `json:"webhooks"`
+	TRInstances []importTRInstance `json:"trInstances"`
 }
 
 func (f backupFile) empty() bool {
 	return f.Settings == nil && f.Users == nil && f.Groups == nil && f.Tags == nil && f.Systems == nil &&
 		f.Talkgroups == nil && f.Units == nil && f.APIKeys == nil && f.DirMonitors == nil &&
-		f.Downstreams == nil && f.Webhooks == nil
+		f.Downstreams == nil && f.Webhooks == nil && f.TRInstances == nil
 }
 
 // parseBackup reads a backup file, with the optional restore mode beside
@@ -99,7 +100,7 @@ func (o *Operations) checkBackupSecrets(f backupFile) error {
 			}
 		}
 	}
-	return nil
+	return checkTRSecrets(f.TRInstances, encKey)
 }
 
 // BackupEntity compares one table between a backup and the live data.
@@ -392,6 +393,7 @@ type liveConfig struct {
 	DirMonitors []db.Dirmonitor
 	Downstreams []db.Downstream
 	Webhooks    []db.Webhook
+	TRInstances []db.TrInstance
 }
 
 func (o *Operations) loadLiveConfig(ctx context.Context) (liveConfig, error) {
@@ -429,6 +431,9 @@ func (o *Operations) loadLiveConfig(ctx context.Context) (liveConfig, error) {
 	}
 	if l.Webhooks, err = o.Queries.ListWebhooks(ctx); err != nil {
 		return l, fmt.Errorf("failed to list webhooks: %w", err)
+	}
+	if l.TRInstances, err = o.Queries.ListTRInstances(ctx); err != nil {
+		return l, fmt.Errorf("failed to list Trunk Recorder brokers: %w", err)
 	}
 	return l, nil
 }
@@ -498,6 +503,7 @@ func (o *Operations) previewBackup(ctx context.Context, f backupFile) (BackupPre
 		diffRows("dirmonitors", "Folder monitors", dirMonitorRows(f.DirMonitors), dirMonitorRows(live.DirMonitors), f.DirMonitors != nil),
 		diffRows("downstreams", "Forwarding targets", downstreamRows(f.Downstreams), downstreamRows(flattenDownstreams(live.Downstreams)), f.Downstreams != nil),
 		diffRows("webhooks", "Webhooks", webhookRows(f.Webhooks), webhookRows(flattenWebhooks(live.Webhooks)), f.Webhooks != nil),
+		diffRows("trInstances", "Trunk Recorder brokers", trInstanceRows(f.TRInstances), trInstanceRows(flattenTRInstances(live.TRInstances)), f.TRInstances != nil),
 	)
 
 	orphans := 0

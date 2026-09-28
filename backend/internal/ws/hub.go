@@ -481,6 +481,14 @@ func (h *Hub) SetDirMonitorReloader(r Reloader) {
 	}
 }
 
+// SetTRInstanceSync lets a configuration restore reconnect the Trunk
+// Recorder brokers it rewrote; the MQTT manager starts after the hub.
+func (h *Hub) SetTRInstanceSync(s admin.TRInstanceSync) {
+	if h.admin != nil {
+		h.admin.Deps.TRInstances = s
+	}
+}
+
 // SetDirMonitorStatus gives the admin the folder monitors' runtime state,
 // after hub creation for the same reason as SetDirMonitorReloader.
 func (h *Hub) SetDirMonitorStatus(m admin.MonitorStatus) {

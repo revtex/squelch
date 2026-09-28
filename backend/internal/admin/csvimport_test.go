@@ -125,3 +125,53 @@ func TestParseAndPreviewLabels_ThenImport(t *testing.T) {
 		t.Error("an empty label was accepted")
 	}
 }
+
+// Order is never blank, so Fill keeps what is there and Overwrite takes the
+// file's, for talkgroups and units alike.
+func TestImport_OverwriteTakesTheFilesOrder(t *testing.T) {
+	ops, q := newTestOperations(t, "")
+	ctx := context.Background()
+	sysID := createSystem(t, ops, 1, "MARCS")
+	createTalkgroup(t, ops, sysID, 41011, "LC FD Disp")
+	if _, err := q.CreateUnit(ctx, db.CreateUnitParams{SystemID: sysID, UnitID: 7001, Label: ptrToNullStr(strPtrOf("Car 1"))}); err != nil {
+		t.Fatal(err)
+	}
+
+	format, tgRows, _, err := ParseTalkgroupCSV(strings.NewReader("talkgroup_id,label,order\n41011,LC FD Disp,5\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := PreviewTalkgroupImport(ctx, q, sysID, format, tgRows, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := p.Rows[0].Changes; len(c) != 1 || c[0].Field != "order" || c[0].Now != "0" || c[0].After != "5" {
+		t.Errorf("talkgroup changes = %+v, want order 0 → 5", c)
+	}
+	unitRows, _, _ := ParseUnitCSV(strings.NewReader("unit_id,label,order\n7001,Car 1,9\n"))
+	up, err := PreviewUnitImport(ctx, q, sysID, unitRows, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := up.Rows[0].Changes; len(c) != 1 || c[0].Field != "order" || c[0].Now != "0" || c[0].After != "9" {
+		t.Errorf("unit changes = %+v, want order 0 → 9", c)
+	}
+
+	for _, mode := range []string{"fill", "overwrite"} {
+		if _, err := ops.TalkgroupsImport(ctx, params(t, map[string]any{"systemId": sysID, "mode": mode, "rows": tgRows}), 1); err != nil {
+			t.Fatalf("TalkgroupsImport(%s): %v", mode, err)
+		}
+		if _, err := ops.UnitsImport(ctx, params(t, map[string]any{"systemId": sysID, "mode": mode, "rows": unitRows}), 1); err != nil {
+			t.Fatalf("UnitsImport(%s): %v", mode, err)
+		}
+		tg, _ := q.GetTalkgroupBySystemAndTGID(ctx, db.GetTalkgroupBySystemAndTGIDParams{SystemID: sysID, TalkgroupID: 41011})
+		u, _ := q.GetUnitBySystemAndUnitID(ctx, db.GetUnitBySystemAndUnitIDParams{SystemID: sysID, UnitID: 7001})
+		want := map[string][2]int64{"fill": {0, 0}, "overwrite": {5, 9}}[mode]
+		if tg.Order != want[0] || u.Order != want[1] {
+			t.Errorf("after %s: talkgroup order %d, unit order %d, want %v", mode, tg.Order, u.Order, want)
+		}
+		if u.Label.String != "Car 1" {
+			t.Errorf("after %s the unit label is %q", mode, u.Label.String)
+		}
+	}
+}

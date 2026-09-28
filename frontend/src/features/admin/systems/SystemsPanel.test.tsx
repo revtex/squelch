@@ -270,7 +270,7 @@ describe("SystemsPanel", () => {
       changed: 1,
     };
     ops.previewImport.mockResolvedValue(preview);
-    ops.applyImport.mockResolvedValue({ ok: true, created: 1, updated: 1, unchanged: 1 });
+    ops.applyImport.mockResolvedValue({ ok: true, created: 0, updated: 1, unchanged: 0 });
     renderPanel();
     await user.click(screen.getByRole("button", { name: "Import" }));
     const wizard = within(screen.getByRole("dialog", { name: "Import talkgroups into County" }));
@@ -292,7 +292,7 @@ describe("SystemsPanel", () => {
       mode: "overwrite",
       rows: [{ row: 3, talkgroupId: 102, label: "PD Dispatch", name: "Police dispatch" }],
     });
-    expect(await screen.findByRole("status")).toHaveTextContent("Imported: 1 new talkgroup, 1 updated, 1 unchanged.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Imported: 0 new talkgroups, 1 updated, 2 unchanged.");
   });
 
   it("on a phone shows the list first and a way back from a system", async () => {

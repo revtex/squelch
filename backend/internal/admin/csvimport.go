@@ -158,6 +158,10 @@ func PreviewUnitImport(ctx context.Context, q *db.Queries, systemID int64, rows 
 		if row.Label != nil && !strings.EqualFold(u.Label.String, *row.Label) {
 			pr.Changes = append(pr.Changes, ImportChange{Field: "label", Now: u.Label.String, After: *row.Label})
 		}
+		// Order is never blank, so only Overwrite takes the file's.
+		if row.Order != nil && u.Order != *row.Order {
+			pr.Changes = append(pr.Changes, ImportChange{Field: "order", Now: strconv.FormatInt(u.Order, 10), After: strconv.FormatInt(*row.Order, 10)})
+		}
 		if len(pr.Changes) == 0 {
 			pr.Status = "unchanged"
 			out.Unchanged++
@@ -171,8 +175,8 @@ func PreviewUnitImport(ctx context.Context, q *db.Queries, systemID int64, rows 
 }
 
 // UnitsImport applies unit rows from the wizard to a system. Mode "fill"
-// labels only units with no label yet; "overwrite" replaces labels with
-// what the file has. New units are always created.
+// labels only units with no label yet; "overwrite" replaces labels and
+// order with what the file has. New units are always created.
 func (o *Operations) UnitsImport(ctx context.Context, params json.RawMessage, callerID int64) (any, error) {
 	var req struct {
 		SystemID int64           `json:"systemId"`
@@ -221,12 +225,19 @@ func (o *Operations) UnitsImport(ctx context.Context, params json.RawMessage, ca
 			created++
 			continue
 		}
-		label := trimPtr(row.Label)
-		if label == nil || (!overwrite && strings.TrimSpace(u.Label.String) != "") || u.Label.String == *label {
+		next := db.UpdateUnitParams{ID: u.ID, UnitID: u.UnitID, Label: u.Label, Order: u.Order}
+		changed := false
+		if label := trimPtr(row.Label); label != nil && (overwrite || strings.TrimSpace(u.Label.String) == "") && u.Label.String != *label {
+			next.Label, changed = ptrToNullStr(label), true
+		}
+		if row.Order != nil && overwrite && u.Order != *row.Order {
+			next.Order, changed = *row.Order, true
+		}
+		if !changed {
 			unchanged++
 			continue
 		}
-		if err := o.Queries.UpdateUnit(ctx, db.UpdateUnitParams{ID: u.ID, UnitID: u.UnitID, Label: ptrToNullStr(label), Order: u.Order}); err != nil {
+		if err := o.Queries.UpdateUnit(ctx, next); err != nil {
 			return nil, fmt.Errorf("update unit %d: %w", row.UnitID, err)
 		}
 		updated++

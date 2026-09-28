@@ -167,17 +167,21 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
     if (!review) return;
     setError(null);
     const keys = new Set(toApply.map((r) => r.key));
+    // Only rows with something to write are sent, so the server's
+    // "unchanged" misses the rest; count them too, to match the review.
+    const untouched = review.rows.length - toApply.length;
+    const done = (r: { created: number; updated?: number; unchanged: number }) =>
+      onDone(importSummary(entity, { ...r, unchanged: r.unchanged + untouched }));
     try {
       if (entity === "talkgroups" && system) {
         const rows = (raw.talkgroups ?? []).filter((r) => keys.has(String(r.talkgroupId))).map(toImportRow);
-        onDone(importSummary(entity, await applyTalkgroups({ systemId: system.id, mode, rows }).unwrap()));
+        done(await applyTalkgroups({ systemId: system.id, mode, rows }).unwrap());
       } else if (entity === "units" && system) {
         const rows = (raw.units ?? []).filter((r) => keys.has(String(r.unitId))).map(toUnitRow);
-        onDone(importSummary(entity, await applyUnits({ systemId: system.id, mode, rows }).unwrap()));
+        done(await applyUnits({ systemId: system.id, mode, rows }).unwrap());
       } else {
         const labels = toApply.map((r) => r.id);
-        const r = await (entity === "groups" ? applyGroups({ labels }) : applyTags({ labels })).unwrap();
-        onDone(importSummary(entity, r));
+        done(await (entity === "groups" ? applyGroups({ labels }) : applyTags({ labels })).unwrap());
       }
     } catch (e) {
       setError(messageOf(e, "The import failed."));
@@ -292,7 +296,7 @@ export default function ImportWizard({ entity, systems = [], system: preset, tit
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="radio" className="radio radio-sm" name={`${id}-mode`} checked={mode === "overwrite"} onChange={() => setMode("overwrite")} />
-                {entity === "units" ? "Overwrite labels" : "Overwrite label, name, group and tag"}
+                Overwrite with the file's values
               </label>
             </fieldset>
           )}

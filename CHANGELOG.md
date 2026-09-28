@@ -382,6 +382,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The configuration backup carries the Trunk Recorder brokers.** A
+  backup left them out, so a restore onto a new server came back without
+  the MQTT connections. They are in the file now (passwords as stored, so
+  encrypted ones need the same `--encryption-key`), the restore review has
+  a Trunk Recorder brokers row, and a restore reconnects the restored
+  brokers and disconnects the removed ones without a restart.
+- **Result messages agree with the review.** Replace everything counted a
+  removed system as one row though the review listed its talkgroups and
+  units too; it counts them all now. An import's message counted only the
+  rows it sent, so rows the review showed unchanged, or that you
+  unticked, came out as "0 unchanged"; they are counted now.
+- **Overwrite updates order.** Importing talkgroups or units with an
+  `order` column in Overwrite mode left the existing order as it was. The
+  review lists order changes and Overwrite applies them; Fill in blanks
+  only still leaves order alone. The option reads "Overwrite with the
+  file's values", since colour and frequency were overwritten too.
 - **Transcription recognises the go-whisper you run.** Deployed go-whisper
   builds answer the model list with a bare array, not the documented
   `{"models": […]}`, so the Transcription page said "Not connected" and the

@@ -14,9 +14,10 @@ import (
 
 // exportConfigData gathers the full configuration (settings, users without
 // passwords, systems, talkgroups, units, groups, tags, API keys, folder
-// monitors, forwarding targets and webhooks) in the shape ImportConfig
-// reads back. API keys carry their hashed key, forwarding targets their
-// key and webhooks their secret, so the file is sensitive.
+// monitors, forwarding targets, webhooks and Trunk Recorder brokers) in the
+// shape ImportConfig reads back. API keys carry their hashed key,
+// forwarding targets their key, webhooks their secret and brokers their
+// password, so the file is sensitive.
 func (o *Operations) exportConfigData(ctx context.Context) (map[string]any, error) {
 	live, err := o.loadLiveConfig(ctx)
 	if err != nil {
@@ -40,6 +41,7 @@ func (o *Operations) exportConfigData(ctx context.Context) (map[string]any, erro
 		"dirmonitors": live.DirMonitors,
 		"downstreams": flattenDownstreams(live.Downstreams),
 		"webhooks":    flattenWebhooks(live.Webhooks),
+		"trInstances": flattenTRInstances(live.TRInstances),
 	}, nil
 }
 

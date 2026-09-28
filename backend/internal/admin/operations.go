@@ -67,9 +67,12 @@ type EventSink interface {
 // left zero disables the corresponding feature path at runtime (matches
 // the prior ws.HubDeps behaviour exactly).
 type Deps struct {
-	SQLDB             *sql.DB
-	DirMonitorReload  Reloader
-	DownstreamReload  Reloader
+	SQLDB            *sql.DB
+	DirMonitorReload Reloader
+	DownstreamReload Reloader
+	// TRInstances reconnects Trunk Recorder brokers after a restore; nil
+	// leaves the live MQTT clients until a restart.
+	TRInstances       TRInstanceSync
 	TranscriberReload TranscriberReloader
 	FFmpegAvailable   bool
 	FDKAACAvailable   bool

@@ -102,6 +102,13 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 		return nil, err
 	}
 
+	// The brokers as they were, so the ones Replace removes can be
+	// disconnected once the restore commits.
+	trBefore, err := o.Queries.ListTRInstances(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Trunk Recorder brokers: %w", err)
+	}
+
 	snapshot, err := o.writePreRestoreSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("the previous configuration could not be saved first: %w", err)
@@ -456,10 +463,23 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 		res.Created++
 	}
 
+	// Trunk Recorder brokers: matched by label.
+	trKeep, err := restoreTRInstances(ctx, qtx, f.TRInstances, now, &res)
+	if err != nil {
+		return nil, err
+	}
+
 	if replace {
 		removed, err := o.removeAbsent(ctx, qtx, f, systemKeep, tgKeep, unitKeep, groupKeep, tagKeep, userKeep, apiKeyKeep, monitorKeep, downstreamKeep, webhookKeep)
 		if err != nil {
 			return nil, err
+		}
+		if f.TRInstances != nil {
+			n, err := removeAbsentTR(ctx, qtx, trKeep)
+			if err != nil {
+				return nil, err
+			}
+			removed += n
 		}
 		res.Removed = removed
 	}
@@ -486,10 +506,13 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 	if o.Deps.DownstreamReload != nil && (f.Downstreams != nil || replace) {
 		o.Deps.DownstreamReload.Reload()
 	}
+	if f.TRInstances != nil {
+		o.syncTRInstances(ctx, trBefore)
+	}
 
 	for _, topic := range []string{
 		"groups.updated", "tags.updated", "systems.updated", "talkgroups.updated", "units.updated", "users.updated",
-		"apikeys.updated", "dirmonitors.updated", "downstreams.updated", "webhooks.updated",
+		"apikeys.updated", "dirmonitors.updated", "downstreams.updated", "webhooks.updated", "trinstances.updated",
 	} {
 		o.broadcastAdminEvent(topic, nil)
 	}
@@ -662,6 +685,24 @@ func (o *Operations) removeAbsent(ctx context.Context, qtx *db.Queries, f backup
 		if err != nil {
 			return 0, fmt.Errorf("failed to list systems: %w", err)
 		}
+		// A removed system takes its talkgroups and units with it (ON
+		// DELETE CASCADE). Count them, so the result matches the review,
+		// which lists them under Talkgroups and Units.
+		tgCounts, err := qtx.CountTalkgroupsPerSystem(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to count talkgroups: %w", err)
+		}
+		unitCounts, err := qtx.CountUnitsPerSystem(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to count units: %w", err)
+		}
+		cascaded := map[int64]int{}
+		for _, c := range tgCounts {
+			cascaded[c.SystemID] += int(c.Talkgroups)
+		}
+		for _, c := range unitCounts {
+			cascaded[c.SystemID] += int(c.Units)
+		}
 		for _, s := range systems {
 			if systemKeep[s.ID] {
 				continue
@@ -669,7 +710,7 @@ func (o *Operations) removeAbsent(ctx context.Context, qtx *db.Queries, f backup
 			if err := qtx.DeleteSystem(ctx, s.ID); err != nil {
 				return 0, fmt.Errorf("failed to remove system %q: %w", s.Label, err)
 			}
-			removed++
+			removed += 1 + cascaded[s.ID]
 		}
 	}
 	return removed, nil
