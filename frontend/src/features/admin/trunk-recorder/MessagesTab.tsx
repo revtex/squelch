@@ -83,8 +83,11 @@ export default function MessagesTab({ messages, tallies }: MessagesTabProps) {
           </>
         )}
       </div>
+      {/* Keyed apart so switching views starts a fresh table, not one
+          carrying the other's sort and page. */}
       {view === "stats" ? (
         <DataTable
+          key="stats"
           columns={statColumns}
           rows={stats}
           rowKey={(r) => r.key}
@@ -94,9 +97,10 @@ export default function MessagesTab({ messages, tallies }: MessagesTabProps) {
         />
       ) : (
         <DataTable
+          key="live"
           columns={liveColumns}
           rows={live}
-          rowKey={(r) => `${r.at}-${r.opcode ?? ""}-${r.shortname ?? ""}`}
+          rowKey={(r) => r.seq}
           caption="Live messages"
           defaultSort={{ id: "when", dir: "desc" }}
           pageSize={20}

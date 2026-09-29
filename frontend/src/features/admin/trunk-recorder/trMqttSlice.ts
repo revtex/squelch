@@ -45,6 +45,12 @@ export interface TrMqttState {
   trunkingMessages: Record<number, MessageEntry[]>;
   /** Every message counted by opcode since the page connected, uncapped. */
   messageTallies: Record<number, Record<string, MessageTally>>;
+  /**
+   * The last number handed to a live entry. Several messages can share a
+   * millisecond, opcode and system, so only this tells two rows apart; a
+   * table keyed on anything less keeps duplicate rows it can never remove.
+   */
+  seq: number;
   /** Unix millis of the last `tr.warn.lag` event for each instance. */
   lagWarning: Record<number, number>;
 }
@@ -63,8 +69,15 @@ const initialState: TrMqttState = {
   recentCalls: {},
   trunkingMessages: {},
   messageTallies: {},
+  seq: 0,
   lagWarning: {},
 };
+
+/** Gives a live entry the next [seq] number. */
+function stamped<T extends { seq: number }>(state: TrMqttState, item: Omit<T, "seq">): T {
+  state.seq += 1;
+  return { ...item, seq: state.seq } as T;
+}
 
 function pushCapped<T>(arr: T[] | undefined, item: T, cap: number): T[] {
   const next = arr ? [...arr, item] : [item];
@@ -183,7 +196,7 @@ function extractCall(
   at: number,
   kind: "start" | "end",
   raw: unknown,
-): RecentCallEntry {
+): Omit<RecentCallEntry, "seq"> {
   return {
     at,
     kind,
@@ -275,7 +288,7 @@ function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotV
     }
   }
   if ((state.unitEvents[id] ?? []).length === 0) {
-    const entries: UnitEventEntry[] = [];
+    const entries: Omit<UnitEventEntry, "seq">[] = [];
     for (const item of asArray(snapshot.UnitEvents)) {
       const e = asRecord(item);
       const f = asRecord(e?.Frame);
@@ -299,10 +312,12 @@ function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotV
         raw: f,
       });
     }
-    if (entries.length > 0) state.unitEvents[id] = entries.slice(-UNIT_EVENT_CAP);
+    if (entries.length > 0) {
+      state.unitEvents[id] = entries.slice(-UNIT_EVENT_CAP).map((e) => stamped<UnitEventEntry>(state, e));
+    }
   }
   if ((state.trunkingMessages[id] ?? []).length === 0) {
-    const entries: MessageEntry[] = [];
+    const entries: Omit<MessageEntry, "seq">[] = [];
     for (const item of asArray(snapshot.Messages)) {
       const e = asRecord(item);
       const f = asRecord(e?.Frame);
@@ -323,7 +338,7 @@ function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotV
       });
     }
     if (entries.length > 0) {
-      state.trunkingMessages[id] = entries.slice(-MESSAGE_CAP);
+      state.trunkingMessages[id] = entries.slice(-MESSAGE_CAP).map((e) => stamped<MessageEntry>(state, e));
       const tallies: Record<string, MessageTally> = {};
       for (const e of entries) tallyMessage(tallies, e);
       state.messageTallies[id] = tallies;
@@ -452,11 +467,9 @@ export const trMqttSlice = createSlice({
           const call = asRecord(env?.call) ?? env;
           state.recentCalls[id] = pushCapped(
             state.recentCalls[id],
-            extractCall(
-              call,
-              now,
-              topic === "tr.callStart" ? "start" : "end",
-              envelope.payload,
+            stamped<RecentCallEntry>(
+              state,
+              extractCall(call, now, topic === "tr.callStart" ? "start" : "end", envelope.payload),
             ),
             RECENT_CALL_CAP,
           );
@@ -489,7 +502,7 @@ export const trMqttSlice = createSlice({
           // meta }, timestamp, instance_id }
           const env = asRecord(envelope.payload);
           const msg = asRecord(env?.message) ?? env;
-          const entry: MessageEntry = {
+          const entry = stamped<MessageEntry>(state, {
               at: now,
               topic,
               type: asString(msg?.trunk_msg_type ?? msg?.message_type),
@@ -501,7 +514,7 @@ export const trMqttSlice = createSlice({
               sysNum: asNumber(msg?.sys_num),
               meta: asString(msg?.meta),
               raw: envelope.payload,
-          };
+          });
           state.trunkingMessages[id] = pushCapped(state.trunkingMessages[id], entry, MESSAGE_CAP);
           tallyMessage((state.messageTallies[id] ??= {}), entry);
           state.instances[id] = { ...conn, connected: true, lastSeenAt: now };
@@ -519,7 +532,7 @@ export const trMqttSlice = createSlice({
         // names (shortname, unit_id) are accepted as fallbacks.
         state.unitEvents[id] = pushCapped(
           state.unitEvents[id],
-          {
+          stamped<UnitEventEntry>(state, {
             at: now,
             topic,
             kind: unitKindFromTopic(topic),
@@ -536,7 +549,7 @@ export const trMqttSlice = createSlice({
             callNum: asString(rec?.call_num),
             encrypted: asBool(rec?.encrypted),
             raw: envelope.payload,
-          },
+          }),
           UNIT_EVENT_CAP,
         );
         state.instances[id] = { ...conn, connected: true, lastSeenAt: now };

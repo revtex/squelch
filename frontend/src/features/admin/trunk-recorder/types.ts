@@ -126,6 +126,8 @@ export interface PluginStatusInfo {
  * frames; `kind` distinguishes them and `endedAt` is set on call_end.
  */
 export interface RecentCallEntry {
+  /** Unique within the page, from the slice: the table's row key. */
+  seq: number;
   at: number;
   kind: "start" | "end";
   callId?: string;
@@ -155,6 +157,8 @@ export interface RecentCallEntry {
 }
 
 export interface UnitEventEntry {
+  /** Unique within the page, from the slice: the table's row key. */
+  seq: number;
   at: number;
   topic: string;
   kind: string;
@@ -174,6 +178,8 @@ export interface UnitEventEntry {
 }
 
 export interface MessageEntry {
+  /** Unique within the page, from the slice: the table's row key. */
+  seq: number;
   at: number;
   topic: string;
   type?: string;

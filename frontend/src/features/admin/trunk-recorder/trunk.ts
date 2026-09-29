@@ -338,7 +338,7 @@ export interface MessageTally extends Omit<MessageStat, "systems"> {
  * capped live list: a busy control channel fills that list in seconds, and
  * counts taken from it would stop climbing.
  */
-export function tallyMessage(tallies: Record<string, MessageTally>, m: MessageEntry): void {
+export function tallyMessage(tallies: Record<string, MessageTally>, m: Omit<MessageEntry, "seq">): void {
   const k = `${m.opcode ?? "?"}|${m.opcodeType ?? "?"}|${m.type ?? "?"}`;
   const sys = m.shortname ?? "?";
   const desc = m.meta ?? m.opcodeDesc ?? m.trunkMsg ?? "";

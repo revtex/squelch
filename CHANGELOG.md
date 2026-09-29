@@ -385,11 +385,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Trunk Recorder's message counts keep counting.** By opcode tallied the
-  live list, which holds the newest 500 messages. A busy control channel
-  fills that in seconds, so the counts stopped climbing. They are now
-  running totals since the page connected. The Live view shows 20 messages
-  a page instead of 50.
+- **Trunk Recorder's messages stay live after you look at Live.** Opening
+  Live and going back to By opcode froze the table, and Live grew into a
+  scroll of hundreds of rows. A busy control channel sends several messages
+  in the same millisecond with the same opcode and system, and the table
+  told rows apart by exactly those, so it could never remove the
+  duplicates. They piled up in Live and then sat on top of By opcode. Each
+  message now has its own number; Units and Calls › Recent use it too.
+  By opcode counts are also running totals since the page connected,
+  rather than a tally of the newest 500 messages, and Live shows 20 a page.
 - **Logs level counts are the real totals.** The chips counted the lines on
   screen, which are at most 500 and only the chosen level. So Warn read 0
   under All, while All read 48 under Warn. The server now counts the whole

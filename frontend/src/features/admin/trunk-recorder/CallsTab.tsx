@@ -72,8 +72,11 @@ export default function CallsTab({ instance, active, recent, view, onView }: Cal
           Export CSV
         </button>
       </div>
+      {/* Keyed apart so switching views starts a fresh table, not one
+          carrying the other's sort and page. */}
       {view === "active" ? (
         <DataTable
+          key="active"
           columns={activeColumns}
           rows={activeRows}
           rowKey={(r) => r.key}
@@ -83,9 +86,10 @@ export default function CallsTab({ instance, active, recent, view, onView }: Cal
         />
       ) : (
         <DataTable
+          key="recent"
           columns={recentColumns}
           rows={recentRows}
-          rowKey={(r) => `${r.callId ?? r.callNum ?? ""}-${r.kind}-${r.at}`}
+          rowKey={(r) => r.seq}
           caption="Recent calls"
           defaultSort={{ id: "when", dir: "desc" }}
           empty="No calls have started or ended since this page opened."

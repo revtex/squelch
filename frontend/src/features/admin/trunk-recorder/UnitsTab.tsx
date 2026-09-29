@@ -83,7 +83,7 @@ export default function UnitsTab({ events }: { events: UnitEventEntry[] }) {
       <DataTable
         columns={columns}
         rows={shown}
-        rowKey={(r) => `${r.at}-${r.topic}-${r.unitId ?? ""}-${r.talkgroupId ?? ""}`}
+        rowKey={(r) => r.seq}
         caption="Unit events"
         defaultSort={{ id: "when", dir: "desc" }}
         pageSize={50}
