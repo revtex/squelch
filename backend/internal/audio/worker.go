@@ -212,10 +212,14 @@ func ffmpegArgs(input, output string, mode ConversionMode, preset EncodingPreset
 		base = append(base, "-af", "loudnorm")
 	}
 
-	// AAC presets use the iPod/M4A muxer with fragmented-MP4 flags so that
-	// the moov atom is at the front of the file. MP3 doesn't need this.
+	// AAC presets use the iPod/M4A muxer with faststart, which moves the
+	// moov atom — the complete sample table and duration — in front of the
+	// audio, so a player reads the file in one request from the start.
+	// Fragmented MP4 is not used: its moov is empty and its index sits in an
+	// mfra box at the end, which Media3 always fetches, costing three extra
+	// range requests per call. MP3 doesn't need either.
 	if !IsMP3EncodingPreset(string(preset)) {
-		base = append(base, "-movflags", "frag_keyframe+empty_moov", "-f", "ipod")
+		base = append(base, "-movflags", "+faststart", "-f", "ipod")
 	}
 
 	return append(base, output)

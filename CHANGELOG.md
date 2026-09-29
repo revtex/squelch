@@ -387,6 +387,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A Call's audio arrives in one request instead of four.** AAC
+  recordings were written as fragmented MP4, whose index sits at the end of
+  the file, so the Android app's player fetched each Call four times over:
+  the start, the last few bytes, the index, and back to the audio. They are
+  now written with the index in front (`-movflags +faststart`), which also
+  gives every player the length straight away. Only new recordings change;
+  the audio itself, the encoding preset and MP3 output are untouched.
+
 - **A listener closing the tab is no longer a warning.** When a browser or
   phone drops its live connection without saying goodbye (the tab closed,
   the screen locked, the network went), the server logged `ws: read error`
