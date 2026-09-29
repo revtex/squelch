@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  within,
-  act,
-} from "@testing-library/react";
+import { render, screen, fireEvent, within, act } from "@testing-library/react";
 import { configureStore } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 import SelectTGPanel from "../components/SelectTGPanel";
@@ -91,7 +85,7 @@ function scannerState(
     isPaused: false,
     isAudioActive: false,
     backgroundAudio: false,
-      streamState: "idle" as const,
+    streamState: "idle" as const,
     heldSystem: null,
     heldTG: null,
     avoidList: [],
@@ -216,6 +210,38 @@ describe("SelectTGPanel", () => {
     expect(store.getState().scanner.tgSelection[10]).toBe(false);
   });
 
+  it("avoids tab lists timed avoids with the time left", () => {
+    const expiresAt = Date.now() + 90_000;
+    renderPanel({
+      scanner: scannerState({ avoidList: [{ talkgroupId: 10, expiresAt }] }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /avoids/i }));
+    expect(screen.getByText("TG-A1 - Alpha One")).toBeInTheDocument();
+    expect(screen.getByText(/^1:(29|30)$/)).toBeInTheDocument();
+  });
+
+  it("avoids tab leaves permanent avoids out", () => {
+    renderPanel({
+      scanner: scannerState({ avoidList: [{ talkgroupId: 10, expiresAt: 0 }] }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /avoids/i }));
+    expect(screen.queryByText("TG-A1 - Alpha One")).not.toBeInTheDocument();
+    expect(screen.getByText(/No timed avoids/i)).toBeInTheDocument();
+  });
+
+  it("Resume clears a timed avoid", () => {
+    const expiresAt = Date.now() + 90_000;
+    const { store } = renderPanel({
+      scanner: scannerState({ avoidList: [{ talkgroupId: 10, expiresAt }] }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /avoids/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(store.getState().scanner.avoidList).toHaveLength(0);
+  });
+
   it("avoided talkgroup shows avoid badge", () => {
     renderPanel({
       scanner: scannerState({ avoidList: [{ talkgroupId: 10, expiresAt: 0 }] }),
@@ -259,9 +285,7 @@ describe("SelectTGPanel", () => {
     const { store } = renderPanel({
       scanner: scannerState({ tgSelection: { 10: false, 11: false } }),
     });
-    const confirmSpy = vi
-      .spyOn(window, "confirm")
-      .mockReturnValue(false);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
     const allRow = screen.getByText("All Talkgroups").closest("div");
     const globalToggle = allRow?.querySelector(

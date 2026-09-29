@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     "limit"              INTEGER,
     password_need_change INTEGER NOT NULL DEFAULT 0,
     tg_selection_json    TEXT,
+    preferences_json     TEXT,
     created_at           INTEGER NOT NULL,
     updated_at           INTEGER NOT NULL
 );
@@ -84,11 +85,13 @@ CREATE TABLE IF NOT EXISTS calls (
     decoder          TEXT,
     error_count      INTEGER,
     spike_count      INTEGER,
-    talker_alias     TEXT
+    talker_alias     TEXT,
+    api_key_id       INTEGER REFERENCES api_keys(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_calls_datetime_system_tg ON calls(date_time, system_id, talkgroup_id);
 CREATE INDEX IF NOT EXISTS idx_calls_system_tg ON calls(system_id, talkgroup_id);
+CREATE INDEX IF NOT EXISTS idx_calls_api_key_datetime ON calls(api_key_id, date_time);
 
 CREATE TABLE IF NOT EXISTS api_keys (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +100,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
     disabled     INTEGER NOT NULL DEFAULT 0,
     systems_json TEXT,
     call_rate_limit INTEGER,
-    "order"      INTEGER NOT NULL DEFAULT 0
+    "order"      INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL DEFAULT 0,
+    last_used_at INTEGER,
+    last_used_ip TEXT,
+    previous_key TEXT,
+    previous_key_expires_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS dirmonitors (
@@ -123,6 +131,13 @@ CREATE TABLE IF NOT EXISTS downstreams (
     systems_json TEXT,
     disabled     INTEGER NOT NULL DEFAULT 0,
     "order"      INTEGER NOT NULL DEFAULT 0
+,
+    label        TEXT    NOT NULL DEFAULT '',
+    last_at      INTEGER,
+    last_ok      INTEGER NOT NULL DEFAULT 0,
+    last_status  INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT    NOT NULL DEFAULT '',
+    last_ok_at   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS logs (
@@ -131,6 +146,7 @@ CREATE TABLE IF NOT EXISTS logs (
     level     TEXT    NOT NULL,
     message   TEXT    NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_logs_date_time ON logs(date_time DESC);
 
 CREATE TABLE IF NOT EXISTS bookmarks (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,6 +166,13 @@ CREATE TABLE IF NOT EXISTS webhooks (
     systems_json TEXT,
     disabled     INTEGER NOT NULL DEFAULT 0,
     "order"      INTEGER NOT NULL DEFAULT 0
+,
+    label        TEXT    NOT NULL DEFAULT '',
+    last_at      INTEGER,
+    last_ok      INTEGER NOT NULL DEFAULT 0,
+    last_status  INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT    NOT NULL DEFAULT '',
+    last_ok_at   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
@@ -181,7 +204,9 @@ CREATE TABLE IF NOT EXISTS shared_links (
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token      TEXT    UNIQUE NOT NULL,
     created_at INTEGER NOT NULL,
-    expires_at INTEGER
+    expires_at INTEGER,
+    opens          INTEGER NOT NULL DEFAULT 0,
+    last_opened_at INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_shared_links_token ON shared_links(token);
@@ -193,12 +218,35 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     family_id       TEXT    NOT NULL,
     expires_at      INTEGER NOT NULL,
     revoked         INTEGER NOT NULL DEFAULT 0,
-    created_at      INTEGER NOT NULL
+    created_at      INTEGER NOT NULL,
+    ip              TEXT,
+    user_agent      TEXT,
+    native          INTEGER NOT NULL DEFAULT 0,
+    signed_in_at    INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family_id);
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON refresh_tokens(token_hash);
+
+CREATE TABLE IF NOT EXISTS connection_log (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind              TEXT    NOT NULL,
+    user_id           INTEGER,
+    username          TEXT,
+    ip                TEXT    NOT NULL,
+    country_code      TEXT,
+    user_agent        TEXT,
+    native            INTEGER NOT NULL DEFAULT 0,
+    family_id         TEXT,
+    connected_at      INTEGER NOT NULL,
+    disconnected_at   INTEGER,
+    disconnect_reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_connection_log_connected_at ON connection_log(connected_at);
+CREATE INDEX IF NOT EXISTS idx_connection_log_ip ON connection_log(ip, connected_at);
+CREATE INDEX IF NOT EXISTS idx_connection_log_user ON connection_log(user_id, connected_at);
 
 CREATE TABLE IF NOT EXISTS tr_instances (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -219,3 +267,25 @@ CREATE TABLE IF NOT EXISTS tr_instances (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tr_instances_enabled ON tr_instances(enabled);
+
+CREATE TABLE IF NOT EXISTS ip_blocks (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    cidr       TEXT    NOT NULL UNIQUE,
+    reason     TEXT    NOT NULL DEFAULT '',
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS transcription_jobs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    call_id     INTEGER NOT NULL UNIQUE REFERENCES calls(id) ON DELETE CASCADE,
+    status      TEXT    NOT NULL,
+    error       TEXT,
+    model       TEXT,
+    duration_ms INTEGER,
+    created_at  INTEGER NOT NULL,
+    finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_transcription_jobs_status_created ON transcription_jobs(status, created_at);

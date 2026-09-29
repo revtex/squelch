@@ -63,3 +63,12 @@ ON CONFLICT (system_id, talkgroup_id) DO UPDATE SET
     group_id  = excluded.group_id,
     tag_id    = excluded.tag_id,
     "order"   = excluded."order";
+
+-- name: SetTalkgroupGroup :exec
+UPDATE talkgroups SET group_id = ? WHERE id = ?;
+
+-- name: SetTalkgroupTag :exec
+UPDATE talkgroups SET tag_id = ? WHERE id = ?;
+
+-- name: SetTalkgroupLed :exec
+UPDATE talkgroups SET led = ? WHERE id = ?;

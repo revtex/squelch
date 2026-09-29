@@ -15,7 +15,7 @@ interface SelectTGPanelProps {
   onClose: () => void;
 }
 
-type TabId = "groups" | "tags" | "systems";
+type TabId = "groups" | "tags" | "systems" | "avoids";
 
 function formatCountdown(expiresAt: number, now: number): string {
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
@@ -253,6 +253,17 @@ export default function SelectTGPanel({ isOpen, onClose }: SelectTGPanelProps) {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isOpen, hasTimedAvoids]);
+
+  // Only the avoids that run out on their own. A permanent avoid has no
+  // clock to show and belongs with the talkgroup it silenced, which is
+  // where it is turned back on.
+  const timedAvoids = useMemo(() => {
+    const byId = new Map(allTalkgroups.map((tg) => [tg.id, tg]));
+    return avoidList
+      .filter((a) => a.expiresAt > 0 && a.expiresAt > now)
+      .sort((a, b) => a.expiresAt - b.expiresAt)
+      .map((a) => ({ entry: a, tg: byId.get(a.talkgroupId) }));
+  }, [avoidList, allTalkgroups, now]);
 
   // Toggle handler: if TG has an active avoid, clicking clears the avoid
   // (and re-enables in tgSelection if it was a permanent avoid).
@@ -507,7 +518,7 @@ export default function SelectTGPanel({ isOpen, onClose }: SelectTGPanelProps) {
 
       {/* Tabs */}
       <div className="flex border-b border-base-300">
-        {(["groups", "tags", "systems"] as TabId[]).map((tab) => (
+        {(["groups", "tags", "systems", "avoids"] as TabId[]).map((tab) => (
           <button
             key={tab}
             className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
@@ -518,14 +529,24 @@ export default function SelectTGPanel({ isOpen, onClose }: SelectTGPanelProps) {
             onClick={() => setActiveTab(tab)}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === "avoids" && timedAvoids.length > 0 && (
+              <span className="badge badge-xs badge-ghost ml-1.5">
+                {timedAvoids.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Content */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        {/* Global All On/Off toggle row */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-base-300 bg-base-200/60">
+        {/* Global All On/Off toggle row. Not on the avoids tab: that list
+            is about clocks running out, not the whole selection. */}
+        <div
+          className={`items-center gap-2 px-4 py-2 border-b border-base-300 bg-base-200/60 ${
+            activeTab === "avoids" ? "hidden" : "flex"
+          }`}
+        >
           <button
             className="shrink-0"
             onClick={handleToggleAllTGs}
@@ -550,6 +571,47 @@ export default function SelectTGPanel({ isOpen, onClose }: SelectTGPanelProps) {
             {effectiveActiveCount}/{totalCount}
           </span>
         </div>
+
+        {activeTab === "avoids" &&
+          (timedAvoids.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-base-content/60">
+              No timed avoids. A permanent avoid is turned back on from the
+              talkgroup itself, under Groups, Tags or Systems.
+            </p>
+          ) : (
+            <ul>
+              {timedAvoids.map(({ entry, tg }) => (
+                <li
+                  key={entry.talkgroupId}
+                  className="flex items-center gap-3 border-b border-base-300 px-4 py-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">
+                      {formatTalkgroupLabelName(
+                        tg?.label,
+                        tg?.name,
+                        tg?.talkgroupId,
+                      )}
+                    </span>
+                    {tg && tgSystemLabel[tg.id] && (
+                      <span className="block truncate text-xs text-base-content/50">
+                        {tgSystemLabel[tg.id]}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 font-mono text-sm tabular-nums text-base-content/70">
+                    {formatCountdown(entry.expiresAt, now)}
+                  </span>
+                  <button
+                    className="btn btn-ghost btn-xs shrink-0"
+                    onClick={() => handleToggleTG(entry.talkgroupId)}
+                  >
+                    Resume
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
 
         {activeTab === "groups" &&
           [...groupMap.entries()]

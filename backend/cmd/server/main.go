@@ -41,15 +41,20 @@ import (
 	"github.com/revtex/squelch/internal/auth"
 	"github.com/revtex/squelch/internal/cli"
 	"github.com/revtex/squelch/internal/config"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/dirmonitor"
 	"github.com/revtex/squelch/internal/downstream"
+	"github.com/revtex/squelch/internal/geoip"
 	"github.com/revtex/squelch/internal/handler/routes"
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
+	"github.com/revtex/squelch/internal/ipblock"
 	"github.com/revtex/squelch/internal/logging"
+	"github.com/revtex/squelch/internal/middleware"
 	"github.com/revtex/squelch/internal/secrets"
 	"github.com/revtex/squelch/internal/seed"
 	"github.com/revtex/squelch/internal/trmqtt"
+	"github.com/revtex/squelch/internal/webhook"
 	"github.com/revtex/squelch/internal/ws"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -199,7 +204,8 @@ func runSetup(args []string) int {
 		slog.Error("setup: failed to create config directory", "error", err)
 		return 1
 	}
-	if err := os.MkdirAll(filepath.Dir(*dbFile), 0o755); err != nil {
+	// The database holds secrets; keep its directory private to the service.
+	if err := os.MkdirAll(filepath.Dir(*dbFile), 0o700); err != nil {
 		slog.Error("setup: failed to create database directory", "error", err)
 		return 1
 	}
@@ -585,41 +591,38 @@ func promptWithDefault(reader *bufio.Reader, out io.Writer, label, def string) (
 func serviceArguments(args []string) []string {
 	// Flags that take a value and must not be persisted.
 	stripValue := map[string]bool{
-		"--service":             true,
-		"--admin-password":      true,
-		"--encryption-key":      true,
-		"--encryption-key-file": true,
+		"service":             true,
+		"admin-password":      true,
+		"encryption-key":      true,
+		"encryption-key-file": true,
 	}
 	// Boolean flags that must not be persisted.
 	stripBool := map[string]bool{
-		"--config-save": true,
-		"--version":     true,
+		"config-save": true,
+		"version":     true,
 	}
 
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
+		// The flag package accepts -name and --name, each optionally with
+		// =value, so normalise all four spellings before matching.
+		name, hasValue := "", false
+		if len(a) > 1 && a[0] == '-' && a != "--" {
+			name = strings.TrimPrefix(strings.TrimPrefix(a, "-"), "-")
+			name, _, hasValue = strings.Cut(name, "=")
+		}
 		switch {
-		case stripValue[a]:
-			// Skip this flag and its next argument (the value).
-			if i+1 < len(args) {
+		case stripValue[name]:
+			// Skip this flag and, in the separate-argument form, its value.
+			if !hasValue && i+1 < len(args) {
 				i++
 			}
 			continue
-		case stripBool[a]:
+		case stripBool[name]:
 			continue
 		}
-		// Also handle --flag=value form for value flags.
-		skip := false
-		for prefix := range stripValue {
-			if strings.HasPrefix(a, prefix+"=") {
-				skip = true
-				break
-			}
-		}
-		if !skip {
-			out = append(out, a)
-		}
+		out = append(out, a)
 	}
 	return out
 }
@@ -700,6 +703,13 @@ func (p *program) run() {
 	}
 
 	queries := db.New(sqlDB)
+
+	if cfg.AdminPassword != "" {
+		if err := resetAdminPassword(context.Background(), queries, cfg.AdminPassword); err != nil {
+			slog.Error("admin password reset failed", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// Resolve encryption key (from file if configured).
 	if err := cfg.ResolveEncryptionKey(); err != nil {
@@ -783,9 +793,52 @@ func (p *program) run() {
 		os.Exit(1)
 	}
 
+	// Address blocks. Loaded before the server listens so they apply from the
+	// first request after a restart; a database that cannot be read here is
+	// fatal rather than silently serving every blocked address.
+	trustedAddrs, err := cfg.TrustedAddressList()
+	if err != nil {
+		slog.Error("invalid trusted addresses", "value", cfg.TrustedAddresses, "error", err)
+		os.Exit(1)
+	}
+	if len(trustedAddrs) > 0 && cfg.ProxiesAreDefault() {
+		slog.Warn("trusted addresses are set but trusted proxies are still the default: " +
+			"any client on a private network can claim a trusted address. Set --trusted-proxies to your reverse proxy's address")
+	}
+	ipBlocks := ipblock.New(trustedAddrs)
+	if err := ipBlocks.Reload(context.Background(), queries); err != nil {
+		slog.Error("failed to load ip blocks", "error", err)
+		os.Exit(1)
+	}
+
+	// Country lookup for the admin's connection list, from a file the
+	// operator supplies. Optional: a missing or unreadable file only turns
+	// the country column off.
+	var geoDB *geoip.DB
+	if cfg.GeoIPDB != "" {
+		d, err := geoip.Open(cfg.GeoIPDB)
+		if err != nil {
+			slog.Warn("geoip: country lookup is off: the database could not be opened", "path", cfg.GeoIPDB, "error", err)
+		} else {
+			geoDB = d
+			slog.Info("geoip: country lookup is on", "path", cfg.GeoIPDB, "type", d.Type())
+		}
+	}
+
 	// Set up Gin router with registered routes.
 	router := gin.New()
-	router.MaxMultipartMemory = 50 << 20 // 50 MiB limit for multipart uploads
+	// Multipart parts beyond this are spooled to temp files rather than held
+	// in memory. Legacy uploads may carry the API key as a form field, so the
+	// form is parsed before the key is checked; a small threshold keeps an
+	// unauthenticated body from costing more than a few MiB of heap. Request
+	// size itself is capped per route by MaxBodySize.
+	router.MaxMultipartMemory = 8 << 20
+	// Only honour X-Forwarded-For from configured proxies, so a direct client
+	// cannot pick the IP that login lockout and rate limits are keyed on.
+	if err := router.SetTrustedProxies(cfg.TrustedProxyList()); err != nil {
+		slog.Error("invalid trusted proxies", "value", cfg.TrustedProxies, "error", err)
+		os.Exit(1)
+	}
 	router.Use(gin.Recovery())
 
 	// Create the shutdown context early so it can be passed to long-lived components
@@ -795,6 +848,7 @@ func (p *program) run() {
 	p.stop = stop
 
 	rateLimiter := auth.NewRateLimiter(ctx)
+	admin.ApplyLoginLimits(ctx, queries, rateLimiter)
 
 	// Set up bounded FFmpeg worker pool and audio processor.
 	pool := audio.NewWorkerPool(ctx)
@@ -845,11 +899,21 @@ func (p *program) run() {
 		}
 	}
 	transcriberMgr := audio.NewTranscriberManager(ctx, initialPool, poolCancel)
+	admin.ApplyTranscriptionMinDuration(ctx, queries, transcriberMgr)
 
 	// Start background call pruner.
 	go audio.PruneLoop(ctx, queries, cfg.RecordingsDir)
 
-	// Start background refresh token cleanup (every hour).
+	// Connection history. Rows a previous run left open are closed first,
+	// before anything can connect, so no live connection's row is swept.
+	connHistory := connections.NewHistory(queries)
+	if err := connHistory.CloseStale(ctx); err != nil {
+		slog.Error("connections: failed to close stale history rows", "error", err)
+	}
+	connHistory.Prune(ctx)
+	go connHistory.Run(ctx)
+
+	// Hourly cleanup: expired refresh tokens and aged-out connection history.
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
@@ -858,13 +922,12 @@ func (p *program) run() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				now := time.Now().Unix()
-				if err := queries.DeleteExpiredRefreshTokens(ctx, db.DeleteExpiredRefreshTokensParams{
-					ExpiresAt: now,
-					CreatedAt: now,
-				}); err != nil {
+				if err := queries.DeleteExpiredRefreshTokens(ctx, time.Now().Unix()); err != nil {
 					slog.Error("failed to cleanup expired refresh tokens", "error", err)
 				}
+				connHistory.Prune(ctx)
+				ipBlocks.Sweep(ctx, queries)
+				geoDB.ReloadIfChanged()
 			}
 		}
 	}()
@@ -873,6 +936,10 @@ func (p *program) run() {
 	// Services are created first so their Reloader interfaces can be injected into the hub.
 	dsService := downstream.NewService(queries, processor, cfg.EncryptionKey)
 	dsService.Start(ctx)
+	whService := webhook.NewService(queries, cfg.EncryptionKey, config.Version)
+	whService.Start(ctx)
+	// Every accepted call goes to both forwarding services.
+	forwarders := callFanout{dsService, whService}
 
 	hub := ws.NewHub(queries, config.Version, ws.HubDeps{
 		SQLDB:             sqlDB,
@@ -883,27 +950,68 @@ func (p *program) run() {
 		FDKAACAvailable:   hasFDKAAC,
 		WhisperAvailable:  hasWhisper,
 		RecordingsDir:     cfg.RecordingsDir,
+		DBFile:            cfg.DBFile,
 		EncryptionKey:     cfg.EncryptionKey,
+		IPBlocks:          ipBlocks,
+		GeoIP:             geoDB,
+		LoginLimiter:      rateLimiter,
+		LegacyUsage:       middleware.DefaultLegacyUsageStore,
+		Downstreams:       dsService,
+		Webhooks:          whService,
+		MaskTester:        dirmonitor.ParseMask,
 	})
+	// Every live connection — listener and admin sockets, audio streams —
+	// reports here, for the admin's connection list.
+	conns := connections.New()
+	conns.SetObserver(connHistory)
+	if geoDB != nil {
+		conns.SetCountryLookup(geoDB.Country)
+	}
+	conns.SetOnChange(func() { hub.BroadcastAdminEvent("connections.updated", nil) })
+	hub.SetConnections(conns)
 	go hub.Run(ctx)
 
 	// Continuous listener audio stream. Startup shells out to FFmpeg to
 	// build the silence filler, so a host without a usable encoder simply
 	// leaves the endpoint answering 503 instead of failing to boot.
 	streamMgr := streamhandler.NewManager(queries, cfg.RecordingsDir)
+	streamMgr.SetConnections(conns)
 	if err := streamMgr.Start(ctx); err != nil {
 		slog.Warn("stream: continuous audio stream disabled", "error", err)
 	} else {
 		hub.SetCallNotifier(streamMgr.Notify)
+		hub.SetSessionRevoker(streamMgr)
 		// Lets a stream listener hold a call's now-playing label until its
 		// own playback reaches that call, instead of showing it the moment
 		// the call arrives — clients run several seconds behind the head.
 		streamMgr.SetCuePublisher(hub.SendStreamCue)
 	}
 
-	dwService := dirmonitor.NewService(queries, processor, hub, dsService, transcriberMgr)
+	// The audit trail is kept for auditRetentionDays; prune at startup and
+	// then once a day.
+	go func() {
+		admin.PruneAuditTrail(ctx, queries)
+		admin.PruneTranscriptionJobs(ctx, queries)
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				admin.PruneAuditTrail(ctx, queries)
+				admin.PruneTranscriptionJobs(ctx, queries)
+			}
+		}
+	}()
+
+	// The job history needs the hub so admin pages hear about each job; it
+	// is set before anything can hand the transcriber a call.
+	transcriberMgr.SetRecorder(admin.TranscriptionJobRecorder{Queries: queries, Events: hub})
+	dwService := dirmonitor.NewService(queries, processor, hub, forwarders, transcriberMgr)
 	dwService.Start(ctx)
 	hub.SetDirMonitorReloader(dwService)
+	hub.SetDirMonitorStatus(dwService)
 
 	// trunk-recorder MQTT subscriber. One autopaho client per tr_instances row;
 	// supervised reconnect, in-memory snapshot. Events fan out to admin
@@ -914,6 +1022,7 @@ func (p *program) run() {
 	if err := trManager.Start(ctx); err != nil {
 		slog.Error("trmqtt: failed to start manager", "error", err)
 	}
+	hub.SetTRInstanceSync(trManager)
 	trEvents, trUnsubscribe := trManager.Subscribe()
 	go func() {
 		defer trUnsubscribe()
@@ -949,7 +1058,7 @@ func (p *program) run() {
 		SQLDB:              sqlDB,
 		DirMonitorReloader: dwService,
 		DownstreamReloader: dsService,
-		DownstreamNotifier: dsService,
+		DownstreamNotifier: forwarders,
 		Transcriber:        transcriberMgr,
 		Version:            config.Version,
 		FFmpegAvailable:    hasFFmpeg,
@@ -958,6 +1067,7 @@ func (p *program) run() {
 		TRMqttManager:      trManager,
 		EncryptionKey:      cfg.EncryptionKey,
 		StreamManager:      streamMgr,
+		IPBlocks:           ipBlocks,
 	})
 
 	// Create HTTP server.
@@ -1038,6 +1148,7 @@ func (p *program) run() {
 
 	dsService.Stop()
 	trManager.Stop()
+	_ = geoDB.Close()
 	slog.Info("server: shutdown complete")
 }
 
@@ -1209,6 +1320,7 @@ func formatTRMqttErr(err error) string {
 // consumeTranscriptionResults reads completed transcription jobs, stores them
 // in the database, and broadcasts TRN events to WebSocket clients.
 func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *ws.Hub, mgr *audio.TranscriberManager) {
+	recorder := admin.TranscriptionJobRecorder{Queries: queries, Events: hub}
 	for {
 		select {
 		case <-ctx.Done():
@@ -1217,6 +1329,7 @@ func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *
 			if !ok {
 				return
 			}
+			recorder.Finished(ctx, res.CallID, res.DurationMs, res.Err)
 			if res.Err != nil {
 				slog.Error("transcription failed", "call_id", res.CallID, "error", res.Err)
 				continue
@@ -1249,8 +1362,15 @@ func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *
 
 			slog.Info("transcription stored", "call_id", res.CallID, "language", res.Result.Language, "segments", len(res.Result.Segments))
 
-			// Broadcast TRN to all connected clients.
-			hub.BroadcastTRN(res.CallID, res.Result.Text, res.Result.Segments)
+			// Broadcast TRN to the clients allowed to receive this call. If
+			// the call can't be loaded its grants are unknown, so skip the
+			// broadcast rather than sending it to everyone.
+			call, err := queries.GetCall(ctx, res.CallID)
+			if err != nil {
+				slog.Error("transcription: call lookup failed; not broadcasting", "call_id", res.CallID, "error", err)
+				continue
+			}
+			hub.BroadcastTRN(res.CallID, call.SystemID, call.TalkgroupID.Int64, res.Result.Text, res.Result.Segments)
 		}
 	}
 }
@@ -1415,4 +1535,13 @@ func migrateSecrets(ctx context.Context, queries *db.Queries, sqlDB *sql.DB, enc
 		slog.Info("secrets: encryption migration complete", "migrated", migrated)
 	}
 	return nil
+}
+
+// callFanout tells every forwarding service about an accepted call.
+type callFanout []interface{ Notify(downstream.CallEvent) }
+
+func (f callFanout) Notify(event downstream.CallEvent) {
+	for _, n := range f {
+		n.Notify(event)
+	}
 }

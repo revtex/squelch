@@ -39,6 +39,11 @@ than invent it: a reconstructed alternative is worse than none.
 | [0004](0004-background-audio-server-stream.md) | Background audio via a server-side stream | Accepted |
 | [0005](0005-rename-to-squelch.md) | Rename to Squelch with compatibility shims | Accepted |
 | [0006](0006-rotate-key-derivation-with-an-external-tool.md) | Rotate the key-derivation inputs with an external tool | Accepted |
+| [0007](0007-share-link-app-handoff.md) | Hand share links to the app with a custom scheme, not Universal Links | Accepted |
+| [0008](0008-ip-blocks-are-global-with-a-server-side-trusted-list.md) | IP blocks are global, with a trusted list only the host can change | Accepted |
+| [0009](0009-country-from-a-local-database-only.md) | Country comes from a local database file only | Accepted |
+| [0010](0010-admin-has-its-own-type-and-component-styling.md) | The admin has its own type and component styling, derived from the scanner theme | Accepted |
+| [0011](0011-the-wordmark-is-fixed-identity.md) | The SQUELCH wordmark is fixed identity, outside any redesign | Accepted |
 
 ## Not yet written
 

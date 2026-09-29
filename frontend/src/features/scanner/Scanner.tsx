@@ -1,33 +1,40 @@
 import { readStored } from "@/shared/utils/storage";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useGetSetupStatusQuery } from "@/app/api";
 import { useAppDispatch, useAppSelector } from "@/app/store";
 import { setSetupStatus, selectToken } from "@/features/auth";
-import {
-  expireAvoids,
-  setPaused,
-  setLive,
-  resetDisplay,
-} from "./scannerSlice";
+import { expireAvoids, setPaused, setLive, resetDisplay } from "./scannerSlice";
+import { setSystemFilters, setTalkgroupFilters } from "./callsSlice";
 import { useScanner } from "./hooks/useScanner";
 import { useTGSelectionSync } from "./hooks/useTGSelectionSync";
+import { useKeypadBeeps } from "./hooks/useKeypadBeeps";
 import { LEDPanel } from "./components/LEDPanel";
 import { DisplayPanel } from "./components/DisplayPanel";
 import { ControlToolbar } from "./components/ControlToolbar";
+import { HistoryPanel } from "./components/HistoryPanel";
 import SelectTGPanel from "./components/SelectTGPanel";
 import SearchPanel from "./components/SearchPanel";
 import BookmarksPanel from "./components/BookmarksPanel";
 import { isMobilePlatform } from "@/shared/utils/platform";
+
+function idParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 export default function Scanner() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { data: setupStatus } = useGetSetupStatusQuery();
   const token = useAppSelector(selectToken);
+  const isAudioActive = useAppSelector((s) => s.scanner.isAudioActive);
 
   const scanner = useScanner();
   useTGSelectionSync();
+  // Per-browser, with the server's setting as the starting point.
+  const { style: keypadBeeps } = useKeypadBeeps(scanner.config?.keypadBeeps);
 
   // Read cached display prefs so we don't flash defaults before WS delivers CFG.
   // Lazy useState initializer runs exactly once per component instance.
@@ -48,8 +55,19 @@ export default function Scanner() {
     return {};
   });
 
+  // `/?system=<id>&talkgroup=<id>` (from the admin) opens the search on one
+  // talkgroup. The ids are row ids, the same ones the search filters use.
+  const [searchParams] = useSearchParams();
+  const deepSystem = idParam(searchParams.get("system"));
+  const deepTalkgroup = idParam(searchParams.get("talkgroup"));
+  const hasDeepLink = deepSystem != null || deepTalkgroup != null;
+  useEffect(() => {
+    if (deepSystem != null) dispatch(setSystemFilters([deepSystem]));
+    if (deepTalkgroup != null) dispatch(setTalkgroupFilters([deepTalkgroup]));
+  }, [dispatch, deepSystem, deepTalkgroup]);
+
   const [selectTGOpen, setSelectTGOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(hasDeepLink);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
 
   const handleToggleSelectTG = useCallback(() => {
@@ -95,11 +113,14 @@ export default function Scanner() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <LEDPanel />
+      <LEDPanel
+        onToggleBookmarks={
+          token ? () => setBookmarksOpen((prev) => !prev) : undefined
+        }
+      />
       <DisplayPanel
         currentCall={scanner.currentCall}
         backgroundAudio={scanner.backgroundAudio}
-        history={scanner.history}
         heldSystem={scanner.heldSystem}
         heldTG={scanner.heldTG}
         listenerCount={scanner.listenerCount}
@@ -116,6 +137,7 @@ export default function Scanner() {
         shareableLinks={scanner.config?.shareableLinks ?? false}
         isAuthenticated={!!token}
         isLive={scanner.isLive}
+        isPaused={scanner.isPaused}
       />
       <ControlToolbar
         isPaused={scanner.isPaused}
@@ -135,17 +157,34 @@ export default function Scanner() {
         onAddAvoid={scanner.addAvoid}
         onToggleSelectTG={handleToggleSelectTG}
         onToggleSearch={handleToggleSearch}
-        onToggleBookmarks={
-          token ? () => setBookmarksOpen((prev) => !prev) : undefined
+        selectOpen={selectTGOpen}
+        searchOpen={searchOpen}
+        isAvoided={
+          scanner.currentCall != null &&
+          scanner.avoidList.some(
+            (a) => a.talkgroupId === scanner.currentCall?.talkgroup,
+          )
         }
+        // Anything the player has already played can be replayed, whether or
+        // not it is still the Call on the display.
+        canReplay={scanner.currentCall != null || scanner.history.length > 0}
         backgroundAudio={scanner.backgroundAudio}
         streamState={scanner.streamState}
         onToggleBackgroundAudio={
           // Mobile only: a desktop browser keeps a background tab running
           // and plays each call normally, so the stream buys nothing there.
-          token && isMobilePlatform() ? scanner.toggleBackgroundAudio : undefined
+          token && isMobilePlatform()
+            ? scanner.toggleBackgroundAudio
+            : undefined
         }
-        keypadBeeps={scanner.config?.keypadBeeps}
+        keypadBeeps={keypadBeeps}
+      />
+      <HistoryPanel
+        history={scanner.history}
+        time12hFormat={
+          scanner.config?.time12hFormat ?? cachedPrefs.time12hFormat ?? false
+        }
+        playingCallId={isAudioActive ? (scanner.currentCall?.id ?? null) : null}
       />
       <SelectTGPanel
         isOpen={selectTGOpen}

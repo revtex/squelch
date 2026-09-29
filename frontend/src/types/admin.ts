@@ -10,6 +10,28 @@ export interface AdminUser {
   limit: number | null; // concurrent connection limit
   createdAt: number;
   updatedAt: number;
+  /** 1 when the user has a temporary password and must pick their own. */
+  passwordNeedChange: number;
+  /** Open LIVE, BKGND and admin connections right now. */
+  liveConnections: number;
+  /** Browsers and phones that can still sign back in without a password. */
+  devices: number;
+  /** When and from where the account last renewed its sign-in. */
+  lastSeenAt: number | null;
+  lastSeenIp: string | null;
+}
+
+/** An address the sign-in limiter is counting failures for or keeping out. */
+export interface AdminLockout {
+  ip: string;
+  failures: number;
+  /** Unix seconds; null while the address still has attempts left. */
+  lockedUntil: number | null;
+  lastFailure: number;
+}
+
+export interface AdminLockoutsList {
+  lockouts: AdminLockout[];
 }
 
 export interface AdminSystem {
@@ -20,7 +42,17 @@ export interface AdminSystem {
   blacklistsJson: string | null;
   led: string | null;
   order: number;
+  /** Counts and activity, from systems.list. */
+  talkgroups: number;
+  units: number;
+  calls24h: number;
+  lastCall: number | null;
+  /** Talkgroup numbers auto-populate skips. */
+  blocked: number[];
 }
+
+/** What create and update take: the fields the admin edits. */
+export type AdminSystemInput = Pick<AdminSystem, "systemId" | "label" | "autoPopulateTalkgroups" | "blacklistsJson" | "led" | "order">;
 
 export interface AdminTalkgroup {
   id: number;
@@ -33,7 +65,13 @@ export interface AdminTalkgroup {
   groupId: number | null;
   tagId: number | null;
   order: number;
+  /** Activity, present when one system's talkgroups were asked for. */
+  calls24h?: number;
+  lastHeard?: number | null;
+  avgDurationMs?: number;
 }
+
+export type AdminTalkgroupInput = Pick<AdminTalkgroup, "systemId" | "talkgroupId" | "label" | "name" | "frequency" | "led" | "groupId" | "tagId" | "order">;
 
 export interface AdminUnit {
   id: number;
@@ -41,16 +79,95 @@ export interface AdminUnit {
   unitId: number;
   label: string | null;
   order: number;
+  /** Present when one system's units were asked for. */
+  lastHeard?: number | null;
+}
+
+export type AdminUnitInput = Pick<AdminUnit, "systemId" | "unitId" | "label" | "order">;
+
+/** Fields talkgroups.bulk may set; null clears, absent leaves alone. */
+export interface TalkgroupBulkPayload {
+  ids: number[];
+  groupId?: number | null;
+  tagId?: number | null;
+  led?: string | null;
+}
+
+/** One talkgroup read from a CSV, in the file's own words. */
+export interface ImportRow {
+  row: number;
+  talkgroupId: number;
+  label?: string;
+  name?: string;
+  group?: string;
+  tag?: string;
+  led?: string;
+  frequency?: number;
+  order?: number;
+}
+
+export interface ImportProblem {
+  row: number;
+  reason: string;
+}
+
+export interface ImportChange {
+  field: string;
+  now: string;
+  after: string;
+}
+
+export interface ImportPreviewRow extends ImportRow {
+  status: "new" | "unchanged" | "changed";
+  changes: ImportChange[];
+}
+
+export interface TalkgroupImportPreview {
+  format: "squelch" | "rdio-scanner" | "radioreference";
+  rows: ImportPreviewRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
+  changed: number;
+}
+
+export type ImportMode = "fill" | "overwrite";
+
+export interface TalkgroupImportResult {
+  ok: boolean;
+  created: number;
+  updated: number;
+  unchanged: number;
 }
 
 export interface AdminGroup {
   id: number;
   label: string;
+  /** How many talkgroups are in this group. */
+  talkgroups: number;
 }
 
 export interface AdminTag {
   id: number;
   label: string;
+  /** How many talkgroups carry this tag. */
+  talkgroups: number;
+}
+
+/**
+ * Deleting a group or tag that talkgroups still use needs a destination:
+ * another id, or null to leave them without one.
+ */
+export interface DeleteLabelPayload {
+  id: number;
+  reassign?: boolean;
+  moveTo?: number | null;
+}
+
+export interface DeleteLabelResult {
+  ok: boolean;
+  /** Talkgroups moved before the delete. */
+  moved: number;
 }
 
 export interface AdminApiKey {
@@ -61,22 +178,51 @@ export interface AdminApiKey {
   systemsJson: string | null;
   callRateLimit: number | null;
   order: number;
+  createdAt: number;
+  /** Unix seconds of the last authenticated request, or null if never. */
+  lastUsedAt: number | null;
+  lastUsedIp: string | null;
+  /** Calls uploaded with this key in the last 24 hours. */
+  calls24h: number;
+  /** Requests on the deprecated /api/* surface in the last 24 hours. */
+  legacy24h: number;
+  /** While set, the secret this key had before its last rotation still works until then. */
+  previousKeyExpiresAt: number | null;
 }
 
 export interface AdminApiKeyCreateResponse extends AdminApiKey {
   createdKey: string;
 }
 
-export interface AdminDownstream {
+/** How one delivery went: a call forwarded, or a test. */
+export interface DeliveryResult {
+  at: number;
+  ok: boolean;
+  status: number;
+  error: string;
+  millis: number;
+}
+
+/** What downstreams and webhooks share: an address and how sending goes. */
+export interface ForwardingTarget {
   id: number;
+  label: string;
   url: string;
-  hasApiKey: boolean;
   systemsJson: string | null;
   disabled: number;
   order: number;
+  last: DeliveryResult | null;
+  lastOkAt: number | null;
+  sent24h: number;
+  failed24h: number;
+}
+
+export interface AdminDownstream extends ForwardingTarget {
+  hasApiKey: boolean;
 }
 
 export interface AdminDownstreamCreate {
+  label: string;
   url: string;
   apiKey: string;
   systemsJson: string | null;
@@ -84,23 +230,38 @@ export interface AdminDownstreamCreate {
   order: number;
 }
 
-export interface AdminDownstreamUpdate {
+export interface AdminDownstreamUpdate extends AdminDownstreamCreate {
   id: number;
+}
+
+export type WebhookType = "generic" | "discord";
+
+export interface AdminWebhook extends ForwardingTarget {
+  type: WebhookType;
+  /** The secret itself never reaches the browser. */
+  hasSecret: boolean;
+}
+
+export interface AdminWebhookCreate {
+  label: string;
   url: string;
-  apiKey: string;
+  type: WebhookType;
+  /** Blank keeps the current secret when editing. */
+  secret?: string;
+  clearSecret?: boolean;
   systemsJson: string | null;
   disabled: number;
   order: number;
 }
 
-export interface AdminWebhook {
+export interface AdminWebhookUpdate extends AdminWebhookCreate {
   id: number;
-  url: string;
-  type: string;
-  secret: string | null;
-  systemsJson: string | null;
-  disabled: number;
-  order: number;
+}
+
+/** The payload and headers a generic webhook receives, for the preview. */
+export interface WebhookSample {
+  payload: unknown;
+  headers: Record<string, string>;
 }
 
 export interface AdminSetting {
@@ -114,9 +275,24 @@ export interface Capabilities {
   whisper: boolean;
 }
 
+/** Storage figures shown next to the prune setting. */
+export interface StorageInfo {
+  recordingsBytes: number;
+  recordingFiles: number;
+  /** Unix seconds of the last recordings walk; 0 while the first one runs. */
+  measuredAt: number;
+  volumeTotalBytes: number;
+  volumeFreeBytes: number;
+  databaseBytes: number;
+  oldestCall: number | null;
+}
+
 export interface ConfigResponse {
   settings: AdminSetting[];
   capabilities: Capabilities;
+  storage?: StorageInfo;
+  /** Addresses the server was started with that can never be blocked. */
+  trustedAddresses?: string[];
 }
 
 export interface AdminLog {
@@ -124,6 +300,14 @@ export interface AdminLog {
   level: string;
   message: string;
   attrs?: Record<string, string>;
+}
+
+/** One row of the audit trail: what the server wrote to the logs table. */
+export interface AdminAuditRow {
+  id: number;
+  dateTime: number;
+  level: string;
+  message: string;
 }
 
 // User create/update payload
@@ -135,25 +319,47 @@ export interface CreateUserPayload {
   systemsJson?: string | null;
   expiration?: number | null;
   limit?: number | null;
+  /** Default 1: the user picks their own password at first sign-in. */
+  passwordNeedChange?: number;
 }
 
 export interface UpdateUserPayload {
   username?: string;
+  /** Resets the password; an admin reset asks for a change next time. */
   password?: string;
   role?: "admin" | "listener";
   disabled?: number;
   systemsJson?: string | null;
   expiration?: number | null;
   limit?: number | null;
+  passwordNeedChange?: number;
+  /** Also sign the account out on every device. */
+  signOut?: boolean;
 }
 
-export interface AdminDirMonitor {
-  id: number;
+export type MonitorState = "watching" | "polling" | "stopped" | "disabled" | "unknown";
+
+/** What a folder monitor is doing right now, from the running service. */
+export interface MonitorStatus {
+  state: MonitorState;
+  /** Why it stopped, or a problem it keeps running through. */
+  error: string;
+  since: number | null;
+  lastFile: string;
+  lastFileAt: number | null;
+  /** What came of the last file, in words. */
+  lastResult: string;
+  lastCallId: number | null;
+  ingested24h: number;
+}
+
+export interface AdminDirMonitorCreate {
   directory: string;
   type: string;
   mask: string | null;
   extension: string | null;
   frequency: number | null;
+  /** Milliseconds to wait before reading a new file, or between polls. */
   delay: number | null;
   deleteAfter: number;
   usePolling: number;
@@ -163,55 +369,108 @@ export interface AdminDirMonitor {
   order: number;
 }
 
-// --- RadioReference enrichment types ---
+export interface AdminDirMonitorUpdate extends AdminDirMonitorCreate {
+  id: number;
+}
 
-export interface RRTalkgroupCandidate {
+export interface AdminDirMonitor extends AdminDirMonitorCreate {
+  id: number;
+  status: MonitorStatus;
+}
+
+export interface MaskTestResult {
+  ok: boolean;
+  values: Record<string, string>;
+}
+
+// --- Backup & import ---
+
+/** One unit read from a CSV. */
+export interface UnitImportRow {
   row: number;
-  talkgroupId: number;
+  unitId: number;
   label?: string;
-  name?: string;
-  group?: string;
-  tag?: string;
-  led?: string;
   order?: number;
 }
 
-export interface RRPreviewRow extends RRTalkgroupCandidate {
-  matched: boolean;
-  wouldUpdate: boolean;
-  wouldUpdateFields: string[];
-  skipReason?: string;
+export interface UnitImportPreviewRow extends UnitImportRow {
+  status: "new" | "unchanged" | "changed";
+  changes: ImportChange[];
 }
 
-export interface RRRowError {
+export interface UnitImportPreview {
+  rows: UnitImportPreviewRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
+  changed: number;
+}
+
+/** One group or tag label read from a CSV, judged against what exists. */
+export interface LabelImportRow {
   row: number;
-  reason: string;
+  label: string;
+  status: "new" | "unchanged";
 }
 
-export interface RRPreviewResponse {
-  processed: number;
-  matched: number;
-  wouldUpdate: number;
-  skipped: number;
-  errors: number;
-  rowErrors: RRRowError[];
-  rows: RRPreviewRow[];
+export interface LabelImportPreview {
+  rows: LabelImportRow[];
+  problems: ImportProblem[];
+  new: number;
+  unchanged: number;
 }
 
-export interface RRApplyRequest {
-  systemId: number;
-  candidates: RRTalkgroupCandidate[];
-  mergeMode: string;
-  selectedFields: string[];
+/** What units.import, groups.import and tags.import report. */
+export interface ImportApplyResult {
+  ok: boolean;
+  created: number;
+  updated?: number;
+  unchanged: number;
 }
 
-export interface RRApplyResponse {
-  processed: number;
-  matched: number;
+/** One table compared between a backup file and the live data. */
+export interface BackupEntity {
+  key: string;
+  label: string;
+  /** False when the file does not carry this table. */
+  included: boolean;
+  inFile: number;
+  now: number;
+  /** In the file, not here. */
+  added: number;
+  /** In both, but different. */
+  changed: number;
+  /** Here, not in the file: only Replace deletes these. */
+  removed: number;
+  /** A few names of what Replace would remove. */
+  examples: string[];
+}
+
+export interface BackupPreview {
+  entities: BackupEntity[];
+  warnings: string[];
+}
+
+export interface BackupCounts {
+  systems: number;
+  talkgroups: number;
+  units: number;
+  groups: number;
+  tags: number;
+  users: number;
+  lastBackupAt: number | null;
+}
+
+export type RestoreMode = "merge" | "replace";
+
+export interface RestoreResult {
+  ok: boolean;
+  mode: RestoreMode;
+  created: number;
   updated: number;
-  skipped: number;
-  errors: number;
-  rowErrors: RRRowError[];
+  removed: number;
+  /** Where the previous configuration was saved, or "" when the server has no database file. */
+  snapshot: string;
 }
 
 // --- Shared Links (admin) ---
@@ -219,16 +478,137 @@ export interface RRApplyResponse {
 export interface SharedLinkAdmin {
   id: number;
   callId: number;
+  userId: number;
   token: string;
   createdAt: number;
   sharedBy: string;
   dateTime: number;
+  /** The call's length in milliseconds. */
   duration: number;
   systemLabel: string;
   talkgroupLabel: string;
   talkgroupName: string;
+  /** The link's own expiry, if it has one. */
+  expiresAt: number | null;
+  /** When the link stops working, its own expiry or the server-wide one; null means never. */
+  effectiveExpiresAt: number | null;
+  expired: boolean;
+  /** Times the public page fetched the call. */
+  opens: number;
+  lastOpenedAt: number | null;
+}
+
+/** Enough to put a revoked link back with the same URL. */
+export interface RestoreSharedLinkPayload {
+  callId: number;
+  userId: number;
+  token: string;
+  createdAt: number;
   expiresAt: number | null;
 }
+
+// --- Connections (admin) ---
+
+/** listener = a LIVE socket, admin = the admin dashboard, stream = BKGND audio. */
+export type ConnectionKind = "listener" | "admin" | "stream";
+
+/** Whether countries are shown, and the credit the database asks for. */
+export interface GeoIPInfo {
+  enabled: boolean;
+  credit: { text: string; url: string } | null;
+}
+
+/** Where an address is: a country, the local network, or unknown. */
+export interface AddressPlace {
+  /** ISO 3166-1 alpha-2 code; null when unknown or local. */
+  country: string | null;
+  /** A private, loopback or link-local address. */
+  local: boolean;
+}
+
+export interface AdminConnection extends AddressPlace {
+  id: string;
+  kind: ConnectionKind;
+  /** null for an anonymous (public access) listener. */
+  userId: number | null;
+  username: string;
+  role: string;
+  familyId: string | null;
+  ip: string | null;
+  userAgent: string;
+  native: boolean;
+  protocol: string;
+  connectedAt: number;
+  /** The admin connection this list was requested over. */
+  self: boolean;
+  /** On the server's trusted list: can never be blocked. */
+  trusted: boolean;
+}
+
+export interface AdminConnectionsList {
+  connections: AdminConnection[];
+  geoip: GeoIPInfo;
+}
+
+/** A signed-in device: one refresh-token family, as it was last used. */
+export interface AdminSession extends AddressPlace {
+  familyId: string;
+  userId: number;
+  username: string;
+  role: string;
+  ip: string | null;
+  userAgent: string | null;
+  native: boolean;
+  signedInAt: number | null;
+  lastUsedAt: number;
+  expiresAt: number;
+  liveConnections: number;
+  /** The device this list was requested from. */
+  current: boolean;
+  /** Its last address is on the server's trusted list. */
+  trusted: boolean;
+}
+
+export interface AdminSessionsList {
+  sessions: AdminSession[];
+  geoip: GeoIPInfo;
+}
+
+export interface AdminConnectionHistoryEntry extends AddressPlace {
+  id: number;
+  kind: ConnectionKind;
+  userId: number | null;
+  username: string | null;
+  ip: string;
+  userAgent: string | null;
+  native: boolean;
+  familyId: string | null;
+  connectedAt: number;
+  disconnectedAt: number | null;
+  disconnectReason: string | null;
+  /** On the server's trusted list: can never be blocked. */
+  trusted: boolean;
+}
+
+export interface AdminConnectionHistoryPage {
+  items: AdminConnectionHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** 0 means history is turned off. */
+  retentionDays: number;
+  geoip: GeoIPInfo;
+}
+
+export type ConnectionHistoryFilter = {
+  ip?: string;
+  userId?: number;
+  kind?: ConnectionKind;
+  since?: number;
+  until?: number;
+  page?: number;
+  pageSize?: number;
+};
 
 // --- Server filesystem types ---
 
@@ -252,7 +632,19 @@ export interface TranscriptionStatus {
   language: string;
   diarize: boolean;
   liveDisplay: boolean;
+  /** Calls shorter than this are not sent; 0 sends everything. */
+  minDurationMs: number;
+  /** Whether go-whisper answered just now. */
   connected: boolean;
+  /** From the sidecar's Server header, when it sends one. */
+  version: string;
+  latencyMs: number;
+  /** Why it is not connected, in a sentence; empty when it is. */
+  error: string;
+  /** Live pool: worker count, buffered jobs, and whether a pool is running. */
+  workers: number;
+  queueDepth: number;
+  poolEnabled: boolean;
 }
 
 export interface WhisperModel {
@@ -263,14 +655,52 @@ export interface WhisperModel {
   owned_by: string;
 }
 
+/** A model download in flight on the server. */
+export interface ModelDownload {
+  model: string;
+  current: number;
+  total: number;
+  percent: number;
+}
+
 export interface TranscriptionModelsResponse {
-  object: string;
   models: WhisperModel[];
+  downloads: ModelDownload[];
+}
+
+export interface TranscriptionTestResult {
+  ok: boolean;
+  latencyMs: number;
+  version: string;
+  models: number;
+  error: string;
+}
+
+export type TranscriptionJobStatus = "queued" | "done" | "failed" | "skipped";
+
+/** One call's trip through the transcriber. */
+export interface TranscriptionJob {
+  callId: number;
+  status: TranscriptionJobStatus;
+  error: string;
+  model: string;
+  durationMs: number;
+  createdAt: number;
+  finishedAt: number | null;
+  callTime: number;
+  callDurationMs: number;
+  systemLabel: string;
+  talkgroupNumber: number | null;
+  talkgroupLabel: string;
 }
 
 export interface TranscriptionStats {
   total: number;
   recent24h: number;
+  calls24h: number;
+  failed24h: number;
+  skipped24h: number;
+  queued: number;
   avgDurationMs: number;
   minDurationMs: number;
   maxDurationMs: number;
@@ -278,4 +708,85 @@ export interface TranscriptionStats {
   poolEnabled: boolean;
   byLanguage: { language: string; count: number }[];
   byModel: { model: string; count: number }[];
+}
+
+/** A blocked address or range. */
+export interface AdminIPBlock {
+  id: number;
+  cidr: string;
+  reason: string;
+  /** Username of the admin who added it; null if that account is gone. */
+  createdBy: string | null;
+  createdAt: number;
+  /** Unix seconds; null = until removed. */
+  expiresAt: number | null;
+}
+
+export interface AdminIPBlocksList {
+  /** False when the server runs without address blocking. */
+  enabled: boolean;
+  blocks: AdminIPBlock[];
+  /** Addresses that can never be blocked: loopback plus the server's list. */
+  trusted: string[];
+  /** The address the admin is connected from, as the server sees it. */
+  yourAddress: string | null;
+}
+
+export interface CreateIPBlockPayload {
+  address: string;
+  reason: string;
+  expiresAt?: number;
+  force?: boolean;
+}
+
+/**
+ * Either the block was made, or it would include the admin's own address
+ * and needs confirming (resend with force).
+ */
+export type CreateIPBlockResult =
+  | { ok: true; id: number; cidr: string; closed: number }
+  | { needsConfirm: true; cidr: string; message: string };
+
+// ── Activity (Overview) ──
+
+export type ActivityRange = "24h" | "7d" | "30d";
+
+export interface ActivityStats {
+  callsToday: number;
+  /** Yesterday's calls up to this time of day. */
+  callsYesterday: number;
+  callsThisWeek: number;
+  callsTotal: number;
+  /** Unix seconds of the newest call; 0 when there are none. */
+  lastCallAt: number;
+  activeListeners: number;
+  uptime: number;
+  /** Unix seconds the server started. */
+  startedAt: number;
+  version: string;
+}
+
+export interface ActivityBucket {
+  /** Unix seconds at the start of the hour. */
+  hour: number;
+  count: number;
+}
+
+export interface ActivityChart {
+  buckets: ActivityBucket[];
+}
+
+export interface TopTalkgroup {
+  /** The talkgroup's database id; 0 for calls without one. */
+  talkgroupId: number;
+  systemId: number;
+  talkgroupNumber: number;
+  talkgroupLabel: string;
+  talkgroupName: string;
+  systemLabel: string;
+  callCount: number;
+}
+
+export interface TopTalkgroups {
+  talkgroups: TopTalkgroup[];
 }

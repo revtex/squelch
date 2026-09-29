@@ -10,6 +10,33 @@ import (
 	"database/sql"
 )
 
+const adminSetUserPassword = `-- name: AdminSetUserPassword :exec
+UPDATE users SET
+    password_hash        = ?1,
+    password_need_change = ?2,
+    updated_at           = ?3
+WHERE id = ?4
+`
+
+type AdminSetUserPasswordParams struct {
+	PasswordHash       string `db:"password_hash" json:"-"`
+	PasswordNeedChange int64  `db:"password_need_change" json:"password_need_change"`
+	UpdatedAt          int64  `db:"updated_at" json:"updated_at"`
+	ID                 int64  `db:"id" json:"id"`
+}
+
+// An admin's reset: the new hash, and whether the user must pick their own
+// password at the next sign-in.
+func (q *Queries) AdminSetUserPassword(ctx context.Context, arg AdminSetUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, adminSetUserPassword,
+		arg.PasswordHash,
+		arg.PasswordNeedChange,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     username,
@@ -77,7 +104,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, created_at, updated_at FROM users WHERE id = ? LIMIT 1
+SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, preferences_json, created_at, updated_at FROM users WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -94,6 +121,7 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.Limit,
 		&i.PasswordNeedChange,
 		&i.TgSelectionJson,
+		&i.PreferencesJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -101,7 +129,7 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, created_at, updated_at FROM users WHERE username = ? LIMIT 1
+SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, preferences_json, created_at, updated_at FROM users WHERE username = ? LIMIT 1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -118,6 +146,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.Limit,
 		&i.PasswordNeedChange,
 		&i.TgSelectionJson,
+		&i.PreferencesJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -125,7 +154,7 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, created_at, updated_at FROM users ORDER BY id ASC
+SELECT id, username, password_hash, role, disabled, systems_json, expiration, "limit", password_need_change, tg_selection_json, preferences_json, created_at, updated_at FROM users ORDER BY id ASC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -148,6 +177,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.Limit,
 			&i.PasswordNeedChange,
 			&i.TgSelectionJson,
+			&i.PreferencesJson,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -162,6 +192,24 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setUserPasswordNeedChange = `-- name: SetUserPasswordNeedChange :exec
+UPDATE users SET
+    password_need_change = ?1,
+    updated_at           = ?2
+WHERE id = ?3
+`
+
+type SetUserPasswordNeedChangeParams struct {
+	PasswordNeedChange int64 `db:"password_need_change" json:"password_need_change"`
+	UpdatedAt          int64 `db:"updated_at" json:"updated_at"`
+	ID                 int64 `db:"id" json:"id"`
+}
+
+func (q *Queries) SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error {
+	_, err := q.db.ExecContext(ctx, setUserPasswordNeedChange, arg.PasswordNeedChange, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const updateUser = `-- name: UpdateUser :exec
@@ -217,6 +265,24 @@ type UpdateUserPasswordParams struct {
 
 func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
 	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.PasswordHash, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const updateUserPreferences = `-- name: UpdateUserPreferences :exec
+UPDATE users SET
+    preferences_json = ?1,
+    updated_at       = ?2
+WHERE id = ?3
+`
+
+type UpdateUserPreferencesParams struct {
+	PreferencesJson sql.NullString `db:"preferences_json" json:"preferences_json"`
+	UpdatedAt       int64          `db:"updated_at" json:"updated_at"`
+	ID              int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPreferences, arg.PreferencesJson, arg.UpdatedAt, arg.ID)
 	return err
 }
 

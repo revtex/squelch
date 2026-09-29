@@ -5,6 +5,7 @@ import type {
   LoginResponse,
   RefreshResponse,
   ChangePasswordRequest,
+  ListenerPreferences,
 } from "./types";
 
 interface AuthState {
@@ -124,6 +125,36 @@ const authApi = api.injectEndpoints({
         body,
       }),
     }),
+    // A listener's own client settings, kept against the account so they
+    // follow the person rather than the browser. A field is absent when it
+    // has never been set, which leaves the instance default in force.
+    getPreferences: builder.query<ListenerPreferences, void>({
+      query: () => "/listener/preferences",
+    }),
+    updatePreferences: builder.mutation<
+      ListenerPreferences,
+      ListenerPreferences
+    >({
+      query: (body) => ({
+        url: "/listener/preferences",
+        method: "PUT",
+        body,
+      }),
+      // The choice has to apply to this tab as it is made, not after a
+      // round trip — the click that picks a beep also plays it.
+      async onQueryStarted(body, { dispatch, queryFulfilled }) {
+        const patch = dispatch(
+          authApi.util.updateQueryData("getPreferences", undefined, (draft) => {
+            Object.assign(draft, body);
+          }),
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+    }),
   }),
 });
 
@@ -134,4 +165,6 @@ export const {
   useChangePasswordMutation,
   useGetTGSelectionQuery,
   useUpdateTGSelectionMutation,
+  useGetPreferencesQuery,
+  useUpdatePreferencesMutation,
 } = authApi;

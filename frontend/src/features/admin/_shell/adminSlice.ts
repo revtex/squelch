@@ -1,5 +1,5 @@
 import { api } from "@/app/api";
-import type { RRPreviewResponse } from "@/types";
+import type { LabelImportPreview, TalkgroupImportPreview, UnitImportPreview } from "@/types";
 
 // --- Admin RTK Query endpoints (file-upload only; all other admin ops use WebSocket) ---
 
@@ -72,10 +72,31 @@ const adminApi = api.injectEndpoints({
       invalidatesTags: ["Tags"],
     }),
 
-    // ── RadioReference CSV preview (multipart file upload) ──
-    rrPreviewCSV: builder.mutation<RRPreviewResponse, FormData>({
+    // ── Reviewed CSV imports: the preview reads the file, the WS op applies it ──
+    previewTalkgroupImport: builder.mutation<TalkgroupImportPreview, FormData>({
       query: (body) => ({
-        url: "/admin/radioreference/preview",
+        url: "/admin/import/talkgroups/preview",
+        method: "POST",
+        body,
+      }),
+    }),
+    previewUnitImport: builder.mutation<UnitImportPreview, FormData>({
+      query: (body) => ({
+        url: "/admin/import/units/preview",
+        method: "POST",
+        body,
+      }),
+    }),
+    previewGroupImport: builder.mutation<LabelImportPreview, FormData>({
+      query: (body) => ({
+        url: "/admin/import/groups/preview",
+        method: "POST",
+        body,
+      }),
+    }),
+    previewTagImport: builder.mutation<LabelImportPreview, FormData>({
+      query: (body) => ({
+        url: "/admin/import/tags/preview",
         method: "POST",
         body,
       }),
@@ -88,5 +109,8 @@ export const {
   useImportUnitsMutation,
   useImportGroupsMutation,
   useImportTagsMutation,
-  useRrPreviewCSVMutation,
+  usePreviewTalkgroupImportMutation,
+  usePreviewUnitImportMutation,
+  usePreviewGroupImportMutation,
+  usePreviewTagImportMutation,
 } = adminApi;

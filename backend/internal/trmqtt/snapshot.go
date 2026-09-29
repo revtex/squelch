@@ -1,6 +1,7 @@
 package trmqtt
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 )
@@ -138,6 +139,24 @@ func (s *Snapshot) setRates(f RatesFrame) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rates = f
+	// Keep a rolling window per system so a page opened later can draw the
+	// last few minutes instead of starting from an empty chart.
+	var rates []struct {
+		SysName    string      `json:"sys_name"`
+		SysNum     json.Number `json:"sys_num"`
+		Decoderate float64     `json:"decoderate"`
+	}
+	if len(f.Rates) == 0 || json.Unmarshal(f.Rates, &rates) != nil {
+		return
+	}
+	now := time.Now()
+	for _, r := range rates {
+		name := r.SysName
+		if name == "" {
+			name = r.SysNum.String()
+		}
+		s.rateSamps.Push(RateSample{At: now, System: name, Rate: r.Decoderate})
+	}
 }
 
 func (s *Snapshot) setRecorders(f RecordersFrame) {
@@ -152,14 +171,41 @@ func (s *Snapshot) setCallsActive(f CallsActiveFrame) {
 	s.callsActive = f
 }
 
+// maxSystemFrames caps the per-instance system table. A trunk-recorder
+// instance monitors a handful of systems; the cap only matters if a broker
+// publisher sends frames for endless distinct systems.
+const maxSystemFrames = 64
+
 func (s *Snapshot) mergeSystem(f SystemFrame) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	key := f.InstanceID + ":" + string(f.Timestamp)
-	if key == ":" {
-		key = "_"
+	key := f.InstanceID + ":" + systemFrameIdentity(f.System)
+	if _, known := s.systemFrames[key]; !known && len(s.systemFrames) >= maxSystemFrames {
+		return
 	}
 	s.systemFrames[key] = f
+}
+
+// systemFrameIdentity names the system a /system frame describes, so each
+// system keeps one latest frame. It prefers sys_name, then sys_num.
+func systemFrameIdentity(raw json.RawMessage) string {
+	var id struct {
+		SysName   string      `json:"sys_name"`
+		Shortname string      `json:"shortname"`
+		SysNum    json.Number `json:"sys_num"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &id) != nil {
+		return "_"
+	}
+	switch {
+	case id.SysName != "":
+		return id.SysName
+	case id.Shortname != "":
+		return id.Shortname
+	case id.SysNum != "":
+		return "#" + id.SysNum.String()
+	}
+	return "_"
 }
 
 func (s *Snapshot) setSystems(f SystemsFrame) {

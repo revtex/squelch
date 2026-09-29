@@ -72,20 +72,26 @@ export function ShareCallButton({
     if (!shareUrl) return;
     const copied = await copyToClipboard(shareUrl);
     showToast(
-      copied ? "Link copied to clipboard" : "Copy failed - long-press URL to copy",
+      copied
+        ? "Link copied to clipboard"
+        : "Copy failed - long-press URL to copy",
     );
   }, [shareUrl, showToast]);
 
   return (
     <>
-      <button
-        onClick={handleClick}
-        className={className}
-        aria-label="Share call"
-        title="Share call"
+      <span
+        className="tooltip tooltip-top tooltip-flush-right"
+        data-tip="Share call"
       >
-        <Share2 style={{ width: iconSize, height: iconSize }} />
-      </button>
+        <button
+          onClick={handleClick}
+          className={className}
+          aria-label="Share call"
+        >
+          <Share2 style={{ width: iconSize, height: iconSize }} />
+        </button>
+      </span>
 
       {shareUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -111,24 +117,26 @@ export function ShareCallButton({
                 onFocus={(e) => e.currentTarget.select()}
                 aria-label="Share URL"
               />
-              <button
-                className="btn btn-primary btn-sm btn-square"
-                onClick={handleCopy}
-                aria-label="Copy share URL"
-                title="Copy"
-              >
-                <Copy size={16} />
-              </button>
-              <button
-                className="btn btn-ghost btn-sm btn-square"
-                onClick={() => {
-                  window.open(shareUrl, "_blank", "noopener,noreferrer");
-                }}
-                aria-label="Open share URL"
-                title="Open"
-              >
-                <ExternalLink size={16} />
-              </button>
+              <span className="tooltip tooltip-top" data-tip="Copy">
+                <button
+                  className="btn btn-primary btn-sm btn-square"
+                  onClick={handleCopy}
+                  aria-label="Copy share URL"
+                >
+                  <Copy size={16} />
+                </button>
+              </span>
+              <span className="tooltip tooltip-top" data-tip="Open">
+                <button
+                  className="btn btn-ghost btn-sm btn-square"
+                  onClick={() => {
+                    window.open(shareUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  aria-label="Open share URL"
+                >
+                  <ExternalLink size={16} />
+                </button>
+              </span>
             </div>
           </div>
         </div>

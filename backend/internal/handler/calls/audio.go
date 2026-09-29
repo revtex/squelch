@@ -39,9 +39,7 @@ func (h *Handler) GetCallAudio(c *gin.Context) {
 
 	// Require authentication or publicAccess for direct audio access.
 	// Anonymous users must use /api/shared/:token/audio for shared calls.
-	_, hasUser := c.Get("userID")
-	if !hasUser && shared.GetSettingValue(c, h.queries, "publicAccess") != "true" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+	if !shared.RequireUserOrPublicAccess(c, h.queries) {
 		return
 	}
 

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/revtex/squelch/internal/connections"
 )
 
 // Tuning constants.
@@ -68,6 +70,9 @@ type Manager struct {
 
 	cue CuePublisher
 
+	// conns is the admin's view of live connections; nil when unset.
+	conns *connections.Registry
+
 	mu        sync.Mutex
 	listeners map[*listener]struct{}
 	silence   [][]byte
@@ -110,6 +115,12 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
+// SetConnections registers the connection registry streams report to.
+// Set once at startup, before any Serve.
+func (m *Manager) SetConnections(r *connections.Registry) {
+	m.conns = r
+}
+
 // SetCuePublisher registers the sink for stream-position cues. Safe to
 // leave unset, in which case clients fall back to labelling on arrival.
 func (m *Manager) SetCuePublisher(fn CuePublisher) {
@@ -146,8 +157,14 @@ type queuedFrame struct {
 // listener is one connected stream client.
 type listener struct {
 	userID int64
+	// jti is the JWT ID the stream was opened with, so logout can end it.
+	jti string
 	// sid identifies this connection; a user may hold several.
 	sid string
+	// cancel ends Serve for this listener; used on session revocation.
+	cancel context.CancelFunc
+	// conn describes this stream to the connection registry.
+	conn connections.Conn
 
 	mu sync.Mutex
 	// framesWritten is this listener's stream position, in frames. The
@@ -265,7 +282,11 @@ func (m *Manager) maxFramesLocked() int {
 // Serve streams to one listener until the context is cancelled or the
 // client disconnects. It never returns normally: a live stream ends only
 // when one side goes away.
-func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writer, flush func()) error {
+//
+// who identifies the listener: UserID and JTI scope revocation, and the
+// rest is reported to the connection registry. Its ID and Kind are set
+// here. sid is the client's opaque per-connection id, echoed in cues.
+func (m *Manager) Serve(ctx context.Context, who connections.Conn, sid string, w io.Writer, flush func()) error {
 	m.mu.Lock()
 	silence := m.silence
 	period := m.period
@@ -274,7 +295,13 @@ func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writ
 		return errors.New("stream: manager not started")
 	}
 
-	l := &listener{userID: userID, sid: sid}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	who.ID = connections.NewID()
+	who.Kind = connections.KindStream
+	who.Protocol = ""
+	userID := who.UserID
+	l := &listener{userID: userID, jti: who.JTI, sid: sid, cancel: cancel, conn: who}
 	m.add(l)
 	defer m.remove(l)
 
@@ -317,16 +344,48 @@ func (m *Manager) Serve(ctx context.Context, userID int64, sid string, w io.Writ
 	}
 }
 
-func (m *Manager) add(l *listener) {
+// DisconnectUser ends every open stream belonging to userID. It is called
+// when the user is disabled, expired, deleted or changes their password.
+func (m *Manager) DisconnectUser(userID int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for l := range m.listeners {
+		if l.userID == userID {
+			m.conns.SetCloseReason(l.conn.ID, connections.ReasonSignout)
+			l.cancel()
+		}
+	}
+}
+
+// DisconnectJTI ends the open streams opened with the given JWT ID (logout).
+func (m *Manager) DisconnectJTI(jti string) {
+	if jti == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for l := range m.listeners {
+		if l.jti == jti {
+			m.conns.SetCloseReason(l.conn.ID, connections.ReasonSignout)
+			l.cancel()
+		}
+	}
+}
+
+func (m *Manager) add(l *listener) {
+	m.mu.Lock()
 	m.listeners[l] = struct{}{}
-	slog.Info("stream: listener connected", "user_id", l.userID, "listeners", len(m.listeners))
+	n := len(m.listeners)
+	m.mu.Unlock()
+	m.conns.Add(l.conn, l.cancel)
+	slog.Info("stream: listener connected", "user_id", l.userID, "listeners", n)
 }
 
 func (m *Manager) remove(l *listener) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	delete(m.listeners, l)
-	slog.Info("stream: listener disconnected", "user_id", l.userID, "listeners", len(m.listeners))
+	n := len(m.listeners)
+	m.mu.Unlock()
+	m.conns.Remove(l.conn.ID)
+	slog.Info("stream: listener disconnected", "user_id", l.userID, "listeners", n)
 }

@@ -62,14 +62,20 @@ Start here, in this order:
 
 | Guide | What it covers |
 | --- | --- |
+| [Listener Guide](docs/listener-guide.md) | Using the listening screen: modes, selection, search, bookmarks, sharing |
 | [Deployment Guide](docs/deployment-guide.md) | Installing, upgrading, backups, reverse proxies, HTTPS, encrypting secrets |
 | [Recorder Guide](docs/recorder-guide.md) | Pointing each supported recorder at Squelch |
 | [Admin Guide](docs/admin-guide.md) | Every screen in the admin dashboard, panel by panel |
 | [Trunk Recorder MQTT Guide](docs/tr-mqtt-guide.md) | Live recorder health dashboard via trunk-recorder's MQTT plugin |
+| [Troubleshooting](docs/troubleshooting.md) | What to check when calls stop arriving, playback fails, or an upgrade goes sideways |
 
-For contributors: [CONTEXT.md](CONTEXT.md) defines the project's vocabulary, and
-[docs/adr/](docs/adr/) records the significant design decisions and why the
-alternatives lost.
+For contributors: [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, commands, and
+what a change has to satisfy; [CONTEXT.md](CONTEXT.md) defines the project's
+vocabulary; and [docs/adr/](docs/adr/) records the significant design decisions
+and why the alternatives lost.
+
+Found a security problem? Don't open an issue — [SECURITY.md](SECURITY.md) says
+where to send it.
 
 ---
 
@@ -78,7 +84,7 @@ alternatives lost.
 ### Listening
 
 - **Live feed** with play/pause, skip, and replay, streamed as calls arrive.
-- **Hold and avoid** — lock onto a system or talkgroup, or mute one for 5/15/30
+- **Hold and avoid** — lock onto a system or talkgroup, or mute one for 30/60/120
   minutes or until you undo it.
 - **Talkgroup selection** — search and multi-select by system, group, or tag.
   Your selection is saved to your account, not just the browser.
@@ -88,7 +94,7 @@ alternatives lost.
   link to a single call with an expiry date.
 - **Works on a phone** — mobile-first layout, and a background mode that keeps
   playing when the screen locks.
-- **Dark and light themes.**
+- **Seven dark themes**, chosen per browser, with a per-listener keypad beep.
 
 ### Getting calls in
 
@@ -214,6 +220,9 @@ from the command line, environment, or a JSON config file:
 | `--encryption-key` | `SQUELCH_ENCRYPTION_KEY` | Key for encrypting secrets at rest |
 | `--encryption-key-file` | `SQUELCH_ENCRYPTION_KEY_FILE` | Read that key from a file instead |
 | `--timezone` | `SQUELCH_TIMEZONE` / `TZ` | IANA timezone for recorder timestamps |
+| `--trusted-proxies` | `SQUELCH_TRUSTED_PROXIES` | Proxies allowed to set `X-Forwarded-For` (default: loopback and private ranges; `none` to disable) |
+| `--trusted-addresses` | `SQUELCH_TRUSTED_ADDRESSES` | Addresses that can never be blocked from the admin dashboard |
+| `--geoip-db` | `SQUELCH_GEOIP_DB` | IP-to-country database file for the Connections page (optional) |
 
 The full reference is in the
 [Deployment Guide](docs/deployment-guide.md#configuration-reference).

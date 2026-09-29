@@ -31,29 +31,39 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 
 	handlers := c.adminOpHandlers()
 
-	// The 58 ops expected on the wire. Keep this list sorted so diffs are
+	// The ops expected on the wire. Keep this list sorted so diffs are
 	// readable when an op is intentionally added.
 	want := []string{
 		"activity.chart", "activity.stats", "activity.top-talkgroups",
-		"apikeys.create", "apikeys.delete", "apikeys.list", "apikeys.update",
+		"apikeys.create", "apikeys.delete",
+		"apikeys.list", "apikeys.rotate", "apikeys.update",
+		"backup.counts", "backup.preview",
 		"config.get", "config.update",
-		"dirmonitors.create", "dirmonitors.delete", "dirmonitors.list", "dirmonitors.update",
-		"downstreams.create", "downstreams.delete", "downstreams.list", "downstreams.update",
+		"connections.disconnect", "connections.history", "connections.list",
+		"dirmonitors.create", "dirmonitors.delete", "dirmonitors.list", "dirmonitors.restart", "dirmonitors.test-mask", "dirmonitors.update",
+		"downstreams.create", "downstreams.delete", "downstreams.list", "downstreams.test", "downstreams.update",
 		"export.config", "export.groups", "export.tags", "export.talkgroups", "export.units",
 		"fs.directories",
-		"groups.create", "groups.delete", "groups.list", "groups.update",
+		"groups.create", "groups.delete", "groups.import", "groups.list", "groups.update",
 		"import.config",
-		"logs.level", "logs.query",
+		"logs.audit", "logs.counts", "logs.level", "logs.query",
 		"radioreference.apply",
+		"ipblocks.create", "ipblocks.delete", "ipblocks.list",
+		"lockouts.clear", "lockouts.list",
+		"sessions.list", "sessions.revoke",
 		"shared-links.delete", "shared-links.list",
-		"systems.create", "systems.delete", "systems.list", "systems.update",
-		"tags.create", "tags.delete", "tags.list", "tags.update",
-		"talkgroups.create", "talkgroups.delete", "talkgroups.list", "talkgroups.update",
-		"transcription.delete", "transcription.download", "transcription.models",
-		"transcription.stats", "transcription.status",
-		"units.create", "units.delete", "units.list", "units.update",
-		"users.create", "users.delete", "users.list", "users.update",
-		"webhooks.create", "webhooks.delete", "webhooks.list", "webhooks.update",
+		"shared-links.restore", "shared-links.revoke-expired",
+		"systems.block", "systems.create", "systems.delete", "systems.list",
+		"systems.reorder", "systems.unblock", "systems.update",
+		"tags.create", "tags.delete", "tags.import", "tags.list", "tags.update",
+		"talkgroups.bulk", "talkgroups.create", "talkgroups.delete", "talkgroups.import",
+		"talkgroups.list", "talkgroups.update",
+		"transcription.delete", "transcription.download", "transcription.download.cancel",
+		"transcription.jobs", "transcription.models", "transcription.retry",
+		"transcription.stats", "transcription.status", "transcription.test",
+		"units.create", "units.delete", "units.import", "units.list", "units.update",
+		"users.create", "users.delete", "users.list", "users.signout", "users.update",
+		"webhooks.create", "webhooks.delete", "webhooks.list", "webhooks.sample", "webhooks.test", "webhooks.update",
 	}
 	for _, op := range want {
 		if _, ok := handlers[op]; !ok {

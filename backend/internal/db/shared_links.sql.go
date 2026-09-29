@@ -14,7 +14,7 @@ const createSharedLink = `-- name: CreateSharedLink :one
 INSERT INTO shared_links (call_id, user_id, token, created_at, expires_at)
 VALUES (?, ?, ?, unixepoch(), ?)
 ON CONFLICT (call_id) DO UPDATE SET call_id = call_id
-RETURNING id, call_id, user_id, token, created_at, expires_at
+RETURNING id, call_id, user_id, token, created_at, expires_at, opens, last_opened_at
 `
 
 type CreateSharedLinkParams struct {
@@ -39,6 +39,8 @@ func (q *Queries) CreateSharedLink(ctx context.Context, arg CreateSharedLinkPara
 		&i.Token,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.Opens,
+		&i.LastOpenedAt,
 	)
 	return i, err
 }
@@ -62,7 +64,7 @@ func (q *Queries) DeleteSharedLinkByCallID(ctx context.Context, callID int64) er
 }
 
 const getSharedLinkByCallID = `-- name: GetSharedLinkByCallID :one
-SELECT id, call_id, user_id, token, created_at, expires_at FROM shared_links WHERE call_id = ? LIMIT 1
+SELECT id, call_id, user_id, token, created_at, expires_at, opens, last_opened_at FROM shared_links WHERE call_id = ? LIMIT 1
 `
 
 func (q *Queries) GetSharedLinkByCallID(ctx context.Context, callID int64) (SharedLink, error) {
@@ -75,13 +77,15 @@ func (q *Queries) GetSharedLinkByCallID(ctx context.Context, callID int64) (Shar
 		&i.Token,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.Opens,
+		&i.LastOpenedAt,
 	)
 	return i, err
 }
 
 const getSharedLinkByToken = `-- name: GetSharedLinkByToken :one
 SELECT
-    sl.id, sl.call_id, sl.user_id, sl.token, sl.created_at, sl.expires_at,
+    sl.id, sl.call_id, sl.user_id, sl.token, sl.created_at, sl.expires_at, sl.opens, sl.last_opened_at,
     c.audio_path,
     c.audio_name,
     c.audio_type,
@@ -110,6 +114,8 @@ type GetSharedLinkByTokenRow struct {
 	Token          string         `db:"token" json:"token"`
 	CreatedAt      int64          `db:"created_at" json:"created_at"`
 	ExpiresAt      sql.NullInt64  `db:"expires_at" json:"expires_at"`
+	Opens          int64          `db:"opens" json:"opens"`
+	LastOpenedAt   sql.NullInt64  `db:"last_opened_at" json:"last_opened_at"`
 	AudioPath      string         `db:"audio_path" json:"audio_path"`
 	AudioName      string         `db:"audio_name" json:"audio_name"`
 	AudioType      string         `db:"audio_type" json:"audio_type"`
@@ -135,6 +141,8 @@ func (q *Queries) GetSharedLinkByToken(ctx context.Context, token string) (GetSh
 		&i.Token,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.Opens,
+		&i.LastOpenedAt,
 		&i.AudioPath,
 		&i.AudioName,
 		&i.AudioType,
@@ -156,9 +164,12 @@ const listSharedLinks = `-- name: ListSharedLinks :many
 SELECT
     sl.id,
     sl.call_id,
+    sl.user_id,
     sl.token,
     sl.created_at,
     sl.expires_at,
+    sl.opens,
+    sl.last_opened_at,
     u.username   AS shared_by,
     c.date_time,
     c.duration,
@@ -176,9 +187,12 @@ ORDER BY sl.created_at DESC
 type ListSharedLinksRow struct {
 	ID             int64          `db:"id" json:"id"`
 	CallID         int64          `db:"call_id" json:"call_id"`
+	UserID         int64          `db:"user_id" json:"user_id"`
 	Token          string         `db:"token" json:"token"`
 	CreatedAt      int64          `db:"created_at" json:"created_at"`
 	ExpiresAt      sql.NullInt64  `db:"expires_at" json:"expires_at"`
+	Opens          int64          `db:"opens" json:"opens"`
+	LastOpenedAt   sql.NullInt64  `db:"last_opened_at" json:"last_opened_at"`
 	SharedBy       string         `db:"shared_by" json:"shared_by"`
 	DateTime       int64          `db:"date_time" json:"date_time"`
 	Duration       sql.NullInt64  `db:"duration" json:"duration"`
@@ -199,9 +213,12 @@ func (q *Queries) ListSharedLinks(ctx context.Context) ([]ListSharedLinksRow, er
 		if err := rows.Scan(
 			&i.ID,
 			&i.CallID,
+			&i.UserID,
 			&i.Token,
 			&i.CreatedAt,
 			&i.ExpiresAt,
+			&i.Opens,
+			&i.LastOpenedAt,
 			&i.SharedBy,
 			&i.DateTime,
 			&i.Duration,
@@ -220,4 +237,42 @@ func (q *Queries) ListSharedLinks(ctx context.Context) ([]ListSharedLinksRow, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const restoreSharedLink = `-- name: RestoreSharedLink :exec
+INSERT INTO shared_links (call_id, user_id, token, created_at, expires_at)
+VALUES (?1, ?2, ?3, ?4, ?5)
+`
+
+type RestoreSharedLinkParams struct {
+	CallID    int64         `db:"call_id" json:"call_id"`
+	UserID    int64         `db:"user_id" json:"user_id"`
+	Token     string        `db:"token" json:"token"`
+	CreatedAt int64         `db:"created_at" json:"created_at"`
+	ExpiresAt sql.NullInt64 `db:"expires_at" json:"expires_at"`
+}
+
+func (q *Queries) RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error {
+	_, err := q.db.ExecContext(ctx, restoreSharedLink,
+		arg.CallID,
+		arg.UserID,
+		arg.Token,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const touchSharedLinkOpened = `-- name: TouchSharedLinkOpened :exec
+UPDATE shared_links SET opens = opens + 1, last_opened_at = ?1 WHERE id = ?2
+`
+
+type TouchSharedLinkOpenedParams struct {
+	Now sql.NullInt64 `db:"now" json:"now"`
+	ID  int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) TouchSharedLinkOpened(ctx context.Context, arg TouchSharedLinkOpenedParams) error {
+	_, err := q.db.ExecContext(ctx, touchSharedLinkOpened, arg.Now, arg.ID)
+	return err
 }

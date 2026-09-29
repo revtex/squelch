@@ -16,15 +16,21 @@ interface WsQueryResult<T> {
  * Mirrors RTK Query's useQuery return shape.
  * Re-fetches on mount, when op/params change, on WS connect, and on topic events.
  * Optional pollingInterval (ms) enables periodic auto-refresh.
+ * With `skip` nothing is fetched and data stays undefined until it turns off.
+ * With `debounceMs`, a burst of topic events refetches once, that long after
+ * the last one (for topics that fire on every call).
  */
 export function useWsQuery<T>(
   op: string,
   params?: Record<string, unknown>,
   invalidateTopic?: string,
   pollingInterval?: number,
+  options?: { skip?: boolean; debounceMs?: number },
 ): WsQueryResult<T> {
+  const debounceMs = options?.debounceMs ?? 0;
+  const skip = options?.skip ?? false;
   const [data, setData] = useState<T | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!skip);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -33,6 +39,10 @@ export function useWsQuery<T>(
   paramsRef.current = params;
 
   const doFetch = useCallback(() => {
+    if (skip) {
+      setIsLoading(false);
+      return;
+    }
     if (!adminWsClient.isConnected()) return;
     setIsLoading(true);
     adminWsClient
@@ -50,7 +60,7 @@ export function useWsQuery<T>(
         setIsLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [op, paramsKey]);
+  }, [op, paramsKey, skip]);
 
   // Initial fetch + refetch on param/op change
   useEffect(() => {
@@ -67,10 +77,20 @@ export function useWsQuery<T>(
   // Re-fetch on invalidation topic
   useEffect(() => {
     if (!invalidateTopic) return;
-    return adminWsClient.on(invalidateTopic, () => {
-      doFetch();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = adminWsClient.on(invalidateTopic, () => {
+      if (debounceMs <= 0) {
+        doFetch();
+        return;
+      }
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => doFetch(), debounceMs);
     });
-  }, [doFetch, invalidateTopic]);
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [doFetch, invalidateTopic, debounceMs]);
 
   // Polling interval for periodic refresh
   useEffect(() => {

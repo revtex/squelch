@@ -9,7 +9,10 @@ import { useAuthInit } from "@/features/auth/useAuthInit";
 import { useTokenRefresh } from "@/features/auth/useTokenRefresh";
 import { audioPlayer } from "@/shared/services/audio/player";
 import { refreshSession } from "@/app/api";
+import { applyStoredTheme } from "@/shared/hooks/useTheme";
 import "@/index.css";
+
+applyStoredTheme();
 
 // Wire a silent auth-recovery hook into the audio player so that when an
 // `<audio>` fetch returns 401 (e.g. another device pushed our access JWT

@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -17,7 +19,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/revtex/squelch/internal/admin"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/logging"
 )
@@ -50,21 +54,28 @@ const (
 )
 
 // systemGrant represents a system-level grant with optional talkgroup filtering.
-type systemGrant struct {
-	ID         int64   `json:"id"`
-	Talkgroups []int64 `json:"talkgroups,omitempty"`
-}
+type systemGrant = auth.SystemGrant
 
 // Client represents a single WebSocket connection.
 type Client struct {
 	hub     *Hub
 	conn    *websocket.Conn
 	send    chan []byte
-	grants  []systemGrant // nil/empty = receive all
+	grants  []systemGrant // nil = receive all; empty non-nil = receive nothing
 	isAdmin bool
 	userID  int64
 	jti     string      // JWT token ID, for single-session disconnect
 	queries *db.Queries // for periodic account revalidation
+
+	// connID, remote, username, role and familyID describe the connection
+	// to the admin's connection list. All are set before hub.Register and
+	// never change afterwards.
+	connID   string
+	remote   connections.Client
+	username string
+	role     string
+	familyID string
+	native   bool
 
 	// protocolVersion selects the on-wire encoding for messages sent to
 	// this client. Set once at connect time by the handler that accepted
@@ -122,6 +133,37 @@ type adminRequest struct {
 // isV1 reports whether this client negotiated the native v1 protocol.
 func (c *Client) isV1() bool { return c.protocolVersion == protocolV1 }
 
+// isNativeSession reports whether the device session behind a token is the
+// Squelch app. Only the login knows (the app does not mark its WebSocket
+// upgrade), so it is read back from the refresh family.
+func isNativeSession(ctx context.Context, queries *db.Queries, familyID string) bool {
+	if familyID == "" {
+		return false
+	}
+	n, err := queries.IsNativeRefreshFamily(ctx, familyID)
+	return err == nil && n != 0
+}
+
+// connInfo describes this client for the connection registry.
+func (c *Client) connInfo() connections.Conn {
+	kind := connections.KindListener
+	if c.isAdmin {
+		kind = connections.KindAdmin
+	}
+	return connections.Conn{
+		ID:       c.connID,
+		Kind:     kind,
+		UserID:   c.userID,
+		Username: c.username,
+		Role:     c.role,
+		JTI:      c.jti,
+		FamilyID: c.familyID,
+		Client:   c.remote,
+		Native:   c.native,
+		Protocol: c.protocolVersion,
+	}
+}
+
 // encodeSessionExpired returns the wire bytes for a session-expired
 // notification in the protocol negotiated by this client.
 func (c *Client) encodeSessionExpired() []byte {
@@ -134,39 +176,15 @@ func (c *Client) encodeSessionExpired() []byte {
 }
 
 // CanReceive reports whether this client is authorized to receive a call for
-// the given system and talkgroup. If grants is nil/empty, everything is allowed.
+// the given system and talkgroup. Nil grants allow everything; an empty
+// non-nil list (unparseable systems_json) allows nothing.
 func (c *Client) CanReceive(systemID, talkgroupID int64) bool {
-	if len(c.grants) == 0 {
-		return true
-	}
-	for _, g := range c.grants {
-		if g.ID != systemID {
-			continue
-		}
-		// No TG filter → all TGs in this system.
-		if len(g.Talkgroups) == 0 {
-			return true
-		}
-		for _, tg := range g.Talkgroups {
-			if tg == talkgroupID {
-				return true
-			}
-		}
-	}
-	return false
+	return auth.HasSystemAccess(c.grants, systemID, talkgroupID)
 }
 
 // parseGrants parses systems_json into a slice of systemGrant.
 func parseGrants(systemsJSON sql.NullString) []systemGrant {
-	if !systemsJSON.Valid || systemsJSON.String == "" {
-		return nil
-	}
-	var grants []systemGrant
-	if err := json.Unmarshal([]byte(systemsJSON.String), &grants); err != nil {
-		slog.Warn("ws: failed to parse systems_json", "error", err)
-		return nil
-	}
-	return grants
+	return auth.ParseSystemGrants(systemsJSON)
 }
 
 func wsAcceptOptions(r *http.Request) *websocket.AcceptOptions {
@@ -234,7 +252,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			return
 		}
 
-		slog.Debug("ws: listener connection accepted", "ip", r.RemoteAddr, "v1", isV1)
+		slog.Debug("ws: listener connection accepted", "ip", connections.ClientFrom(r.Context()).IP, "peer", r.RemoteAddr, "v1", isV1)
 
 		ctx := r.Context()
 
@@ -260,12 +278,14 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			send:            make(chan []byte, sendBufSize),
 			queries:         queries,
 			protocolVersion: protoVer,
+			connID:          connections.NewID(),
+			remote:          connections.ClientFrom(r.Context()),
 		}
 
 		if publicAccess {
 			slog.Debug("ws: listener authenticated via public access")
 			// Public access — no auth required, receive all.
-			if err := sendWelcome(ctx, conn, hub, queries, isV1); err != nil {
+			if err := sendWelcome(ctx, conn, hub, queries, nil, isV1); err != nil {
 				slog.Error("ws: failed to send welcome", "error", err)
 				conn.Close(websocket.StatusInternalError, "")
 				return
@@ -303,7 +323,7 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
 		}
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			slog.Info("ws: revoked JWT on listener WS", "jti", claims.ID)
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
@@ -337,10 +357,14 @@ func handleListenerWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc
 		}
 		client.userID = user.ID
 		client.jti = claims.ID
+		client.username = user.Username
+		client.role = user.Role
+		client.familyID = claims.FamilyID
+		client.native = isNativeSession(ctx, queries, claims.FamilyID)
 		client.grants = parseGrants(user.SystemsJson)
 		slog.Debug("ws: listener authenticated via jwt", "user_id", user.ID, "grants", len(client.grants), "v1", isV1)
 
-		if err := sendWelcome(ctx, conn, hub, queries, isV1); err != nil {
+		if err := sendWelcome(ctx, conn, hub, queries, client.grants, isV1); err != nil {
 			slog.Error("ws: failed to send welcome", "error", err)
 			conn.Close(websocket.StatusInternalError, "")
 			return
@@ -433,7 +457,7 @@ func handleAdminWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc {
 		}
 
 		claims, err := auth.ParseToken(tokenStr)
-		if err != nil || auth.Tokens.IsRevoked(claims.ID) {
+		if err != nil || auth.Tokens.Rejects(claims) {
 			slog.Info("ws: invalid or revoked JWT on admin WS")
 			sendExpiredAndClose(ctx, conn, isV1)
 			return
@@ -470,6 +494,12 @@ func handleAdminWS(hub *Hub, queries *db.Queries, isV1 bool) http.HandlerFunc {
 			jti:             claims.ID,
 			queries:         queries,
 			protocolVersion: protoVer,
+			connID:          connections.NewID(),
+			remote:          connections.ClientFrom(r.Context()),
+			username:        user.Username,
+			role:            user.Role,
+			familyID:        claims.FamilyID,
+			native:          isNativeSession(ctx, queries, claims.FamilyID),
 		}
 
 		hub.Register(client)
@@ -498,9 +528,13 @@ func (c *Client) readPump(ctx context.Context) {
 				// Clean disconnect or normal close — nothing to log.
 				return
 			}
-			// Anything else is an unexpected read failure (network drop,
-			// oversized frame, malformed framing). Log at warn so it
-			// surfaces in operator dashboards.
+			if isOrdinaryDisconnect(err) {
+				slog.Debug("ws: connection dropped", "error", err, "admin", c.isAdmin)
+				return
+			}
+			// Anything else is an unexpected read failure (oversized
+			// frame, malformed framing). Log at warn so it surfaces in
+			// operator dashboards.
 			slog.Warn("ws: read error", "error", err, "admin", c.isAdmin)
 			return
 		}
@@ -567,6 +601,7 @@ func (c *Client) handleAdminRequest(ctx context.Context, req adminRequest) {
 		return
 	}
 
+	ctx = admin.WithCaller(ctx, admin.Caller{ConnID: c.connID, FamilyID: c.familyID})
 	data, err := handler(ctx, req.Params, c.userID)
 	if err != nil {
 		if errMsg, isUser := errorString(err); isUser {
@@ -647,10 +682,48 @@ func (c *Client) dispatchV1(ctx context.Context, data []byte) {
 	}
 }
 
+// activityRanges are the Overview's time ranges; anything else is refused.
+var activityRanges = map[string]time.Duration{
+	"24h": 24 * time.Hour,
+	"7d":  7 * 24 * time.Hour,
+	"30d": 30 * 24 * time.Hour,
+}
+
+// activityCutoff reads the optional {"range": "24h"|"7d"|"30d"} parameter
+// and returns the unix time the range starts at. No range means 24 h.
+func activityCutoff(params json.RawMessage, now time.Time) (int64, error) {
+	var p struct {
+		Range string `json:"range"`
+	}
+	if len(params) > 0 && string(params) != "null" {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return 0, admin.UserError("range must be 24h, 7d or 30d")
+		}
+	}
+	if p.Range == "" {
+		p.Range = "24h"
+	}
+	d, ok := activityRanges[p.Range]
+	if !ok {
+		return 0, admin.UserError("range must be 24h, 7d or 30d")
+	}
+	return now.Add(-d).Unix(), nil
+}
+
+// sameTimeYesterday is the start of yesterday and this moment's time of
+// day yesterday, so today's running count compares like with like.
+func sameTimeYesterday(now time.Time) (start, until int64) {
+	y, m, d := now.Date()
+	start = time.Date(y, m, d-1, 0, 0, 0, 0, now.Location()).Unix()
+	until = time.Date(y, m, d-1, now.Hour(), now.Minute(), now.Second(), 0, now.Location()).Unix()
+	return start, until
+}
+
 func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, error) {
 	now := time.Now()
 	y, m, d := now.Date()
 	todayStart := time.Date(y, m, d, 0, 0, 0, 0, now.Location()).Unix()
+	yesterdayStart, yesterdayUntil := sameTimeYesterday(now)
 
 	weekday := now.Weekday()
 	if weekday == time.Sunday {
@@ -659,8 +732,10 @@ func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, e
 	weekStart := time.Date(y, m, d-int(weekday-time.Monday), 0, 0, 0, 0, now.Location()).Unix()
 
 	stats, err := c.hub.queries.GetActivityStats(ctx, db.GetActivityStatsParams{
-		TodayStart: todayStart,
-		WeekStart:  weekStart,
+		TodayStart:     todayStart,
+		YesterdayStart: yesterdayStart,
+		YesterdayUntil: yesterdayUntil,
+		WeekStart:      weekStart,
 	})
 	if err != nil {
 		return nil, err
@@ -668,15 +743,22 @@ func (c *Client) opActivityStats(ctx context.Context, _ json.RawMessage) (any, e
 
 	return map[string]any{
 		"callsToday":      stats.CallsToday,
+		"callsYesterday":  stats.CallsYesterday,
 		"callsThisWeek":   stats.CallsThisWeek,
 		"callsTotal":      stats.CallsTotal,
+		"lastCallAt":      stats.LastCallAt,
 		"activeListeners": c.hub.ClientCount(),
 		"uptime":          int64(time.Since(StartTime).Seconds()),
+		"startedAt":       StartTime.Unix(),
+		"version":         c.hub.version,
 	}, nil
 }
 
-func (c *Client) opActivityChart(ctx context.Context, _ json.RawMessage) (any, error) {
-	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+func (c *Client) opActivityChart(ctx context.Context, params json.RawMessage) (any, error) {
+	cutoff, err := activityCutoff(params, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := c.hub.queries.GetCallsPerHour(ctx, cutoff)
 	if err != nil {
 		return nil, err
@@ -689,8 +771,11 @@ func (c *Client) opActivityChart(ctx context.Context, _ json.RawMessage) (any, e
 	return map[string]any{"buckets": buckets}, nil
 }
 
-func (c *Client) opTopTalkgroups(ctx context.Context, _ json.RawMessage) (any, error) {
-	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+func (c *Client) opTopTalkgroups(ctx context.Context, params json.RawMessage) (any, error) {
+	cutoff, err := activityCutoff(params, time.Now())
+	if err != nil {
+		return nil, err
+	}
 	rows, err := c.hub.queries.GetTopTalkgroups(ctx, db.GetTopTalkgroupsParams{
 		DateTime: cutoff,
 		Limit:    10,
@@ -702,11 +787,13 @@ func (c *Client) opTopTalkgroups(ctx context.Context, _ json.RawMessage) (any, e
 	tgs := make([]map[string]any, len(rows))
 	for i, r := range rows {
 		tgs[i] = map[string]any{
-			"talkgroupId":    r.TalkgroupID.Int64,
-			"talkgroupLabel": r.TalkgroupLabel.String,
-			"talkgroupName":  r.TalkgroupName.String,
-			"systemLabel":    r.SystemLabel.String,
-			"callCount":      r.CallCount,
+			"talkgroupId":     r.TalkgroupID.Int64,
+			"systemId":        r.SystemID,
+			"talkgroupNumber": r.TalkgroupNumber.Int64,
+			"talkgroupLabel":  r.TalkgroupLabel.String,
+			"talkgroupName":   r.TalkgroupName.String,
+			"systemLabel":     r.SystemLabel.String,
+			"callCount":       r.CallCount,
 		}
 	}
 	return map[string]any{"talkgroups": tgs}, nil
@@ -740,6 +827,28 @@ func (c *Client) opLogsQuery(_ context.Context, params json.RawMessage) (any, er
 		}
 	}
 	return resp, nil
+}
+
+// opLogsCounts counts the in-memory log by level for the range and search
+// the list uses, so the level chips show real totals rather than a tally of
+// the rows one page happened to load.
+func (c *Client) opLogsCounts(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		From  int64  `json:"from"`
+		To    int64  `json:"to"`
+		Query string `json:"q"`
+	}
+	if params != nil {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+	}
+	counts := logging.CountEntries(p.From, p.To, p.Query)
+	all := 0
+	for _, n := range counts {
+		all += n
+	}
+	return map[string]int{"all": all, "debug": counts["debug"], "info": counts["info"], "warn": counts["warn"], "error": counts["error"]}, nil
 }
 
 // writePump sends messages from the send channel to the WebSocket connection
@@ -788,12 +897,14 @@ func (c *Client) writePump(ctx context.Context) {
 			user, err := c.queries.GetUser(ctx, c.userID)
 			if err != nil || user.Disabled != 0 {
 				slog.Info("ws: revalidation failed, disconnecting", "user_id", c.userID, "reason", "disabled or not found")
+				c.hub.conns.SetCloseReason(c.connID, connections.ReasonRevalidation)
 				sendExpiredAndClose(ctx, c.conn, c.isV1())
 				return
 			}
 			if user.Expiration.Valid && user.Expiration.Int64 > 0 {
 				if time.Now().Unix() > user.Expiration.Int64 {
 					slog.Info("ws: revalidation failed, disconnecting", "user_id", c.userID, "reason", "expired")
+					c.hub.conns.SetCloseReason(c.connID, connections.ReasonRevalidation)
 					sendExpiredAndClose(ctx, c.conn, c.isV1())
 					return
 				}
@@ -819,7 +930,8 @@ func sendExpiredAndClose(ctx context.Context, conn *websocket.Conn, isV1 bool) {
 
 // sendWelcome sends the post-auth welcome frames (legacy VER+CFG, native
 // connection.welcome + scanner.config) on the given connection.
-func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *db.Queries, isV1 bool) error {
+// grants scopes the systems and talkgroups in the config; nil sends all.
+func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *db.Queries, grants []systemGrant, isV1 bool) error {
 	slog.Debug("ws: sending welcome", "v1", isV1)
 	branding := ""
 	if s, err := queries.GetSetting(ctx, "branding"); err == nil {
@@ -844,7 +956,7 @@ func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *d
 		return err
 	}
 
-	legacyCFG, v1CFG, err := buildCFGFrames(ctx, queries)
+	legacyCFG, v1CFG, err := buildCFGFrames(ctx, queries, grants)
 	if err != nil {
 		return err
 	}
@@ -854,11 +966,25 @@ func sendWelcome(ctx context.Context, conn *websocket.Conn, hub *Hub, queries *d
 	return conn.Write(ctx, websocket.MessageText, legacyCFG)
 }
 
+// systemInGrants reports whether any grant covers systemID. Nil grants cover
+// every system.
+func systemInGrants(grants []systemGrant, systemID int64) bool {
+	if grants == nil {
+		return true
+	}
+	for _, g := range grants {
+		if g.ID == systemID {
+			return true
+		}
+	}
+	return false
+}
+
 // buildCFGFrames returns the legacy and native (v1) CFG frames for the
 // current database state. Both frames carry the same config payload, only
 // the wire envelope differs.
-func buildCFGFrames(ctx context.Context, queries *db.Queries) (legacy, v1 []byte, err error) {
-	payload, err := buildCFGPayload(ctx, queries)
+func buildCFGFrames(ctx context.Context, queries *db.Queries, grants []systemGrant) (legacy, v1 []byte, err error) {
+	payload, err := buildCFGPayload(ctx, queries, grants)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -875,7 +1001,8 @@ func buildCFGFrames(ctx context.Context, queries *db.Queries) (legacy, v1 []byte
 
 // buildCFGPayload constructs the CFG payload (without any framing) from
 // the current database state (systems, talkgroups, groups, tags, settings).
-func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, error) {
+// Systems and talkgroups outside grants are left out; nil grants include all.
+func buildCFGPayload(ctx context.Context, queries *db.Queries, grants []systemGrant) (map[string]any, error) {
 	// Resolve group and tag labels first so talkgroups carry string labels,
 	// matching the TalkgroupConfig type expected by the frontend.
 	groups, _ := queries.ListGroups(ctx)
@@ -913,6 +1040,9 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, 
 	}
 	sysCfgs := []sysCfg{} // never nil — serialises as [] not null
 	for _, s := range systems {
+		if !systemInGrants(grants, s.ID) {
+			continue
+		}
 		sc := sysCfg{ID: s.ID, SystemID: s.SystemID, Label: s.Label, Talkgroups: []tgCfg{}}
 		if s.Led.Valid {
 			sc.LedColor = s.Led.String
@@ -922,6 +1052,9 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, 
 			return nil, err
 		}
 		for _, tg := range tgs {
+			if !auth.HasSystemAccess(grants, s.ID, tg.ID) {
+				continue
+			}
 			t := tgCfg{ID: tg.ID, TalkgroupID: tg.TalkgroupID}
 			if tg.Label.Valid {
 				t.Label = tg.Label.String
@@ -972,4 +1105,12 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries) (map[string]any, 
 	}
 
 	return cfgPayload, nil
+}
+
+// isOrdinaryDisconnect reports whether a read failed only because the peer
+// went away without a close frame (tab closed, phone asleep, network lost)
+// or because we closed the connection ourselves. Browsers and phones do
+// this all the time, so it is not worth a warning.
+func isOrdinaryDisconnect(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
 }

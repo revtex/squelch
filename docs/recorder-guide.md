@@ -24,10 +24,10 @@ This guide walks you through connecting your radio recorder to Squelch. Each rec
 Before connecting a recorder, make sure:
 
 1. **Squelch is running** and accessible from the machine running your recorder (e.g. `http://192.168.1.100:3022`).
-2. **Create your systems** in **Admin → Systems**. There are two auto-populate options to help with initial setup:
-   - **Auto-Populate Systems** (global toggle at the top of the Systems panel) — automatically creates new systems from incoming calls.
-   - **TG Auto-Populate** (per-system toggle) — automatically creates talkgroups within that system as calls arrive.
-3. **Create an API key** if your recorder uploads over HTTP. Go to **Admin → API Keys → Add Key**, give it a name, and copy the key. You can restrict which systems the key is allowed to send calls for.
+2. **Create your systems** in **Admin → Systems**, or let uploads create them. Two auto-populate options help with initial setup:
+   - **Create systems from uploads** (**Settings → Radio data**) — new systems are created from incoming calls.
+   - **Auto-populate talkgroups** (per system, under **System settings**) — talkgroups within that system are created as calls arrive, unlabeled, and the **N unlabeled** button on the Systems page finds them for naming.
+3. **Create an API key** if your recorder uploads over HTTP. Go to **Admin → API keys → Add key**, give it a label, and copy the secret (it is shown once, with a test command and a Trunk-Recorder snippet). You can restrict which systems the key is allowed to send calls for.
 
 > **Tip:** If you're migrating from rdio-scanner, Squelch's upload API is backward-compatible. You only need to change the server URL in your recorder config.
 
@@ -35,14 +35,46 @@ Before connecting a recorder, make sure:
 
 ## Trunk-Recorder
 
-Trunk-Recorder is the most common recorder used with Squelch. You can connect it two ways.
+Trunk-Recorder is the most common recorder used with Squelch. You can connect it three ways. The quickest start is to create an API key in **Admin → API keys**: the panel that shows the secret also gives a test command and a plugin entry for either uploader, filled in with your server and systems.
 
-### Option A: HTTP Upload (Recommended)
+### Option A: Squelch uploader (recommended)
 
-This uses Trunk-Recorder's built-in `rdioscanner_uploader` plugin to send calls directly to Squelch over the network.
+The [Squelch uploader](https://github.com/revtex/squelch-tr-uploader) is a Trunk-Recorder plugin written for Squelch. It posts calls to the native `/api/v1/calls` endpoint, retries failed uploads, and needs Trunk-Recorder 5.0 or later. It is built from source together with Trunk-Recorder.
 
-1. Open your Trunk-Recorder `config.json`.
-2. In the `"plugins"` array, add an entry using the `librdioscanner_uploader.so` library:
+1. Clone the plugin into the `user_plugins/` folder of your Trunk-Recorder source tree, then build and install Trunk-Recorder as usual:
+   ```bash
+   cd /path/to/trunk-recorder
+   mkdir -p user_plugins
+   git clone https://github.com/revtex/squelch-tr-uploader.git user_plugins/squelch_uploader
+   mkdir -p build && cd build
+   cmake .. && make -j"$(nproc)" && sudo make install
+   ```
+   The library installs as `libsquelch_uploader.so` beside Trunk-Recorder's own plugins.
+2. In the `"plugins"` array of your Trunk-Recorder `config.json`, add:
+   ```json
+   {
+     "name": "Squelch",
+     "library": "libsquelch_uploader.so",
+     "server": "http://<your-squelch-address>:3022",
+     "apiKey": "your-api-key-here",
+     "systems": [
+       { "shortName": "your_system", "systemId": 1 }
+     ]
+   }
+   ```
+3. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
+4. `apiKey` is the key you created in **Admin → API keys**. This plugin takes one key for every system it uploads. Unit names come from Trunk-Recorder's own unit tags, so set `unitTagsFile` on the system in Trunk-Recorder as usual.
+5. Each entry in `"systems"` maps a Trunk-Recorder system to a Squelch system:
+   - `shortName` — must match the `"shortName"` of a system in your Trunk-Recorder config.
+   - `systemId` — must match the **System ID** of a system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch creates the system on the first upload.
+6. Optionally set `"maxRetries"` for how many times a failed upload is tried again.
+7. Restart Trunk-Recorder. Calls should start appearing in Squelch within seconds.
+
+### Option B: Built-in rdio-scanner uploader
+
+Trunk-Recorder ships an `rdioscanner_uploader` plugin, so this option needs no build. It posts to Squelch's rdio-scanner compatible `/api/call-upload`, which is **deprecated**: it still works, but Overview lists these uploads under **Needs attention** until the recorder moves to the Squelch uploader.
+
+1. In the `"plugins"` array of your Trunk-Recorder `config.json`, add an entry using the `librdioscanner_uploader.so` library:
    ```json
    {
      "name": "Squelch",
@@ -57,16 +89,11 @@ This uses Trunk-Recorder's built-in `rdioscanner_uploader` plugin to send calls 
      ]
    }
    ```
-3. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
-4. The `"name"` field can be anything — it's just a label.
-5. Each entry in `"systems"` maps a Trunk-Recorder system (by `shortName`) to a Squelch system:
-   - `shortName` — must match the `"shortName"` of a system in your Trunk-Recorder config.
-   - `apiKey` — the API key you created in **Admin → API Keys**. Multiple systems can share the same key.
-   - `systemId` — the radio system ID that identifies this system. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Auto-Populate Systems** is enabled, you can use any number and Squelch will create the system automatically on the first upload.
-6. If you have multiple Trunk-Recorder systems (e.g. multi-site), add an entry for each one. They can all use the same API key and even the same `systemId` if they belong to the same logical system.
-7. Restart Trunk-Recorder. Calls should start appearing in Squelch within seconds.
+2. Replace `<your-squelch-address>` with your Squelch server's IP or hostname.
+3. Each entry in `"systems"` maps a Trunk-Recorder system (by `shortName`) to a Squelch system, as in Option A, but this plugin wants the `apiKey` on every system entry. Multiple systems can share the same key.
+4. Restart Trunk-Recorder.
 
-### Option B: Directory Monitor
+### Option C: Directory Monitor
 
 If Trunk-Recorder runs on the same machine as Squelch (or writes to a shared filesystem), you can have Squelch watch the output directory instead.
 
@@ -90,7 +117,7 @@ SDRTrunk can send calls to Squelch using its built-in Rdio Scanner streaming fea
 2. Add a new **Rdio Scanner** streaming target.
 3. Set the **Server URL** to `http://<your-squelch-address>:3022/api/call-upload`.
 4. Enter your **API Key** from Squelch.
-5. Set the **System ID** to the radio system ID. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Auto-Populate Systems** is enabled, you can use any number and Squelch will create the system automatically on the first upload.
+5. Set the **System ID** to the radio system ID. This must match the **System ID** field of an existing system in **Admin → Systems**. If **Create systems from uploads** is on, you can use any number and Squelch will create the system automatically on the first upload.
 6. Enable the stream. SDRTrunk will upload calls as they are recorded.
 
 > **Note:** SDRTrunk sends a test request when you first connect to verify the API key. Squelch handles this automatically.
@@ -243,19 +270,25 @@ Squelch accepts the following audio file types:
 
 `.mp3` · `.wav` · `.m4a` · `.aac` · `.ogg` · `.flac` · `.opus`
 
-If **Audio Conversion** is enabled in **Admin → Options**, incoming files are converted to a standard format (configurable encoding preset) using FFmpeg.
+If **Convert audio on upload** is set in **Admin → Settings → Ingest & audio**, incoming files are converted to a standard format (configurable encoding preset) using FFmpeg.
 
 ---
 
 ## Helpful Settings
 
-These settings in **Admin → Options** affect how calls are ingested:
+These settings in **Admin → Settings → Ingest & audio** affect how calls are ingested:
 
 | Setting                            | What It Does                                                                                                                      |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Audio Conversion**               | Converts incoming audio to a standard format using FFmpeg. Choose from disabled, basic conversion, normalized, or loudnorm modes. |
-| **Disable Duplicate Detection**    | Turns off the check that rejects calls with the same system/talkgroup within a short time window.                                 |
-| **Duplicate Detection Time Frame** | How close (in milliseconds) two calls must be to be considered duplicates.                                                        |
-| **API Key Call Rate**              | Default maximum calls per minute an API key can upload. This one lives in **Admin → API Keys**, not Options, and can be overridden per key. |
+| **Convert audio on upload**        | Converts incoming audio to a standard format using FFmpeg: keep the original, convert only, or convert and normalise peaks or loudness. |
+| **Reject duplicate calls**         | The check that turns away calls with the same system/talkgroup within a short time window. Switch it off to keep them all.       |
+| **Duplicate window**               | How close (in milliseconds) two calls must be to be considered duplicates.                                                        |
+| **Default upload rate limit**      | Calls a minute an API key can upload unless the key sets its own rate under **Admin → API Keys**.                                   |
 
-> **Note:** Auto-populate settings are in **Admin → Systems**, not in Options. **Auto-Populate Systems** is a global toggle at the top of the panel, and each system has its own **TG Auto-Populate** toggle for automatic talkgroup creation.
+> **Note:** **Create systems from uploads** is under **Admin → Settings → Radio data**; each system has its own **TG Auto-Populate** toggle under **Admin → Systems** for automatic talkgroup creation.
+
+---
+
+## Calls Not Arriving?
+
+[Troubleshooting](troubleshooting.md#no-calls-are-arriving) works through it from the recorder inward: what each rejection code means, why a successful-looking upload can still be discarded as a duplicate, and what the log says when a directory monitor skips a file.

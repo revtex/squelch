@@ -2,14 +2,23 @@ package audio
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 )
 
 // Transcriber is the interface used by call handlers to submit transcription jobs.
 // It allows the underlying pool to be swapped at runtime without restarting.
 type Transcriber interface {
 	Submit(ctx context.Context, job TranscriptionJob) error
+}
+
+// JobRecorder is told about every call the manager takes or turns away, so
+// the admin can show a job history. Nil means nobody is listening.
+type JobRecorder interface {
+	Queued(ctx context.Context, callID int64, model string)
+	Skipped(ctx context.Context, callID int64, model, reason string)
 }
 
 // TranscriberManager wraps a TranscriberPool with thread-safe hot-reload.
@@ -21,6 +30,30 @@ type TranscriberManager struct {
 	cancel  context.CancelFunc // cancels the current pool's workers
 	results chan TranscriptionJobResult
 	appCtx  context.Context // root context (server lifetime)
+
+	// minDurationMs drops calls shorter than this (0 keeps everything).
+	minDurationMs atomic.Int64
+	recorder      JobRecorder
+}
+
+// SetRecorder installs the job history sink.
+func (m *TranscriberManager) SetRecorder(r JobRecorder) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.recorder = r
+}
+
+// SetMinDurationMs sets the shortest call worth transcribing.
+func (m *TranscriberManager) SetMinDurationMs(ms int64) {
+	if ms < 0 {
+		ms = 0
+	}
+	m.minDurationMs.Store(ms)
+}
+
+// MinDurationMs returns the shortest call worth transcribing.
+func (m *TranscriberManager) MinDurationMs() int64 {
+	return m.minDurationMs.Load()
 }
 
 // NewTranscriberManager creates a manager. If pool is nil, transcription starts disabled.
@@ -40,15 +73,45 @@ func NewTranscriberManager(appCtx context.Context, pool *TranscriberPool, cancel
 }
 
 // Submit enqueues a transcription job on the current pool.
-// Returns nil (no-op) if transcription is disabled.
+// Returns nil (no-op) if transcription is disabled. Calls shorter than the
+// minimum are recorded as skipped and not sent, unless the job is forced.
 func (m *TranscriberManager) Submit(ctx context.Context, job TranscriptionJob) error {
 	m.mu.RLock()
 	p := m.pool
+	rec := m.recorder
 	m.mu.RUnlock()
 	if p == nil {
 		return nil
 	}
+	if min := m.minDurationMs.Load(); !job.Force && min > 0 && job.DurationMs > 0 && job.DurationMs < min {
+		if rec != nil {
+			rec.Skipped(ctx, job.CallID, p.Model(), fmt.Sprintf("shorter than %.1f s", float64(min)/1000))
+		}
+		return nil
+	}
+	if rec != nil {
+		rec.Queued(ctx, job.CallID, p.Model())
+	}
 	return p.Submit(ctx, job)
+}
+
+// Retry sends a call to the transcriber again, whatever its length.
+// It fails when transcription is off, since nothing would pick the job up.
+func (m *TranscriberManager) Retry(ctx context.Context, callID int64, audioPath string) error {
+	if !m.Enabled() {
+		return fmt.Errorf("transcription is off")
+	}
+	return m.Submit(ctx, TranscriptionJob{CallID: callID, AudioPath: audioPath, Force: true})
+}
+
+// Workers returns how many jobs run at once, or 0 when disabled.
+func (m *TranscriberManager) Workers() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.pool == nil {
+		return 0
+	}
+	return m.pool.Workers()
 }
 
 // Results returns the shared results channel that the consumer goroutine reads from.

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { configureStore } from "@reduxjs/toolkit";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
@@ -28,11 +29,6 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-// LegacyUsageBanner mounts on Admin; stub the data hook so it stays empty
-// and we don't trigger a real fetch in jsdom.
-vi.mock("@/features/admin/legacy-usage", () => ({
-  default: () => null,
-}));
 
 // --- Helpers ---
 
@@ -50,13 +46,13 @@ function makeStore(preloadedState?: Partial<RootState>) {
   });
 }
 
-function renderAdmin(preloadedState?: Partial<RootState>) {
+function renderAdmin(preloadedState?: Partial<RootState>, url = "/admin/users") {
   const store = makeStore(preloadedState);
   return {
     store,
     ...render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={["/admin/users"]}>
+        <MemoryRouter initialEntries={[url]}>
           <Admin />
         </MemoryRouter>
       </Provider>,
@@ -103,20 +99,120 @@ describe("Admin", () => {
     } as Partial<RootState>);
 
     const expectedLabels = [
+      "Overview",
       "Users",
-      "Systems",
-      "Groups & Tags",
-      "API Keys",
-      "Monitors",
-      "Downstreams",
-      "Options",
-      "Logs",
-      "Tools",
+      "Connections",
+      "Systems & talkgroups",
+      "Groups & tags",
+      "API keys",
+      "Folder monitors",
+      "Forwarding",
+      "Settings",
+      "Logs & audit",
+      "Trunk Recorder",
+      "Backup & import",
     ];
 
     for (const label of expectedLabels) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
+  });
+
+  it("opens the command palette with Ctrl+K and jumps to a section", async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      auth: {
+        token: "test-token",
+        role: "admin",
+        username: "admin",
+        passwordNeedChange: false,
+        setupStatus: null,
+      },
+    } as Partial<RootState>);
+
+    await user.keyboard("{Control>}k{/Control}");
+    const box = screen.getByRole("combobox", { name: "Search" });
+    expect(box).toHaveFocus();
+    await user.type(box, "audit");
+    expect(screen.getByRole("option", { name: /^Logs & audit/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.keyboard("{Enter}");
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/logs");
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("lists every section in the More sheet on a phone", async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      auth: {
+        token: "test-token",
+        role: "admin",
+        username: "admin",
+        passwordNeedChange: false,
+        setupStatus: null,
+      },
+    } as Partial<RootState>);
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    const sheet = screen.getByRole("dialog", { name: "All sections" });
+    expect(within(sheet).getByRole("link", { name: "Forwarding" })).toBeInTheDocument();
+    await user.click(within(sheet).getByRole("link", { name: "Forwarding" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/forwarding");
+    expect(screen.queryByRole("dialog", { name: "All sections" })).toBeNull();
+  });
+
+  it("opens every section from the top bar's menu button and searches from its field", async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      auth: {
+        token: "test-token",
+        role: "admin",
+        username: "admin",
+        passwordNeedChange: false,
+        setupStatus: null,
+      },
+    } as Partial<RootState>);
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const sheet = screen.getByRole("dialog", { name: "All sections" });
+    expect(within(sheet).getByRole("link", { name: "Backup & import" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "All sections" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Search users, talkgroups, settings/ }));
+    expect(screen.getByRole("combobox", { name: "Search" })).toHaveFocus();
+  });
+
+  it("sends an unknown admin address to Overview by its full path", () => {
+    renderAdmin(
+      {
+        auth: {
+          token: "test-token",
+          role: "admin",
+          username: "admin",
+          passwordNeedChange: false,
+          setupStatus: null,
+        },
+      } as Partial<RootState>,
+      "/admin/groups-tags",
+    );
+    const targets = screen.getAllByTestId("navigate").map((el) => el.getAttribute("data-to"));
+    expect(targets).toContain("/admin/overview");
+  });
+
+  it("shows the socket state in the top bar", () => {
+    renderAdmin({
+      auth: {
+        token: "test-token",
+        role: "admin",
+        username: "admin",
+        passwordNeedChange: false,
+        setupStatus: null,
+      },
+    } as Partial<RootState>);
+    expect(screen.getByRole("status")).toHaveTextContent(/Reconnecting|Offline|Live/);
   });
 
   it("sign out button clears credentials", async () => {
@@ -134,7 +230,7 @@ describe("Admin", () => {
     } as Partial<RootState>);
 
     // Multiple sign out buttons may exist (mobile + desktop sidebars)
-    const signOutButtons = screen.getAllByText("Sign Out");
+    const signOutButtons = screen.getAllByText("Sign out");
     fireEvent.click(signOutButtons[0]);
 
     await waitFor(() => {

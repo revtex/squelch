@@ -13,26 +13,45 @@ import (
 const getActivityStats = `-- name: GetActivityStats :one
 SELECT
     (SELECT COUNT(*) FROM calls c1 WHERE c1.date_time >= ?1) AS calls_today,
-    (SELECT COUNT(*) FROM calls c2 WHERE c2.date_time >= ?2) AS calls_this_week,
-    (SELECT COUNT(*) FROM calls) AS calls_total
+    (SELECT COUNT(*) FROM calls c4 WHERE c4.date_time >= ?2 AND c4.date_time < ?3) AS calls_yesterday,
+    (SELECT COUNT(*) FROM calls c2 WHERE c2.date_time >= ?4) AS calls_this_week,
+    (SELECT COUNT(*) FROM calls) AS calls_total,
+    CAST((SELECT COALESCE(MAX(c3.date_time), 0) FROM calls c3) AS INTEGER) AS last_call_at
 `
 
 type GetActivityStatsParams struct {
-	TodayStart int64 `db:"today_start" json:"today_start"`
-	WeekStart  int64 `db:"week_start" json:"week_start"`
+	TodayStart     int64 `db:"today_start" json:"today_start"`
+	YesterdayStart int64 `db:"yesterday_start" json:"yesterday_start"`
+	YesterdayUntil int64 `db:"yesterday_until" json:"yesterday_until"`
+	WeekStart      int64 `db:"week_start" json:"week_start"`
 }
 
 type GetActivityStatsRow struct {
-	CallsToday    int64 `db:"calls_today" json:"calls_today"`
-	CallsThisWeek int64 `db:"calls_this_week" json:"calls_this_week"`
-	CallsTotal    int64 `db:"calls_total" json:"calls_total"`
+	CallsToday     int64 `db:"calls_today" json:"calls_today"`
+	CallsYesterday int64 `db:"calls_yesterday" json:"calls_yesterday"`
+	CallsThisWeek  int64 `db:"calls_this_week" json:"calls_this_week"`
+	CallsTotal     int64 `db:"calls_total" json:"calls_total"`
+	LastCallAt     int64 `db:"last_call_at" json:"last_call_at"`
 }
 
-// Returns aggregate stats: today's calls, this week's calls, total calls.
+// Returns aggregate stats: today's calls, yesterday's calls up to the same
+// time of day (a fair comparison while today is still running), this
+// week's calls, total calls and when the newest call was made.
 func (q *Queries) GetActivityStats(ctx context.Context, arg GetActivityStatsParams) (GetActivityStatsRow, error) {
-	row := q.db.QueryRowContext(ctx, getActivityStats, arg.TodayStart, arg.WeekStart)
+	row := q.db.QueryRowContext(ctx, getActivityStats,
+		arg.TodayStart,
+		arg.YesterdayStart,
+		arg.YesterdayUntil,
+		arg.WeekStart,
+	)
 	var i GetActivityStatsRow
-	err := row.Scan(&i.CallsToday, &i.CallsThisWeek, &i.CallsTotal)
+	err := row.Scan(
+		&i.CallsToday,
+		&i.CallsYesterday,
+		&i.CallsThisWeek,
+		&i.CallsTotal,
+		&i.LastCallAt,
+	)
 	return i, err
 }
 
@@ -78,6 +97,8 @@ func (q *Queries) GetCallsPerHour(ctx context.Context, dateTime int64) ([]GetCal
 const getTopTalkgroups = `-- name: GetTopTalkgroups :many
 SELECT
     c.talkgroup_id,
+    c.system_id,
+    t.talkgroup_id AS talkgroup_number,
     t.label AS talkgroup_label,
     t.name AS talkgroup_name,
     s.label AS system_label,
@@ -97,11 +118,13 @@ type GetTopTalkgroupsParams struct {
 }
 
 type GetTopTalkgroupsRow struct {
-	TalkgroupID    sql.NullInt64  `db:"talkgroup_id" json:"talkgroup_id"`
-	TalkgroupLabel sql.NullString `db:"talkgroup_label" json:"talkgroup_label"`
-	TalkgroupName  sql.NullString `db:"talkgroup_name" json:"talkgroup_name"`
-	SystemLabel    sql.NullString `db:"system_label" json:"system_label"`
-	CallCount      int64          `db:"call_count" json:"call_count"`
+	TalkgroupID     sql.NullInt64  `db:"talkgroup_id" json:"talkgroup_id"`
+	SystemID        int64          `db:"system_id" json:"system_id"`
+	TalkgroupNumber sql.NullInt64  `db:"talkgroup_number" json:"talkgroup_number"`
+	TalkgroupLabel  sql.NullString `db:"talkgroup_label" json:"talkgroup_label"`
+	TalkgroupName   sql.NullString `db:"talkgroup_name" json:"talkgroup_name"`
+	SystemLabel     sql.NullString `db:"system_label" json:"system_label"`
+	CallCount       int64          `db:"call_count" json:"call_count"`
 }
 
 // Returns top N busiest talkgroups (by call count) in a time range.
@@ -116,6 +139,8 @@ func (q *Queries) GetTopTalkgroups(ctx context.Context, arg GetTopTalkgroupsPara
 		var i GetTopTalkgroupsRow
 		if err := rows.Scan(
 			&i.TalkgroupID,
+			&i.SystemID,
+			&i.TalkgroupNumber,
 			&i.TalkgroupLabel,
 			&i.TalkgroupName,
 			&i.SystemLabel,

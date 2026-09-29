@@ -7,7 +7,19 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
+
+const countTalkgroupsWithTag = `-- name: CountTalkgroupsWithTag :one
+SELECT COUNT(*) FROM talkgroups WHERE tag_id = ?
+`
+
+func (q *Queries) CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTalkgroupsWithTag, tagID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createTag = `-- name: CreateTag :one
 INSERT INTO tags (label) VALUES (?1) RETURNING id
@@ -76,6 +88,57 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const listTagsWithUsage = `-- name: ListTagsWithUsage :many
+SELECT tg.id, tg.label, COUNT(t.id) AS talkgroups
+FROM tags tg
+LEFT JOIN talkgroups t ON t.tag_id = tg.id
+GROUP BY tg.id
+ORDER BY tg.label ASC
+`
+
+type ListTagsWithUsageRow struct {
+	ID         int64  `db:"id" json:"id"`
+	Label      string `db:"label" json:"label"`
+	Talkgroups int64  `db:"talkgroups" json:"talkgroups"`
+}
+
+func (q *Queries) ListTagsWithUsage(ctx context.Context) ([]ListTagsWithUsageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsWithUsage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTagsWithUsageRow{}
+	for rows.Next() {
+		var i ListTagsWithUsageRow
+		if err := rows.Scan(&i.ID, &i.Label, &i.Talkgroups); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const moveTalkgroupsToTag = `-- name: MoveTalkgroupsToTag :exec
+UPDATE talkgroups SET tag_id = ?1 WHERE tag_id = ?2
+`
+
+type MoveTalkgroupsToTagParams struct {
+	ToTag   sql.NullInt64 `db:"to_tag" json:"to_tag"`
+	FromTag sql.NullInt64 `db:"from_tag" json:"from_tag"`
+}
+
+func (q *Queries) MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error {
+	_, err := q.db.ExecContext(ctx, moveTalkgroupsToTag, arg.ToTag, arg.FromTag)
+	return err
 }
 
 const updateTag = `-- name: UpdateTag :exec

@@ -15,3 +15,16 @@ UPDATE groups SET label = :label WHERE id = :id;
 
 -- name: DeleteGroup :exec
 DELETE FROM groups WHERE id = ?;
+
+-- name: ListGroupsWithUsage :many
+SELECT g.id, g.label, COUNT(t.id) AS talkgroups
+FROM groups g
+LEFT JOIN talkgroups t ON t.group_id = g.id
+GROUP BY g.id
+ORDER BY g.label ASC;
+
+-- name: CountTalkgroupsInGroup :one
+SELECT COUNT(*) FROM talkgroups WHERE group_id = ?;
+
+-- name: MoveTalkgroupsToGroup :exec
+UPDATE talkgroups SET group_id = sqlc.narg('to_group') WHERE group_id = sqlc.arg('from_group');

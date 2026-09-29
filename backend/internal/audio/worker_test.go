@@ -25,13 +25,19 @@ func TestFfmpegArgs_DefaultPreset(t *testing.T) {
 	}
 }
 
-func TestFfmpegArgs_FragmentedMP4(t *testing.T) {
-	// All enabled modes must produce fragmented MP4 (iPod muxer) so that
-	// blob-URL playback works on Mobile Edge.
+func TestFfmpegArgs_FastStartMP4(t *testing.T) {
+	// All enabled modes must put the moov atom first (faststart) and must not
+	// fragment: a fragmented file keeps its index at the end, and Media3
+	// makes three extra range requests per call to fetch it.
 	for _, mode := range []audio.ConversionMode{audio.ConversionEnabled, audio.ConversionNorm, audio.ConversionLoudNorm} {
 		args := audio.FfmpegArgs("/in.wav", "/out.m4a", mode, audio.PresetAACLC32k)
-		if !containsAll(args, "-movflags", "frag_keyframe+empty_moov", "-f", "ipod") {
-			t.Errorf("mode %d: expected fragmented MP4 flags, got %v", mode, args)
+		if !containsAll(args, "-movflags", "+faststart", "-f", "ipod") {
+			t.Errorf("mode %d: expected faststart MP4 flags, got %v", mode, args)
+		}
+		for _, a := range args {
+			if strings.Contains(a, "frag_keyframe") || strings.Contains(a, "empty_moov") {
+				t.Errorf("mode %d: expected no fragmented MP4 flags, got %v", mode, args)
+			}
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 type Querier interface {
 	ListEnabledTRInstances(ctx context.Context) ([]db.TrInstance, error)
 	GetTRInstance(ctx context.Context, id int64) (db.TrInstance, error)
+	TouchTRInstanceLastSeen(ctx context.Context, arg db.TouchTRInstanceLastSeenParams) error
 }
 
 // Enricher is a stub interface for talkgroup/unit metadata lookups against

@@ -368,6 +368,16 @@ func TestServiceArguments_StripsTransientFlags(t *testing.T) {
 			want: []string{"--listen", ":3022"},
 		},
 		{
+			name: "strips single-dash secret flags",
+			args: []string{"-encryption-key", "k", "-admin-password=pw", "-service", "install", "-listen", ":3022"},
+			want: []string{"-listen", ":3022"},
+		},
+		{
+			name: "strips single-dash key file and bool flags",
+			args: []string{"-encryption-key-file=/root/key", "-config-save", "-version=true", "--config", "/etc/os.json"},
+			want: []string{"--config", "/etc/os.json"},
+		},
+		{
 			name: "strips multiple transient flags",
 			args: []string{"--service", "install", "--admin-password", "pw", "--config-save", "--config", "/etc/os.json"},
 			want: []string{"--config", "/etc/os.json"},

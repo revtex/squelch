@@ -17,14 +17,16 @@ INSERT INTO webhooks (
     secret,
     systems_json,
     disabled,
-    "order"
+    "order",
+    label
 ) VALUES (
     ?1,
     ?2,
     ?3,
     ?4,
     ?5,
-    ?6
+    ?6,
+    ?7
 ) RETURNING id
 `
 
@@ -35,6 +37,7 @@ type CreateWebhookParams struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
 }
 
 func (q *Queries) CreateWebhook(ctx context.Context, arg CreateWebhookParams) (int64, error) {
@@ -45,6 +48,7 @@ func (q *Queries) CreateWebhook(ctx context.Context, arg CreateWebhookParams) (i
 		arg.SystemsJson,
 		arg.Disabled,
 		arg.Order,
+		arg.Label,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -61,7 +65,7 @@ func (q *Queries) DeleteWebhook(ctx context.Context, id int64) error {
 }
 
 const getWebhook = `-- name: GetWebhook :one
-SELECT id, url, type, secret, systems_json, disabled, "order" FROM webhooks WHERE id = ? LIMIT 1
+SELECT id, url, type, secret, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM webhooks WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetWebhook(ctx context.Context, id int64) (Webhook, error) {
@@ -75,12 +79,18 @@ func (q *Queries) GetWebhook(ctx context.Context, id int64) (Webhook, error) {
 		&i.SystemsJson,
 		&i.Disabled,
 		&i.Order,
+		&i.Label,
+		&i.LastAt,
+		&i.LastOk,
+		&i.LastStatus,
+		&i.LastError,
+		&i.LastOkAt,
 	)
 	return i, err
 }
 
 const listActiveWebhooks = `-- name: ListActiveWebhooks :many
-SELECT id, url, type, secret, systems_json, disabled, "order" FROM webhooks WHERE disabled = 0 ORDER BY "order" ASC, id ASC
+SELECT id, url, type, secret, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM webhooks WHERE disabled = 0 ORDER BY "order" ASC, id ASC
 `
 
 func (q *Queries) ListActiveWebhooks(ctx context.Context) ([]Webhook, error) {
@@ -100,6 +110,12 @@ func (q *Queries) ListActiveWebhooks(ctx context.Context) ([]Webhook, error) {
 			&i.SystemsJson,
 			&i.Disabled,
 			&i.Order,
+			&i.Label,
+			&i.LastAt,
+			&i.LastOk,
+			&i.LastStatus,
+			&i.LastError,
+			&i.LastOkAt,
 		); err != nil {
 			return nil, err
 		}
@@ -115,7 +131,7 @@ func (q *Queries) ListActiveWebhooks(ctx context.Context) ([]Webhook, error) {
 }
 
 const listWebhooks = `-- name: ListWebhooks :many
-SELECT id, url, type, secret, systems_json, disabled, "order" FROM webhooks ORDER BY "order" ASC, id ASC
+SELECT id, url, type, secret, systems_json, disabled, "order", label, last_at, last_ok, last_status, last_error, last_ok_at FROM webhooks ORDER BY "order" ASC, id ASC
 `
 
 func (q *Queries) ListWebhooks(ctx context.Context) ([]Webhook, error) {
@@ -135,6 +151,12 @@ func (q *Queries) ListWebhooks(ctx context.Context) ([]Webhook, error) {
 			&i.SystemsJson,
 			&i.Disabled,
 			&i.Order,
+			&i.Label,
+			&i.LastAt,
+			&i.LastOk,
+			&i.LastStatus,
+			&i.LastError,
+			&i.LastOkAt,
 		); err != nil {
 			return nil, err
 		}
@@ -149,6 +171,35 @@ func (q *Queries) ListWebhooks(ctx context.Context) ([]Webhook, error) {
 	return items, nil
 }
 
+const recordWebhookDelivery = `-- name: RecordWebhookDelivery :exec
+UPDATE webhooks SET
+    last_at     = ?1,
+    last_ok     = ?2,
+    last_status = ?3,
+    last_error  = ?4,
+    last_ok_at  = CASE WHEN ?2 = 1 THEN ?1 ELSE last_ok_at END
+WHERE id = ?5
+`
+
+type RecordWebhookDeliveryParams struct {
+	At     sql.NullInt64 `db:"at" json:"at"`
+	Ok     int64         `db:"ok" json:"ok"`
+	Status int64         `db:"status" json:"status"`
+	Error  string        `db:"error" json:"error"`
+	ID     int64         `db:"id" json:"id"`
+}
+
+func (q *Queries) RecordWebhookDelivery(ctx context.Context, arg RecordWebhookDeliveryParams) error {
+	_, err := q.db.ExecContext(ctx, recordWebhookDelivery,
+		arg.At,
+		arg.Ok,
+		arg.Status,
+		arg.Error,
+		arg.ID,
+	)
+	return err
+}
+
 const updateWebhook = `-- name: UpdateWebhook :exec
 UPDATE webhooks SET
     url          = ?1,
@@ -156,8 +207,9 @@ UPDATE webhooks SET
     secret       = ?3,
     systems_json = ?4,
     disabled     = ?5,
-    "order"      = ?6
-WHERE id = ?7
+    "order"      = ?6,
+    label        = ?7
+WHERE id = ?8
 `
 
 type UpdateWebhookParams struct {
@@ -167,6 +219,7 @@ type UpdateWebhookParams struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
 	ID          int64          `db:"id" json:"id"`
 }
 
@@ -178,6 +231,7 @@ func (q *Queries) UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) er
 		arg.SystemsJson,
 		arg.Disabled,
 		arg.Order,
+		arg.Label,
 		arg.ID,
 	)
 	return err

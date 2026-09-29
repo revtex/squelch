@@ -13,6 +13,8 @@ This guide walks you through getting Squelch running at home. The Docker path is
 - [Your Data Directory](#your-data-directory)
 - [Backing Up](#backing-up)
 - [Running Behind a Reverse Proxy](#running-behind-a-reverse-proxy)
+- [Addresses That Can Never Be Blocked](#addresses-that-can-never-be-blocked)
+- [Showing Listeners' Countries (Optional)](#showing-listeners-countries-optional)
 - [HTTPS Options](#https-options)
 - [Keeping Secrets Safe](#keeping-secrets-safe)
 - [Transcription (Optional)](#transcription-optional)
@@ -274,30 +276,85 @@ To restore, unpack the archive into the same location and start the container ag
 
 Most people already have a web server (Caddy, nginx, Traefik) on their home server. Putting Squelch behind it gives you a clean domain name and one place to manage TLS certificates.
 
-Two rules to remember when proxying:
+Every proxy needs to do three things:
 
-- **Forward WebSocket upgrades** on `/api/ws`, `/ws`, and `/api/admin/ws` — the live call feed and admin events use them. `/api/ws` is the canonical listener endpoint; `/ws` is a compatibility alias kept for legacy clients and should also be proxied. (Audio is delivered separately as a regular HTTP response from `/api/calls/:id/audio` and does not require WebSocket forwarding.)
+- **Forward WebSocket upgrades.** The live call feed uses `/api/v1/ws/listener` and the admin dashboard uses `/api/v1/ws/admin`; older clients still use `/api/ws`, `/ws` and `/api/admin/ws`. Proxying the whole site (`/`) with upgrades allowed covers all of them. Audio and the background stream (`/api/v1/listener/stream`) are ordinary HTTP responses.
 - **Send `X-Forwarded-Proto`** so Squelch knows whether to mark cookies as secure.
+- **Send `X-Forwarded-For`** with the visitor's real address. The proxy examples below all do this.
 
-If the proxy is on the same machine, it's also a good idea to bind Squelch to localhost only so nothing bypasses the proxy. In your compose file:
+Then tell Squelch which address the proxy connects from — see [Showing the Real Client Address](#showing-the-real-client-address). Skipping that step leaves anyone on your network able to fake their address.
+
+### Showing the Real Client Address
+
+Squelch records a client address against every login attempt, rate limit and log line. Behind a proxy, every connection arrives from the proxy, so the real address has to come from the `X-Forwarded-For` header — and Squelch must only believe that header from the proxy itself. Anyone can put any address in it.
+
+**Why it matters:** login lockout counts failed passwords per address. If every visitor appears to come from the proxy, one person mistyping a password three times locks **everyone** out for ten minutes. If Squelch believes the header from anyone, a visitor can dodge the lockout by claiming a different address each time.
+
+Out of the box, Squelch believes `X-Forwarded-For` from any loopback or private address (`127.0.0.0/8`, `::1`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). That makes a first install work behind almost any proxy, but it also means **any device on your LAN** that connects to Squelch's port directly can claim to be any address. Narrow it to your proxy:
+
+1. **Find the address your proxy connects from.** It depends on where each one runs:
+
+   | Proxy runs… | Squelch runs… | Squelch sees the proxy as… |
+   | --- | --- | --- |
+   | on the host | on the host (binary install) | `127.0.0.1` |
+   | on the host | in Docker, reached through a published port (`127.0.0.1:3022` or `localhost:3022`) | the gateway of Squelch's Docker network — see the command below |
+   | in Docker, on the same Docker network as Squelch | in Docker | the proxy container's address (pin it, or use the network's subnet if only the proxy and Squelch are on it) |
+   | on another machine | anywhere | that machine's LAN address |
+
+   To find a Docker network's gateway (the project name is usually the folder your compose file is in):
+
+   ```bash
+   docker network inspect squelch_default --format '{{(index .IPAM.Config 0).Gateway}}'
+   ```
+
+   Expected output is a single address such as `172.18.0.1`.
+
+   If you are not sure, set up the proxy first, then look at the log (step 3): with no trusted proxy matching, every request shows the proxy's address, and that is the one to use.
+
+2. **Set it** with `--trusted-proxies` or `SQUELCH_TRUSTED_PROXIES` (comma-separated addresses or CIDR ranges). In Docker Compose:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_TRUSTED_PROXIES=172.18.0.1
+   ```
+
+   Then `docker compose up -d` to apply it. With no proxy in front of Squelch at all, set it to `none`.
+
+3. **Check it.** Browse the site through the proxy from your phone or another computer, then read the request log:
+
+   ```bash
+   docker compose logs squelch | grep '"msg":"request"' | tail -5
+   ```
+
+   Each line ends in `"ip":"…"`. It should be the address of the device you browsed from, not the proxy's. If it shows the proxy's address, the trusted-proxy setting does not match where the proxy connects from — go back to step 1.
+
+> **If a Docker network is recreated** (for example after `docker compose down` removes it), it can come back with a different subnet and gateway. Nothing breaks, but every visitor shows as the new gateway address until you update `SQUELCH_TRUSTED_PROXIES`. Step 3 catches this.
+
+If the proxy is on the same machine, you can also stop anything bypassing it by publishing Squelch's port on localhost only. Keep `SQUELCH_LISTEN` at `0.0.0.0:3022` inside the container — `127.0.0.1` there would make the container unreachable — and restrict the published port instead:
 
 ```yaml
-environment:
-  - SQUELCH_LISTEN=127.0.0.1:3022
 ports:
   - "127.0.0.1:3022:3022"
 ```
 
+Recorders and apps that used `http://<server>:3022` directly then have to go through the proxy's address.
+
 ### Caddy
 
-Caddy is the easiest — it handles TLS, WebSockets, and forwarded headers on its own.
+Caddy handles TLS, WebSockets and forwarded headers on its own. Since v2.5 it also discards any `X-Forwarded-For` a visitor sends and writes the real address, so the header cannot be forged through it. It does pass a visitor's `X-Real-IP` straight through, so remove it:
 
 ```caddy
 scanner.example.com {
     encode gzip zstd
-    reverse_proxy 127.0.0.1:3022
+    reverse_proxy 127.0.0.1:3022 {
+        header_up -X-Real-IP
+    }
 }
 ```
+
+If Caddy itself sits behind Cloudflare's proxy (orange cloud), see [Cloudflare](#cloudflare).
 
 ### nginx
 
@@ -340,11 +397,168 @@ server {
 }
 ```
 
+`$proxy_add_x_forwarded_for` adds the real address to the end of whatever the visitor sent. Squelch reads the list from the end backwards and stops at the first address that is not a trusted proxy, so a forged entry at the front is ignored — **as long as `SQUELCH_TRUSTED_PROXIES` names only nginx**. With the default private ranges, a LAN visitor's own address counts as "trusted" and Squelch reads past it to the forged one.
+
+### Nginx Proxy Manager
+
+1. Add a **Proxy Host** for your domain, forwarding to Squelch's address and port `3022` (`http`).
+2. Turn on **Websockets Support**.
+3. On the **SSL** tab, request a certificate and turn on **Force SSL**.
+
+Nginx Proxy Manager already sends `X-Forwarded-For`, `X-Real-IP` and `X-Forwarded-Proto`. It runs in Docker, so its address as Squelch sees it is its container address on the shared network, or the Docker gateway if it reaches Squelch through a published port — use the table above.
+
+### Traefik
+
+Traefik forwards WebSockets and sets `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Real-Ip` itself. By default it discards those headers when a visitor sends them, so they cannot be forged through it. With Traefik watching Docker, add labels to the Squelch service:
+
+```yaml
+services:
+  squelch:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.squelch.rule=Host(`scanner.example.com`)
+      - traefik.http.routers.squelch.entrypoints=websecure
+      - traefik.http.routers.squelch.tls.certresolver=letsencrypt
+      - traefik.http.services.squelch.loadbalancer.server.port=3022
+```
+
+Use your own entrypoint and certificate resolver names. Traefik and Squelch must share a Docker network; set `SQUELCH_TRUSTED_PROXIES` to Traefik's container address, or to that network's subnet if nothing else is on it.
+
+### Apache
+
+Needs Apache 2.4.47 or later, with `mod_proxy`, `mod_proxy_http`, `mod_headers` and `mod_ssl` enabled (`a2enmod proxy proxy_http headers ssl` on Debian and Ubuntu).
+
+```apache
+<VirtualHost *:443>
+    ServerName scanner.example.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/scanner.example.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/scanner.example.com/privkey.pem
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader unset X-Real-IP
+
+    ProxyPass        / http://127.0.0.1:3022/ upgrade=websocket
+    ProxyPassReverse / http://127.0.0.1:3022/
+</VirtualHost>
+```
+
+Apache adds `X-Forwarded-For` on its own, appending to anything the visitor sent — the same as nginx, so the same rule applies: set `SQUELCH_TRUSTED_PROXIES` to Apache's address only.
+
+### Cloudflare
+
+**Cloudflare Tunnel** (`cloudflared`): point the tunnel's service at Squelch (`http://localhost:3022`, or `http://squelch:3022` when `cloudflared` runs in the same Compose project). Cloudflare sends the visitor's address in `X-Forwarded-For`, so set `SQUELCH_TRUSTED_PROXIES` to the address `cloudflared` connects from, using the table above.
+
+**Cloudflare's proxy in front of your own proxy** (the orange cloud): your proxy now sees Cloudflare's servers, not visitors, and has to be told to trust them — otherwise every visitor shows up as a Cloudflare address. Cloudflare publishes its ranges at <https://www.cloudflare.com/ips/>. In Caddy, add them to the global options and forward the resolved address:
+
+```caddy
+{
+    servers {
+        trusted_proxies static 173.245.48.0/20 103.21.244.0/22 # …the full list from cloudflare.com/ips
+    }
+}
+
+scanner.example.com {
+    reverse_proxy 127.0.0.1:3022 {
+        header_up X-Forwarded-For {client_ip}
+        header_up -X-Real-IP
+    }
+}
+```
+
+In nginx, use `set_real_ip_from` for each Cloudflare range with `real_ip_header CF-Connecting-IP;` and send `proxy_set_header X-Forwarded-For $remote_addr;`. Either way, Squelch still trusts only your own proxy.
+
+### Checking the Proxy
+
 After starting the proxy, open the public URL in a browser and confirm the live scanner shows new calls and plays audio. New calls arriving prove the WebSocket forwarding is working; audio playing proves the standard HTTPS forwarding (and cookies) are working.
 
 > **Tip:** Make sure your server's clock is accurate (NTP is usually on by default). Login tokens have expiry times, and a clock that's off by several minutes will cause confusing login failures.
 
 ---
+
+## Addresses That Can Never Be Blocked
+
+Admins can block an address or range from **Admin → Connections → Blocked addresses**. To make sure nobody can lock you out that way, including someone who has stolen an admin password, list the addresses you manage Squelch from in `--trusted-addresses` or `SQUELCH_TRUSTED_ADDRESSES`. Blocks never apply to them, and the admin dashboard cannot change the list. Only someone who can change the server's configuration can.
+
+1. **Narrow your trusted proxies first.** A trusted address is only as trustworthy as the client address Squelch works out. Under the default trusted proxies, any device on your LAN can claim to be your address. Follow [Showing the Real Client Address](#showing-the-real-client-address) before relying on this list. Squelch logs a warning at startup when trusted addresses are set but trusted proxies are still the default.
+
+2. **Find your address.** Open **Admin → Connections → Blocked addresses**. It shows the address you are connected from.
+
+3. **Set it.** Use comma-separated addresses or CIDR ranges. In Docker Compose:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_TRUSTED_ADDRESSES=203.0.113.7,192.168.1.0/24
+   ```
+
+   Then run `docker compose up -d`. An entry that is not an address or a range stops Squelch from starting, and the log names it.
+
+4. **Check it.** The **Never blocked** list on the Blocked addresses tab shows every trusted address. Rows from those addresses are marked **trusted** and have no **Block address** action.
+
+Things to know:
+
+- **Loopback is always trusted,** but only for a request made on the server itself. In Docker, a request from the host reaches the container from the Docker network's gateway, not from loopback, so it gets no exemption.
+- **Home addresses change.** If your internet provider changes your address, the old entry stops protecting you. Trust the range your provider uses, or the address of a VPN you always connect through.
+- **The list cannot be edited from the dashboard on purpose.** If you are locked out, see [Locked Out](troubleshooting.md#locked-out) in the troubleshooting guide.
+
+## Showing Listeners' Countries (Optional)
+
+**Admin → Connections** can show the country each connection comes from. The lookup uses a country database file that you download and keep on the server. Addresses are looked up locally and never leave the server. Squelch does not include a database, so this is off until you add one. Private and local addresses always show as **Local network**, with or without a database.
+
+Squelch reads any IP-to-country file in the MMDB format. Two free ones work:
+
+| Database | Account needed | Updates | Licence |
+| --- | --- | --- | --- |
+| [DB-IP IP to Country Lite](https://db-ip.com/db/lite.php) | No | Monthly | CC BY 4.0 |
+| [MaxMind GeoLite2-Country](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) | Yes, free | Twice a week | [GeoLite EULA](https://www.maxmind.com/en/geolite/eula) |
+
+You download the file yourself, so you are the licensee. Squelch shows the credit each licence asks for under the country column.
+
+### DB-IP (recommended)
+
+1. **Download it** into your data folder. The file name carries the year and month:
+
+   ```bash
+   cd squelch/data
+   curl -fsSL "https://download.db-ip.com/free/dbip-country-lite-$(date +%Y-%m).mmdb.gz" \
+     | gunzip > country.mmdb.new && mv country.mmdb.new country.mmdb
+   ```
+
+   Early on the 1st of a month the new file may not be published yet. If the download fails, try again later that day.
+
+2. **Point Squelch at it** with `--geoip-db` or `SQUELCH_GEOIP_DB`. In Docker Compose, the data folder is `/data` inside the container:
+
+   ```yaml
+   services:
+     squelch:
+       environment:
+         - SQUELCH_GEOIP_DB=/data/country.mmdb
+   ```
+
+   Then run `docker compose up -d`.
+
+3. **Check it.** The log shows `geoip: country lookup is on` at startup, and **Admin → Connections** gains a **Country** column. If the file cannot be opened, Squelch starts anyway with a warning and no country column.
+
+4. **Keep it current.** Run the step 1 command once a month, for example from cron on the 2nd:
+
+   ```bash
+   0 4 2 * * cd /path/to/squelch/data && curl -fsSL "https://download.db-ip.com/free/dbip-country-lite-$(date +\%Y-\%m).mmdb.gz" | gunzip > country.mmdb.new && mv country.mmdb.new country.mmdb
+   ```
+
+   Squelch checks for a replaced file every hour, so no restart is needed. Always download to a new name and then move it into place, as the command does. Overwriting the open file directly can make Squelch read a half-written database.
+
+### MaxMind GeoLite2
+
+1. Create a free account at [maxmind.com](https://www.maxmind.com/en/geolite2/signup) and generate a licence key.
+2. Install MaxMind's [`geoipupdate`](https://dev.maxmind.com/geoip/updating-databases) tool, set `EditionIDs GeoLite2-Country` in its configuration, and point its database directory at your data folder.
+3. Set `SQUELCH_GEOIP_DB=/data/GeoLite2-Country.mmdb` and restart Squelch.
+4. **Update it on a schedule.** The GeoLite EULA requires you to replace the file within 30 days of each MaxMind release, and to delete old copies. Run `geoipupdate` from cron at least weekly. It replaces the file safely, and Squelch picks the new one up within the hour.
+
+This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com.
 
 ## HTTPS Options
 
@@ -511,11 +725,12 @@ whisper:
 
 Then in Squelch's admin dashboard, open **Admin → Transcription** and:
 
-1. Set **Transcription URL** to `http://whisper:8081`.
-2. **Download a model** — pick one from the list and click download.
-3. **Select the model** you just downloaded as the active model.
-4. Set **Language** (default `en`, or leave blank to auto-detect).
-5. Turn **Transcription Enabled** on.
+1. Under **Settings**, set **go-whisper URL** to `http://whisper:8081`, click **Test** to make sure Squelch can reach it, and **Save**.
+2. Under **Models**, pick a model from the list (each shows its size, speed and whether it marks speaker turns) and click **Download**. A progress bar shows the download; it keeps going if you leave the page.
+3. Click **Use** on the downloaded model.
+4. Back under **Settings**, set **Language** (default English, or auto-detect), turn **Transcribe new calls** on, and **Save**.
+
+The banner at the top of the page says whether the sidecar answers; the **Recent jobs** tab shows what happened to each call. See the [Admin Guide](admin-guide.md#transcription) for the rest of the page.
 
 Available models:
 
@@ -553,7 +768,7 @@ The project's [docker-compose.yml](../docker-compose.yml) has commented-out exam
 
 FFmpeg handles audio conversion and normalization. It's **already installed in the Docker image**, so you don't need to do anything unless you're running from a binary.
 
-In **Admin → Options** you can pick a conversion mode:
+In **Admin → Settings → Ingest & audio** you can pick a conversion mode:
 
 - **Disabled** — store audio files as-is
 - **Enabled** — basic codec conversion
@@ -571,6 +786,8 @@ After deploying, check these to confirm everything works:
 - [ ] Admin login works and the dashboard loads
 - [ ] A test upload from your recorder appears in Squelch
 - [ ] The live scanner feed shows new calls in real time (this proves WebSockets are working) and plays them back (this proves audio HTTP fetches and cookies are working)
+
+If one of those fails, [Troubleshooting](troubleshooting.md) lists the usual cause for each symptom.
 
 ---
 
@@ -713,6 +930,9 @@ Docker users will almost always use environment variables; binary users typicall
 | `--encryption-key`      | Key for encrypting secrets at rest                        |                        |
 | `--encryption-key-file` | Path to a file containing the encryption key              |                        |
 | `--timezone`            | IANA timezone for recorder timestamps                     | `UTC`                  |
+| `--trusted-proxies`     | Proxy IPs/CIDRs allowed to set `X-Forwarded-For`, or `none` | loopback + private ranges |
+| `--trusted-addresses`   | IPs/CIDRs that can never be blocked (loopback always is)  |                        |
+| `--geoip-db`            | Path to an IP-to-country MMDB file                        | (off)                  |
 | `--admin-password`      | Reset the first admin user's password on startup          |                        |
 | `--config`              | Path to JSON config file                                  | `squelch.json`     |
 | `--config-save`         | Write current flags to JSON config and exit               |                        |
@@ -734,6 +954,9 @@ Docker users will almost always use environment variables; binary users typicall
 | `SQUELCH_ENCRYPTION_KEY_FILE` | `--encryption-key-file` |
 | `SQUELCH_ADMIN_PASSWORD`      | `--admin-password`      |
 | `SQUELCH_TIMEZONE`            | `--timezone`            |
+| `SQUELCH_TRUSTED_PROXIES`     | `--trusted-proxies`     |
+| `SQUELCH_TRUSTED_ADDRESSES`   | `--trusted-addresses`   |
+| `SQUELCH_GEOIP_DB`            | `--geoip-db`            |
 | `TZ`                              | `--timezone` (fallback) |
 
 #### Env-Only Settings
@@ -750,7 +973,7 @@ A couple of toggles don't have matching CLI flags or JSON fields — they only e
 You can save your settings to a JSON file so you don't need to pass flags every time:
 
 ```bash
-squelch --listen 0.0.0.0:3022 --db-file /data/squelch.db --config-save
+squelch --listen 0.0.0.0:3022 --db-file /data/squelch.db --recordings-dir /data/recordings --config-save
 ```
 
 That produces:
@@ -764,12 +987,19 @@ That produces:
   "ssl_cert_file": "",
   "ssl_key_file": "",
   "ssl_auto_cert": "",
-  "encryption_key": "",
   "timezone": ""
 }
 ```
 
-Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written to the file. `--encryption-key-file` is also not persisted — only the resolved `encryption_key` value appears in the JSON.
+Pass `--recordings-dir` if you want it in the file — left off, it defaults to the directory the executable sits in, and that is what gets saved. Temporary flags (`--admin-password`, `--config-save`, `--version`, `--service`) are never written. `--trusted-proxies` is written as `trusted_proxies`, `--trusted-addresses` as `trusted_addresses` and `--geoip-db` as `geoip_db`, each only when you have set it.
+
+**The encryption key is never written to this file, and must never be added to it by hand.** Squelch refuses to start if it finds an `encryption_key` field there and prints:
+
+```
+squelch: refusing to start — remove 'encryption_key' from squelch.json; pass the key via --encryption-key, --encryption-key-file, or SQUELCH_ENCRYPTION_KEY
+```
+
+A config file written by an older version may still carry that field. Delete the line and supply the key with `--encryption-key`, `--encryption-key-file`, or `SQUELCH_ENCRYPTION_KEY` instead. An empty `"encryption_key": ""` is ignored — only a real value stops startup.
 
 ### Built-in TLS
 

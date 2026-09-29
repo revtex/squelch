@@ -2,33 +2,65 @@ import { useWsQuery, useWsMutation, useLazyWsQuery } from "./useWsQuery";
 import type {
   AdminUser,
   AdminSystem,
+  AdminSystemInput,
   AdminTalkgroup,
+  AdminTalkgroupInput,
   AdminUnit,
+  AdminUnitInput,
+  ImportMode,
+  ImportRow,
+  TalkgroupBulkPayload,
+  TalkgroupImportResult,
   AdminGroup,
   AdminTag,
+  DeleteLabelPayload,
+  DeleteLabelResult,
   AdminApiKey,
   AdminApiKeyCreateResponse,
   AdminDirMonitor,
+  AdminDirMonitorCreate,
+  AdminDirMonitorUpdate,
+  MaskTestResult,
+  MonitorStatus,
   AdminDownstream,
   AdminDownstreamCreate,
   AdminDownstreamUpdate,
   AdminWebhook,
+  AdminWebhookCreate,
+  AdminWebhookUpdate,
+  DeliveryResult,
+  WebhookSample,
   ConfigResponse,
   AdminSetting,
   CreateUserPayload,
   UpdateUserPayload,
   SharedLinkAdmin,
+  RestoreSharedLinkPayload,
   ServerDirectoryListResponse,
-  RRApplyRequest,
-  RRApplyResponse,
+  BackupCounts,
+  BackupPreview,
+  ImportApplyResult,
+  RestoreResult,
+  UnitImportRow,
   TranscriptionStatus,
-  WhisperModel,
+  AdminConnectionsList,
+  AdminSessionsList,
+  AdminConnectionHistoryPage,
+  ConnectionHistoryFilter,
+  AdminIPBlocksList,
+  AdminLockoutsList,
+  CreateIPBlockPayload,
+  CreateIPBlockResult,
+  TranscriptionModelsResponse,
+  TranscriptionTestResult,
+  TranscriptionJob,
+  TranscriptionJobStatus,
+  TranscriptionStats,
+  ActivityStats,
 } from "@/types";
 
 // ─── Payload types ──────────────────────────────────────────────────────────
 
-type CreatePayload<T> = Omit<T, "id">;
-type UpdatePayload<T> = { id: number } & Partial<Omit<T, "id">>;
 
 type CreateApiKeyPayload = {
   ident: string | null;
@@ -48,10 +80,91 @@ type UpdateApiKeyPayload = {
   key?: string | null;
 };
 
+// ─── Connections ────────────────────────────────────────────────────────────
+
+export function useListConnectionsQuery() {
+  return useWsQuery<AdminConnectionsList>(
+    "connections.list",
+    undefined,
+    "connections.updated",
+  );
+}
+
+// Signing in opens a connection, so a change in connections is the cue to
+// refresh the device list too.
+export function useListSessionsQuery() {
+  return useWsQuery<AdminSessionsList>(
+    "sessions.list",
+    undefined,
+    "connections.updated",
+  );
+}
+
+export function useConnectionHistoryQuery(filter: ConnectionHistoryFilter) {
+  return useWsQuery<AdminConnectionHistoryPage>("connections.history", filter);
+}
+
+export function useDisconnectConnectionMutation() {
+  return useWsMutation<void, string>("connections.disconnect", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useRevokeSessionMutation() {
+  return useWsMutation<void, string>("sessions.revoke", {
+    transformArg: (familyId) => ({ familyId }),
+  });
+}
+
+export function useListIPBlocksQuery() {
+  return useWsQuery<AdminIPBlocksList>(
+    "ipblocks.list",
+    undefined,
+    "ipblocks.updated",
+  );
+}
+
+export function useCreateIPBlockMutation() {
+  return useWsMutation<CreateIPBlockResult, CreateIPBlockPayload>(
+    "ipblocks.create",
+    { transformArg: (p) => ({ ...p }) },
+  );
+}
+
+export function useDeleteIPBlockMutation() {
+  return useWsMutation<void, number>("ipblocks.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useSignOutUserMutation() {
+  return useWsMutation<void, number>("users.signout", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+// Lockouts are in memory on the server and end on their own, so poll.
+export function useListLockoutsQuery() {
+  return useWsQuery<AdminLockoutsList>(
+    "lockouts.list",
+    undefined,
+    "lockouts.updated",
+    30_000,
+  );
+}
+
+export function useClearLockoutMutation() {
+  return useWsMutation<void, string>("lockouts.clear", {
+    transformArg: (ip) => ({ ip }),
+  });
+}
+
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export function useListUsersQuery() {
-  return useWsQuery<AdminUser[]>("users.list", undefined, "users.updated");
+  // A user who sets their own password does not raise users.updated, so a
+  // minute's poll keeps "temporary password" honest away from this page.
+  return useWsQuery<AdminUser[]>("users.list", undefined, "users.updated", 60_000);
 }
 
 export function useCreateUserMutation() {
@@ -81,41 +194,54 @@ export function useListSystemsQuery() {
 }
 
 export function useCreateSystemMutation() {
-  return useWsMutation<AdminSystem, CreatePayload<AdminSystem>>(
-    "systems.create",
-  );
+  return useWsMutation<AdminSystem, AdminSystemInput>("systems.create");
 }
 
 export function useUpdateSystemMutation() {
-  return useWsMutation<AdminSystem, UpdatePayload<AdminSystem>>(
+  return useWsMutation<AdminSystem, AdminSystemInput & { id: number }>(
     "systems.update",
   );
 }
 
 export function useDeleteSystemMutation() {
-  return useWsMutation<void, number>("systems.delete", {
+  return useWsMutation<{ ok: boolean; talkgroups: number; units: number }, number>("systems.delete", {
     transformArg: (id) => ({ id }),
   });
 }
 
+export function useReorderSystemsMutation() {
+  return useWsMutation<void, number[]>("systems.reorder", {
+    transformArg: (ids) => ({ ids }),
+  });
+}
+
+export function useBlockTalkgroupMutation() {
+  return useWsMutation<{ ok: boolean; blocked: number[] }, { id: number; talkgroupId: number }>("systems.block");
+}
+
+export function useUnblockTalkgroupMutation() {
+  return useWsMutation<{ ok: boolean; blocked: number[] }, { id: number; talkgroupId: number }>("systems.unblock");
+}
+
 // ─── Talkgroups ─────────────────────────────────────────────────────────────
 
-export function useListTalkgroupsQuery() {
+/** All talkgroups, or one system's with their recent activity. */
+export function useListTalkgroupsQuery(systemId?: number, options?: { skip?: boolean }) {
   return useWsQuery<AdminTalkgroup[]>(
     "talkgroups.list",
-    undefined,
+    systemId === undefined ? undefined : { systemId },
     "talkgroups.updated",
+    undefined,
+    options,
   );
 }
 
 export function useCreateTalkgroupMutation() {
-  return useWsMutation<AdminTalkgroup, CreatePayload<AdminTalkgroup>>(
-    "talkgroups.create",
-  );
+  return useWsMutation<AdminTalkgroup, AdminTalkgroupInput>("talkgroups.create");
 }
 
 export function useUpdateTalkgroupMutation() {
-  return useWsMutation<AdminTalkgroup, UpdatePayload<AdminTalkgroup>>(
+  return useWsMutation<AdminTalkgroup, AdminTalkgroupInput & { id: number }>(
     "talkgroups.update",
   );
 }
@@ -126,18 +252,53 @@ export function useDeleteTalkgroupMutation() {
   });
 }
 
+export function useDeleteTalkgroupsMutation() {
+  return useWsMutation<{ ok: boolean; deleted: number }, number[]>("talkgroups.delete", {
+    transformArg: (ids) => ({ ids }),
+  });
+}
+
+export function useBulkTalkgroupsMutation() {
+  return useWsMutation<{ ok: boolean; updated: number }, TalkgroupBulkPayload>("talkgroups.bulk");
+}
+
+export function useApplyTalkgroupImportMutation() {
+  return useWsMutation<TalkgroupImportResult, { systemId: number; mode: ImportMode; rows: ImportRow[] }>(
+    "talkgroups.import",
+  );
+}
+
+export function useApplyUnitImportMutation() {
+  return useWsMutation<ImportApplyResult, { systemId: number; mode: ImportMode; rows: UnitImportRow[] }>("units.import");
+}
+
+export function useApplyGroupImportMutation() {
+  return useWsMutation<ImportApplyResult, { labels: string[] }>("groups.import");
+}
+
+export function useApplyTagImportMutation() {
+  return useWsMutation<ImportApplyResult, { labels: string[] }>("tags.import");
+}
+
 // ─── Units ──────────────────────────────────────────────────────────────────
 
-export function useListUnitsQuery() {
-  return useWsQuery<AdminUnit[]>("units.list", undefined, "units.updated");
+/** All units, or one system's with when each was last heard. */
+export function useListUnitsQuery(systemId?: number, options?: { skip?: boolean }) {
+  return useWsQuery<AdminUnit[]>(
+    "units.list",
+    systemId === undefined ? undefined : { systemId },
+    "units.updated",
+    undefined,
+    options,
+  );
 }
 
 export function useCreateUnitMutation() {
-  return useWsMutation<AdminUnit, CreatePayload<AdminUnit>>("units.create");
+  return useWsMutation<AdminUnit, AdminUnitInput>("units.create");
 }
 
 export function useUpdateUnitMutation() {
-  return useWsMutation<AdminUnit, UpdatePayload<AdminUnit>>("units.update");
+  return useWsMutation<AdminUnit, AdminUnitInput & { id: number }>("units.update");
 }
 
 export function useDeleteUnitMutation() {
@@ -145,7 +306,6 @@ export function useDeleteUnitMutation() {
     transformArg: (id) => ({ id }),
   });
 }
-
 // ─── Groups ─────────────────────────────────────────────────────────────────
 
 export function useListGroupsQuery() {
@@ -153,17 +313,15 @@ export function useListGroupsQuery() {
 }
 
 export function useCreateGroupMutation() {
-  return useWsMutation<AdminGroup, CreatePayload<AdminGroup>>("groups.create");
+  return useWsMutation<AdminGroup, { label: string }>("groups.create");
 }
 
 export function useUpdateGroupMutation() {
-  return useWsMutation<AdminGroup, UpdatePayload<AdminGroup>>("groups.update");
+  return useWsMutation<AdminGroup, { id: number; label: string }>("groups.update");
 }
 
 export function useDeleteGroupMutation() {
-  return useWsMutation<void, number>("groups.delete", {
-    transformArg: (id) => ({ id }),
-  });
+  return useWsMutation<DeleteLabelResult, DeleteLabelPayload>("groups.delete");
 }
 
 // ─── Tags ───────────────────────────────────────────────────────────────────
@@ -173,17 +331,15 @@ export function useListTagsQuery() {
 }
 
 export function useCreateTagMutation() {
-  return useWsMutation<AdminTag, CreatePayload<AdminTag>>("tags.create");
+  return useWsMutation<AdminTag, { label: string }>("tags.create");
 }
 
 export function useUpdateTagMutation() {
-  return useWsMutation<AdminTag, UpdatePayload<AdminTag>>("tags.update");
+  return useWsMutation<AdminTag, { id: number; label: string }>("tags.update");
 }
 
 export function useDeleteTagMutation() {
-  return useWsMutation<void, number>("tags.delete", {
-    transformArg: (id) => ({ id }),
-  });
+  return useWsMutation<DeleteLabelResult, DeleteLabelPayload>("tags.delete");
 }
 
 // ─── API Keys ───────────────────────────────────────────────────────────────
@@ -214,32 +370,49 @@ export function useDeleteApiKeyMutation() {
   });
 }
 
+/** Replaces the secret; the old one keeps working for a day. */
+export function useRotateApiKeyMutation() {
+  return useWsMutation<AdminApiKeyCreateResponse, number>("apikeys.rotate", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
 // ─── DirMonitors ────────────────────────────────────────────────────────────
 
+/** Polls every 15 s so the runtime state and last file stay fresh. */
 export function useListDirMonitorsQuery() {
   return useWsQuery<AdminDirMonitor[]>(
     "dirmonitors.list",
     undefined,
     "dirmonitors.updated",
+    15_000,
   );
 }
 
 export function useCreateDirMonitorMutation() {
-  return useWsMutation<AdminDirMonitor, CreatePayload<AdminDirMonitor>>(
-    "dirmonitors.create",
-  );
+  return useWsMutation<AdminDirMonitor, AdminDirMonitorCreate>("dirmonitors.create");
 }
 
 export function useUpdateDirMonitorMutation() {
-  return useWsMutation<AdminDirMonitor, UpdatePayload<AdminDirMonitor>>(
-    "dirmonitors.update",
-  );
+  return useWsMutation<AdminDirMonitor, AdminDirMonitorUpdate>("dirmonitors.update");
 }
 
 export function useDeleteDirMonitorMutation() {
   return useWsMutation<void, number>("dirmonitors.delete", {
     transformArg: (id) => ({ id }),
   });
+}
+
+export function useRestartDirMonitorMutation() {
+  return useWsMutation<{ ok: boolean; status: MonitorStatus }, number>("dirmonitors.restart", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useTestMaskMutation() {
+  return useWsMutation<MaskTestResult, { mask: string; filename: string }>(
+    "dirmonitors.test-mask",
+  );
 }
 
 export function useLazyListServerDirectoriesQuery() {
@@ -252,10 +425,12 @@ export function useLazyListServerDirectoriesQuery() {
 // ─── Downstreams ────────────────────────────────────────────────────────────
 
 export function useListDownstreamsQuery() {
+  // Delivery results are not broadcast; the poll keeps "failing" current.
   return useWsQuery<AdminDownstream[]>(
     "downstreams.list",
     undefined,
     "downstreams.updated",
+    30_000,
   );
 }
 
@@ -277,6 +452,12 @@ export function useDeleteDownstreamMutation() {
   });
 }
 
+export function useTestDownstreamMutation() {
+  return useWsMutation<DeliveryResult, number>("downstreams.test", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
 // ─── Webhooks ───────────────────────────────────────────────────────────────
 
 export function useListWebhooksQuery() {
@@ -284,23 +465,30 @@ export function useListWebhooksQuery() {
     "webhooks.list",
     undefined,
     "webhooks.updated",
+    30_000,
   );
+}
+
+export function useGetWebhookSampleQuery() {
+  return useWsQuery<WebhookSample>("webhooks.sample");
 }
 
 export function useCreateWebhookMutation() {
-  return useWsMutation<AdminWebhook, CreatePayload<AdminWebhook>>(
-    "webhooks.create",
-  );
+  return useWsMutation<AdminWebhook, AdminWebhookCreate>("webhooks.create");
 }
 
 export function useUpdateWebhookMutation() {
-  return useWsMutation<AdminWebhook, UpdatePayload<AdminWebhook>>(
-    "webhooks.update",
-  );
+  return useWsMutation<AdminWebhook, AdminWebhookUpdate>("webhooks.update");
 }
 
 export function useDeleteWebhookMutation() {
   return useWsMutation<void, number>("webhooks.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useTestWebhookMutation() {
+  return useWsMutation<DeliveryResult, number>("webhooks.test", {
     transformArg: (id) => ({ id }),
   });
 }
@@ -333,6 +521,19 @@ export function useDeleteSharedLinkMutation() {
   });
 }
 
+/** Puts a just-revoked link back, same token, for an undo. */
+export function useRestoreSharedLinkMutation() {
+  return useWsMutation<{ restored: boolean }, RestoreSharedLinkPayload>(
+    "shared-links.restore",
+  );
+}
+
+export function useRevokeExpiredSharedLinksMutation() {
+  return useWsMutation<{ revoked: number }, void>("shared-links.revoke-expired", {
+    transformArg: () => ({}),
+  });
+}
+
 // ─── Export / Import (non-file) ─────────────────────────────────────────────
 
 export function useLazyExportConfigQuery() {
@@ -360,49 +561,80 @@ export function useLazyExportTagsQuery() {
 }
 
 export function useImportConfigMutation() {
-  return useWsMutation<void, unknown>("import.config", {
-    // The backup file IS the params object — the backend unmarshals
-    // params directly into a struct with top-level settings/groups/
-    // systems/etc. fields. Wrapping it as { data } here would put
-    // everything one level too deep and silently parse zero entities.
-    transformArg: (data) => data as Record<string, unknown>,
-  });
+  // The restore request is the backup file itself with `mode` beside its
+  // tables; the backend reads both from the one object.
+  return useWsMutation<RestoreResult, Record<string, unknown>>("import.config");
+}
+
+export function useBackupPreviewMutation() {
+  return useWsMutation<BackupPreview, Record<string, unknown>>("backup.preview");
+}
+
+export function useBackupCountsQuery() {
+  return useWsQuery<BackupCounts>("backup.counts", undefined, "talkgroups.updated", 60_000);
 }
 
 // ─── RadioReference ─────────────────────────────────────────────────────────
 
-export function useRrApplyMutation() {
-  return useWsMutation<RRApplyResponse, RRApplyRequest>("radioreference.apply");
-}
 
 // ─── Transcription ──────────────────────────────────────────────────────────
 
 export function useTranscriptionStatusQuery() {
-  return useWsQuery<TranscriptionStatus>("transcription.status");
+  return useWsQuery<TranscriptionStatus>("transcription.status", undefined, "transcription.updated", 30_000);
 }
 
 export function useTranscriptionModelsQuery() {
-  return useWsQuery<WhisperModel[]>("transcription.models");
+  return useWsQuery<TranscriptionModelsResponse>("transcription.models", undefined, "transcription.models.updated");
 }
 
+/** Starts a download; progress arrives as transcription.download.* events. */
 export function useTranscriptionDownloadMutation() {
-  return useWsMutation<WhisperModel, { model: string }>(
-    "transcription.download",
-    { timeoutMs: 5 * 60_000 },
-  );
+  return useWsMutation<{ started: boolean; model: string }, { model: string }>("transcription.download");
+}
+
+export function useCancelModelDownloadMutation() {
+  return useWsMutation<{ cancelled: boolean }, { model: string }>("transcription.download.cancel");
 }
 
 export function useTranscriptionDeleteMutation() {
-  return useWsMutation<{ deleted: boolean }, { id: string }>(
-    "transcription.delete",
+  return useWsMutation<{ deleted: boolean }, { id: string }>("transcription.delete");
+}
+
+export function useTranscriptionTestMutation() {
+  return useWsMutation<TranscriptionTestResult, { url?: string }>("transcription.test");
+}
+
+export function useTranscriptionJobsQuery(status?: TranscriptionJobStatus, limit = 100) {
+  return useWsQuery<TranscriptionJob[]>(
+    "transcription.jobs",
+    { status: status ?? "", limit },
+    "transcription.jobs.updated",
+    15_000,
   );
 }
 
+export function useRetryTranscriptionMutation() {
+  return useWsMutation<{ ok: boolean; retried: number }, { callId?: number; callIds?: number[] }>("transcription.retry");
+}
+
 export function useTranscriptionStatsQuery() {
-  return useWsQuery<import("@/types").TranscriptionStats>(
+  return useWsQuery<TranscriptionStats>(
     "transcription.stats",
     undefined,
-    undefined,
+    "transcription.jobs.updated",
     30_000, // Auto-refresh every 30 seconds
   );
+}
+
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+
+/**
+ * Call counts, the newest call's time, listeners, uptime and version. Every
+ * ingested call raises activity.updated, so refetches wait for a lull.
+ */
+export function useActivityStatsQuery() {
+  return useWsQuery<ActivityStats>("activity.stats", undefined, "activity.updated", 60_000, {
+    debounceMs: 5_000,
+  });
 }

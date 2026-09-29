@@ -39,8 +39,16 @@ jobs:
         with:
           go-version: "1.26"
           cache-dependency-path: backend/go.sum
+      - name: Build-time code generators are pinned
+        run: |
+          # swag's output is compiled into shipped binaries, so it must run at
+          # a reviewed version, never @latest.
+          if grep -rnE 'swaggo/swag/cmd/swag@(latest)' .github Dockerfile .devcontainer; then
+            echo "::error::Pin swag to the version in backend/go.mod instead of @latest."
+            exit 1
+          fi
       - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@latest
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.4
       - name: Generate Swagger docs
         working-directory: backend
         run: swag init -d cmd/server,internal/handler -g main.go --parseDependency --parseInternal -o docs

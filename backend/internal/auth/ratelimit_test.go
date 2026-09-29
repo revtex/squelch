@@ -62,3 +62,35 @@ func TestRateLimiter_NotLockedAfterTwoFailures(t *testing.T) {
 		t.Error("IP should not be locked out after only 2 failures")
 	}
 }
+
+// Attempts in progress count toward the threshold, so a parallel burst can
+// only run as many password checks as the lockout allows.
+func TestRateLimiter_TryBeginReservesAttempts(t *testing.T) {
+	rl := auth.NewRateLimiter(context.Background())
+	ip := "10.0.0.9"
+
+	for i := 0; i < 3; i++ {
+		if !rl.TryBegin(ip) {
+			t.Fatalf("attempt %d refused, want admitted", i+1)
+		}
+	}
+	if rl.TryBegin(ip) {
+		t.Fatal("4th concurrent attempt admitted before any finished")
+	}
+
+	// One attempt succeeds: its slot frees, the others are still in flight.
+	rl.Reset(ip)
+	rl.End(ip)
+	if !rl.TryBegin(ip) {
+		t.Fatal("slot freed by a finished attempt was not reusable")
+	}
+
+	// The remaining attempts fail and lock the IP out.
+	for i := 0; i < 3; i++ {
+		rl.RecordFailure(ip)
+		rl.End(ip)
+	}
+	if rl.TryBegin(ip) {
+		t.Fatal("attempt admitted while locked out")
+	}
+}

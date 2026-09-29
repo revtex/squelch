@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -26,8 +27,8 @@ func TestCanReceive_NoGrants(t *testing.T) {
 	}
 
 	c2 := &Client{grants: []systemGrant{}}
-	if !c2.CanReceive(1, 100) {
-		t.Error("empty grants should allow all; CanReceive returned false")
+	if c2.CanReceive(1, 100) {
+		t.Error("empty non-nil grants (unparseable systems_json) should deny all; CanReceive returned true")
 	}
 }
 
@@ -451,5 +452,66 @@ func TestWSAccept_DoesNotNegotiateCompression(t *testing.T) {
 	}
 	if got := resp.Header.Get("Sec-WebSocket-Extensions"); got != "" {
 		t.Fatalf("server negotiated extension %q, want none", got)
+	}
+}
+
+// --- isOrdinaryDisconnect tests ---
+
+// serverReadError runs one WebSocket connection, lets drop end it, and
+// returns the error the server's Read saw.
+func serverReadError(t *testing.T, drop func(server, client *websocket.Conn)) error {
+	t.Helper()
+	serverConn := make(chan *websocket.Conn, 1)
+	readErr := make(chan error, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Errorf("accept: %v", err)
+			return
+		}
+		serverConn <- c
+		_, _, err = c.Read(context.Background())
+		readErr <- err
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer client.CloseNow()
+
+	drop(<-serverConn, client)
+	select {
+	case err := <-readErr:
+		return err
+	case <-ctx.Done():
+		t.Fatal("server read never returned")
+		return nil
+	}
+}
+
+func TestIsOrdinaryDisconnect_PeerVanishes(t *testing.T) {
+	err := serverReadError(t, func(_, client *websocket.Conn) { _ = client.CloseNow() })
+	if websocket.CloseStatus(err) != -1 {
+		t.Fatalf("expected no close frame, got status %v", websocket.CloseStatus(err))
+	}
+	if !isOrdinaryDisconnect(err) {
+		t.Errorf("a peer that goes away should be ordinary; got %v", err)
+	}
+}
+
+func TestIsOrdinaryDisconnect_WeCloseIt(t *testing.T) {
+	err := serverReadError(t, func(server, _ *websocket.Conn) { _ = server.CloseNow() })
+	if !isOrdinaryDisconnect(err) {
+		t.Errorf("closing our own connection should be ordinary; got %v", err)
+	}
+}
+
+func TestIsOrdinaryDisconnect_OtherErrorsStillWarn(t *testing.T) {
+	if isOrdinaryDisconnect(errors.New("failed to read frame header: bad opcode")) {
+		t.Error("a malformed frame is not an ordinary disconnect")
 	}
 }

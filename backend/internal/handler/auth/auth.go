@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/handler/shared"
 )
@@ -52,6 +53,52 @@ type loginRequest struct {
 	RememberMe *bool  `json:"rememberMe,omitempty"`
 } // @name LoginRequest
 
+// NativeClientHeader lets a non-browser client ask for the refresh token in
+// the response body instead of an httpOnly cookie. Media players fetch audio
+// on their own network stack — ExoPlayer only sees cookies belonging to the
+// OkHttpClient it was handed, and AVPlayer does not reliably use
+// HTTPCookieStorage at all — so a native app authenticates every request with
+// a bearer header and has nowhere sensible to keep a cookie.
+const (
+	NativeClientHeader = "X-Squelch-Client"
+	NativeClientValue  = "native"
+)
+
+// wantsNativeTokens reports whether the caller asked for body-carried refresh
+// tokens on login.
+//
+// Note the asymmetry with refreshViaBody below, which is deliberate and worth
+// understanding before anyone "fixes" it. On refresh the guard is structural:
+// the raw token is echoed only to a caller that already presented one in the
+// body, so possession of the httpOnly cookie can never be escalated into a
+// JS-readable token. Here the guard is only that the caller knows the
+// password — this header is client-asserted, so page script with both an XSS
+// foothold and stolen credentials could ask for a 30-day token it can read,
+// where the cookie would have denied it. Closing that would mean also
+// requiring the absence of a refresh cookie (a real native client never has
+// one); it is not done here because it would silently drop a native client
+// that happens to carry a cookie jar into the browser path.
+func wantsNativeTokens(c *gin.Context) bool {
+	return c.GetHeader(NativeClientHeader) == NativeClientValue
+}
+
+// refreshRequest is the body a non-browser client sends to /auth/refresh and
+// /auth/logout when it holds the refresh token itself.
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
+} // @name RefreshRequest
+
+// bodyRefreshToken pulls the refresh token out of the request body, returning
+// "" when there is no body, it is not JSON, or it carries no token. A missing
+// body is the normal browser case, not an error.
+func bodyRefreshToken(c *gin.Context) string {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		return ""
+	}
+	return req.RefreshToken
+}
+
 type loginUserResponse struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
@@ -59,9 +106,13 @@ type loginUserResponse struct {
 } // @name LoginUserResponse
 
 type loginResponse struct {
-	Token              string            `json:"token"`
-	User               loginUserResponse `json:"user"`
-	PasswordNeedChange bool              `json:"passwordNeedChange"`
+	Token string            `json:"token"`
+	User  loginUserResponse `json:"user"`
+	// RefreshToken is populated only for clients that sent
+	// `X-Squelch-Client: native`; browsers get the httpOnly cookie instead
+	// and never see this field.
+	RefreshToken       string `json:"refreshToken,omitempty"`
+	PasswordNeedChange bool   `json:"passwordNeedChange"`
 } // @name LoginResponse
 
 // PostLogin handles POST /api/auth/login.
@@ -73,6 +124,7 @@ type loginResponse struct {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      loginRequest   true  "Login credentials"
+// @Param        X-Squelch-Client  header  string  false  "Set to `native` to receive the refresh token in the response body instead of an httpOnly cookie"
 // @Success      200   {object}  loginResponse
 // @Failure      400   {object}  ErrorResponse
 // @Failure      401   {object}  ErrorResponse
@@ -88,6 +140,14 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
 		return
 	}
+
+	// Reserve the attempt before any password check so a burst of parallel
+	// requests cannot outrun the lockout.
+	if !h.rateLimiter.TryBegin(ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many failed attempts, try again later"})
+		return
+	}
+	defer h.rateLimiter.End(ip)
 
 	user, err := h.queries.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
@@ -135,7 +195,8 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		accountExp = user.Expiration.Int64
 	}
 
-	token, jti, err := auth.GenerateToken(user.ID, user.Username, user.Role, accountExp)
+	familyID := uuid.New().String()
+	token, jti, err := auth.GenerateSessionToken(user.ID, user.Username, user.Role, accountExp, familyID)
 	if err != nil {
 		slog.Error("auth: failed to generate token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
@@ -152,7 +213,6 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		return
 	}
 
-	familyID := uuid.New().String()
 	now := time.Now()
 
 	// Enforce max refresh token families per user.
@@ -171,37 +231,50 @@ func (h *Handler) PostLogin(c *gin.Context) {
 		}
 	}
 
+	// A native client carries both tokens itself: the refresh token comes
+	// back in the body below, and the access JWT rides an Authorization
+	// header on every request including audio. Setting either cookie would
+	// hand it credentials it has no way to manage.
+	native := wantsNativeTokens(c)
+	client := connections.ClientFromRequest(c.Request, c.ClientIP())
+
 	if err := h.queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: hashRefresh,
-		FamilyID:  familyID,
-		ExpiresAt: now.Add(auth.RefreshTokenExpiry).Unix(),
-		CreatedAt: now.Unix(),
+		UserID:     user.ID,
+		TokenHash:  hashRefresh,
+		FamilyID:   familyID,
+		ExpiresAt:  now.Add(auth.RefreshTokenExpiry).Unix(),
+		CreatedAt:  now.Unix(),
+		Ip:         nullString(client.IP.String(), client.IP.IsValid()),
+		UserAgent:  nullString(client.UserAgent, client.UserAgent != ""),
+		Native:     boolInt(native),
+		SignedInAt: sql.NullInt64{Int64: now.Unix(), Valid: true},
 	}); err != nil {
 		slog.Error("auth: failed to store refresh token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
-	// Set refresh token cookie. rememberMe defaults to true.
-	rememberMe := req.RememberMe == nil || *req.RememberMe
-	if rememberMe {
-		auth.SetRefreshCookie(c, rawRefresh, int(auth.RefreshTokenExpiry.Seconds()))
-	} else {
-		// Session-only cookie (no Max-Age / Expires — cleared on browser close).
-		auth.SetRefreshCookie(c, rawRefresh, 0)
-	}
+	if !native {
+		// Set refresh token cookie. rememberMe defaults to true.
+		rememberMe := req.RememberMe == nil || *req.RememberMe
+		if rememberMe {
+			auth.SetRefreshCookie(c, rawRefresh, int(auth.RefreshTokenExpiry.Seconds()))
+		} else {
+			// Session-only cookie (no Max-Age / Expires — cleared on browser close).
+			auth.SetRefreshCookie(c, rawRefresh, 0)
+		}
 
-	// Also set the os_session cookie carrying the access JWT so that
-	// <audio src=…> and other same-origin browser requests can authenticate
-	// without injecting an Authorization header. Lifetime mirrors the
-	// access-token TTL; the frontend bearer flow continues to work unchanged.
-	auth.SetSessionCookie(c, token, int(auth.AccessTokenExpiry.Seconds()))
+		// Also set the os_session cookie carrying the access JWT so that
+		// <audio src=…> and other same-origin browser requests can authenticate
+		// without injecting an Authorization header. Lifetime mirrors the
+		// access-token TTL; the frontend bearer flow continues to work unchanged.
+		auth.SetSessionCookie(c, token, int(auth.AccessTokenExpiry.Seconds()))
+	}
 
 	h.logAuthEvent(c.Request.Context(), "info", "login success: "+user.Username, ip)
 	slog.Info("user logged in", "user_id", user.ID, "username", user.Username, "ip", ip)
 
-	c.JSON(http.StatusOK, loginResponse{
+	resp := loginResponse{
 		Token: token,
 		User: loginUserResponse{
 			ID:       user.ID,
@@ -209,7 +282,11 @@ func (h *Handler) PostLogin(c *gin.Context) {
 			Role:     user.Role,
 		},
 		PasswordNeedChange: user.PasswordNeedChange != 0,
-	})
+	}
+	if native {
+		resp.RefreshToken = rawRefresh
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // logAuthEvent writes an authentication event to the logs table for auditing
@@ -228,8 +305,10 @@ func (h *Handler) logAuthEvent(ctx context.Context, level, message, ip string) {
 // @Summary      Log out
 // @Description  Revoke the current JWT token.
 // @Tags         Auth,v1-Auth
+// @Accept       json
 // @Produce      json
 // @Security     BearerAuth
+// @Param        body  body      refreshRequest  false  "Non-browser clients pass their refresh token here so its family is revoked"
 // @Success      200  {object}  object{ok=bool}
 // @Failure      401  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
@@ -246,8 +325,17 @@ func (h *Handler) PostLogout(c *gin.Context) {
 		}
 	}
 
-	// Revoke the refresh token family and clear the cookie.
-	if rawToken, err := c.Cookie(auth.RefreshCookieName); err == nil && rawToken != "" {
+	// Revoke the refresh token family and clear the cookie. A native client
+	// holds its refresh token in the body instead, and without this its
+	// family would outlive the logout by up to 30 days: revoking the access
+	// JWT by jti above says nothing about the refresh family, and the only
+	// other paths that revoke one are replay detection and the
+	// max-families eviction on login.
+	rawToken, err := c.Cookie(auth.RefreshCookieName)
+	if err != nil || rawToken == "" {
+		rawToken = bodyRefreshToken(c)
+	}
+	if rawToken != "" {
 		tokenHash := auth.HashRefreshToken(rawToken)
 		if rt, err := h.queries.GetRefreshTokenByHash(c.Request.Context(), tokenHash); err == nil {
 			_ = h.queries.RevokeRefreshTokenFamily(c.Request.Context(), rt.FamilyID)
@@ -262,6 +350,11 @@ func (h *Handler) PostLogout(c *gin.Context) {
 type refreshResponse struct {
 	Token string            `json:"token"`
 	User  loginUserResponse `json:"user"`
+	// RefreshToken is returned only to a caller that presented its refresh
+	// token in the request body. A cookie-bearing browser never receives
+	// it, so an XSS foothold cannot escalate the httpOnly cookie into a
+	// token it can read and keep.
+	RefreshToken string `json:"refreshToken,omitempty"`
 } // @name RefreshResponse
 
 // PostRefresh handles POST /api/auth/refresh (no JWT required — cookie is the auth).
@@ -270,15 +363,27 @@ type refreshResponse struct {
 // @Summary      Refresh access token
 // @Description  Exchange a valid refresh token cookie for a new access token and rotated refresh token.
 // @Tags         Auth,v1-Auth
+// @Accept       json
 // @Produce      json
+// @Param        body  body      refreshRequest  false  "Non-browser clients send {\"refreshToken\": \"…\"} here instead of the cookie; the rotated token comes back in the response body"
 // @Success      200  {object}  refreshResponse
 // @Failure      401  {object}  ErrorResponse
 // @Failure      500  {object}  ErrorResponse
 // @Router       /auth/refresh [post]
 // @Router       /v1/auth/refresh [post]
 func (h *Handler) PostRefresh(c *gin.Context) {
+	// The cookie wins when present, so a browser's flow is untouched. Only
+	// when there is no cookie does the body come into play, which is what
+	// keeps the raw token out of every browser response: viaBody is the
+	// single condition guarding both the cookie writes below and the token
+	// echoed in the response.
 	rawToken, err := c.Cookie(auth.RefreshCookieName)
+	viaBody := false
 	if err != nil || rawToken == "" {
+		rawToken = bodyRefreshToken(c)
+		viaBody = rawToken != ""
+	}
+	if rawToken == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token"})
 		return
 	}
@@ -302,16 +407,24 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 		if cached, ok := h.replayCache.get(tokenHash); ok {
 			slog.Info("auth: refresh replay within grace window, returning cached successor",
 				"family_id", rt.FamilyID, "user_id", rt.UserID)
-			auth.SetRefreshCookie(c, cached.refreshRaw, int(auth.RefreshTokenExpiry.Seconds()))
-			auth.SetSessionCookie(c, cached.accessToken, int(auth.AccessTokenExpiry.Seconds()))
-			c.JSON(http.StatusOK, refreshResponse{
+			resp := refreshResponse{
 				Token: cached.accessToken,
 				User: loginUserResponse{
 					ID:       cached.userID,
 					Username: cached.username,
 					Role:     cached.role,
 				},
-			})
+			}
+			if viaBody {
+				// Same idempotency the cookie path gets: a native client
+				// that retried mid-rotation must converge on the same
+				// successor rather than lose its session.
+				resp.RefreshToken = cached.refreshRaw
+			} else {
+				auth.SetRefreshCookie(c, cached.refreshRaw, int(auth.RefreshTokenExpiry.Seconds()))
+				auth.SetSessionCookie(c, cached.accessToken, int(auth.AccessTokenExpiry.Seconds()))
+			}
+			c.JSON(http.StatusOK, resp)
 			return
 		}
 		slog.Warn("auth: refresh token replay detected, revoking family",
@@ -355,7 +468,7 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 	if user.Expiration.Valid {
 		accountExp = user.Expiration.Int64
 	}
-	accessToken, jti, err := auth.GenerateToken(user.ID, user.Username, user.Role, accountExp)
+	accessToken, jti, err := auth.GenerateSessionToken(user.ID, user.Username, user.Role, accountExp, rt.FamilyID)
 	if err != nil {
 		slog.Error("auth: failed to generate token on refresh", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
@@ -372,24 +485,33 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 	}
 
 	now := time.Now()
+	// Each rotation records where the device is now, so the newest row of
+	// a family is its current address; the sign-in time carries forward.
+	client := connections.ClientFromRequest(c.Request, c.ClientIP())
 	if err := h.queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: newHash,
-		FamilyID:  rt.FamilyID,
-		ExpiresAt: now.Add(auth.RefreshTokenExpiry).Unix(),
-		CreatedAt: now.Unix(),
+		UserID:     user.ID,
+		TokenHash:  newHash,
+		FamilyID:   rt.FamilyID,
+		ExpiresAt:  now.Add(auth.RefreshTokenExpiry).Unix(),
+		CreatedAt:  now.Unix(),
+		Ip:         nullString(client.IP.String(), client.IP.IsValid()),
+		UserAgent:  nullString(client.UserAgent, client.UserAgent != ""),
+		Native:     boolInt(viaBody),
+		SignedInAt: rt.SignedInAt,
 	}); err != nil {
 		slog.Error("auth: failed to store rotated refresh token", "user_id", user.ID, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
-	// Set new cookie with same Max-Age as original.
-	auth.SetRefreshCookie(c, newRaw, int(auth.RefreshTokenExpiry.Seconds()))
+	if !viaBody {
+		// Set new cookie with same Max-Age as original.
+		auth.SetRefreshCookie(c, newRaw, int(auth.RefreshTokenExpiry.Seconds()))
 
-	// Rotate the os_session cookie alongside the refresh cookie so the
-	// browser-only <audio> auth path always carries a fresh access JWT.
-	auth.SetSessionCookie(c, accessToken, int(auth.AccessTokenExpiry.Seconds()))
+		// Rotate the os_session cookie alongside the refresh cookie so the
+		// browser-only <audio> auth path always carries a fresh access JWT.
+		auth.SetSessionCookie(c, accessToken, int(auth.AccessTokenExpiry.Seconds()))
+	}
 
 	// Cache the issued response keyed by the OLD token hash so a duplicate
 	// presentation of the same cookie within the grace window (parallel
@@ -404,14 +526,18 @@ func (h *Handler) PostRefresh(c *gin.Context) {
 		familyID:    rt.FamilyID,
 	})
 
-	c.JSON(http.StatusOK, refreshResponse{
+	resp := refreshResponse{
 		Token: accessToken,
 		User: loginUserResponse{
 			ID:       user.ID,
 			Username: user.Username,
 			Role:     user.Role,
 		},
-	})
+	}
+	if viaBody {
+		resp.RefreshToken = newRaw
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 type changePasswordRequest struct {
@@ -630,6 +756,10 @@ func (h *Handler) GetTGSelection(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// maxTGSelectionEntries bounds each list in a stored talkgroup selection.
+// It sits well above any real system's talkgroup count.
+const maxTGSelectionEntries = 50000
+
 // PutTGSelection handles PUT /api/auth/tg-selection (JWT required).
 // Saves the list of talkgroup IDs the user wants disabled.
 //
@@ -656,6 +786,13 @@ func (h *Handler) PutTGSelection(c *gin.Context) {
 	var req tgSelectionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	if len(req.DisabledTGs) > maxTGSelectionEntries || len(req.AvoidList) > maxTGSelectionEntries {
+		shared.WriteAPIError(c, http.StatusBadRequest, shared.CodeValidationFailed,
+			"talkgroup selection has too many entries",
+			map[string]any{"max": maxTGSelectionEntries})
 		return
 	}
 
@@ -729,4 +866,15 @@ func PostDocsSession(c *gin.Context) {
 	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
 	auth.SetSwaggerCookie(c, secure)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func nullString(s string, valid bool) sql.NullString {
+	return sql.NullString{String: s, Valid: valid}
+}
+
+func boolInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }

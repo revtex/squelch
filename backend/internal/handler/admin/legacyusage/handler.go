@@ -1,7 +1,6 @@
 // Package legacyusage exposes the 24-hour legacy /api/* hit aggregate to
 // admins. Backed by the in-memory ring buffer in
-// middleware.DefaultLegacyUsageStore — see Phase N-3 in
-// docs/plans/native-api-design-plan.md.
+// middleware.DefaultLegacyUsageStore.
 package legacyusage
 
 import (
@@ -18,6 +17,7 @@ type LegacyUsageEntry struct {
 	Path        string    `json:"path"`
 	Method      string    `json:"method"`
 	APIKeyIdent string    `json:"apiKeyIdent"`
+	APIKeyID    int64     `json:"apiKeyId,omitempty"`
 	Count       int       `json:"count"`
 	LastSeen    time.Time `json:"lastSeen"`
 } // @name LegacyUsageEntry
@@ -50,7 +50,7 @@ func New(store *middleware.LegacyUsageStore, now func() time.Time) *Handler {
 // GetUsage handles GET /api/v1/admin/legacy-usage.
 //
 //	@Summary		Legacy /api/* usage report (24h)
-//	@Description	Returns one entry per (path, method, apiKeyIdent) tuple seen on the legacy /api/* surface in the last 24 hours, sourced from an in-memory ring buffer. Used by the admin dashboard to surface clients that still need to migrate to /api/v1.
+//	@Description	Returns one entry per (path, method, API key) tuple seen on the legacy /api/* surface in the last 24 hours, sourced from an in-memory ring buffer. Used by the admin dashboard to surface clients that still need to migrate to /api/v1.
 //	@Tags			v1-Admin
 //	@Produce		json
 //	@Security		BearerAuth
@@ -66,6 +66,7 @@ func (h *Handler) GetUsage(c *gin.Context) {
 			Path:        e.Path,
 			Method:      e.Method,
 			APIKeyIdent: e.APIKeyIdent,
+			APIKeyID:    e.APIKeyID,
 			Count:       e.Count,
 			LastSeen:    e.LastSeen.UTC(),
 		}

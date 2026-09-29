@@ -179,3 +179,30 @@ func TestHub_GracefulShutdown(t *testing.T) {
 		t.Fatal("Hub did not exit after context cancellation")
 	}
 }
+
+type recordingRevoker struct {
+	users []int64
+	jtis  []string
+}
+
+func (r *recordingRevoker) DisconnectUser(id int64)  { r.users = append(r.users, id) }
+func (r *recordingRevoker) DisconnectJTI(jti string) { r.jtis = append(r.jtis, jti) }
+
+// Revoking a user or token through the hub must also end non-WebSocket
+// sessions such as the audio stream.
+func TestHub_DisconnectForwardsToSessionRevoker(t *testing.T) {
+	h := NewHub(nil, "test")
+	r := &recordingRevoker{}
+	h.SetSessionRevoker(r)
+
+	h.DisconnectByUser(42)
+	h.DisconnectByJTI("jti-1")
+	h.DisconnectByJTI("")
+
+	if len(r.users) != 1 || r.users[0] != 42 {
+		t.Errorf("DisconnectUser calls = %v, want [42]", r.users)
+	}
+	if len(r.jtis) != 1 || r.jtis[0] != "jti-1" {
+		t.Errorf("DisconnectJTI calls = %v, want [jti-1]", r.jtis)
+	}
+}

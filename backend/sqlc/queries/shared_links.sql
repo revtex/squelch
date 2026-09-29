@@ -40,9 +40,12 @@ DELETE FROM shared_links WHERE call_id = ?;
 SELECT
     sl.id,
     sl.call_id,
+    sl.user_id,
     sl.token,
     sl.created_at,
     sl.expires_at,
+    sl.opens,
+    sl.last_opened_at,
     u.username   AS shared_by,
     c.date_time,
     c.duration,
@@ -55,3 +58,10 @@ JOIN calls       c ON c.id = sl.call_id
 LEFT JOIN systems    s ON s.id = c.system_id
 LEFT JOIN talkgroups t ON t.id = c.talkgroup_id
 ORDER BY sl.created_at DESC;
+
+-- name: TouchSharedLinkOpened :exec
+UPDATE shared_links SET opens = opens + 1, last_opened_at = :now WHERE id = :id;
+
+-- name: RestoreSharedLink :exec
+INSERT INTO shared_links (call_id, user_id, token, created_at, expires_at)
+VALUES (:call_id, :user_id, :token, :created_at, :expires_at);

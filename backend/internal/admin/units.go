@@ -43,7 +43,25 @@ func (o *Operations) UnitsList(ctx context.Context, params json.RawMessage, _ in
 		units = filtered
 	}
 
-	return mapUnits(units), nil
+	out := mapUnits(units)
+	// One system's units carry when each was last heard.
+	if req.SystemID != nil {
+		last := map[int64]int64{}
+		if rows, err := o.Queries.UnitCallStats(ctx, *req.SystemID); err == nil {
+			for _, r := range rows {
+				if r.Source.Valid {
+					last[r.Source.Int64] = r.LastCall
+				}
+			}
+		}
+		for i, u := range units {
+			out[i]["lastHeard"] = nil
+			if at, ok := last[u.UnitID]; ok && at > 0 {
+				out[i]["lastHeard"] = at
+			}
+		}
+	}
+	return out, nil
 }
 
 // UnitsCreate creates a new unit.

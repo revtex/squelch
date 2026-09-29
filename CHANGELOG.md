@@ -7,6 +7,596 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-09-29
+
+### Added
+
+- **The admin's search finds things, not just pages.** Type two letters or
+  more in the top bar's search (Ctrl K) to find users, talkgroups, API
+  keys, settings, folder monitors and downstream servers by name. Choosing
+  one opens its details on its page. A setting opens Settings filtered to
+  it.
+- **Backup & import, one page instead of ten cards.** A Configuration
+  backup card downloads the whole configuration as one JSON file (users
+  without passwords) and remembers when it was last taken. Restore is
+  guarded: a review compares the file with what is live, kind by kind
+  (in file, now, added, differ, and what is here but not in the file, with
+  names), then you choose Merge (add and update, never delete) or Replace
+  everything, and type RESTORE. The server saves the previous configuration
+  beside the database first (`backups/pre-restore-<time>.json`, ten kept),
+  matches rows by system number, talkgroup number, label, username, key,
+  folder or URL rather than database ids, updates what it matches, and
+  never removes your own account or the primary admin. One Radio data
+  table lists talkgroups, units, groups and tags with counts; every import
+  goes through the same wizard as Systems → Import (units, groups and tags
+  now preview too, and can be unticked row by row); exports take one
+  system or all, the all-systems CSV carrying a `system` column.
+  RadioReference enrichment is that wizard opened on a system. The API
+  docs card reports a refused session instead of doing nothing, and the
+  access token sits behind a warning that anyone holding it is you for 15
+  minutes. New admin operations: `backup.preview`, `backup.counts`,
+  `units.import`, `groups.import`, `tags.import`; `import.config` takes a
+  `mode`; `export.talkgroups` and `export.units` no longer need a system;
+  `POST /api/v1/admin/import/{units,groups,tags}/preview` read a CSV
+  without writing.
+- **Trunk Recorder, its own page.** One recorder at a time, chosen with a
+  selector in the header that stays in the link; the old Instances tab is
+  gone. A banner says whether the broker is connected, whether the plugin
+  has reported in and how long ago the last frame arrived, with the reason
+  when the connection fails. Instance settings open beside the page with
+  Test broker (the result shows there), Reconnect and a guarded Remove.
+  Tiles show systems, recorders recording out of the total, calls in
+  progress with the encrypted count, and the decode rate with its range.
+  Dashboard, Calls, Recorders, Units, Messages and Config are real tables
+  that sort, page and stack on phones, with CSV export for calls and
+  recorders, a Hold for unit events and a Pause with a new-message count
+  for the message feed. A page opened mid-stream starts from what the
+  server already holds, including the last five minutes of decode rates.
+  When the integration is off, the page links to the setting. Each
+  instance's last-heard time is now written to the database.
+- **Transcription, rebuilt.** A connection banner says whether the go-whisper
+  sidecar answers, its version when it reports one, the model in use and the
+  worker count, or why it does not answer; **Test connection** tries it and
+  audits the result. Tiles show the queue and how far behind it is, calls
+  transcribed in 24 hours as a share of all calls, the average time per call
+  and the failures. Settings save together with one **Save** (toggles
+  included), with a Discard button and an unsaved-changes guard; **Speaker
+  turns** explains the tdrz requirement and stays off without one; a new
+  **Skip calls shorter than** setting drops key-ups before they reach the
+  queue. The Models tab lists size, speed and speaker-turn support before
+  you download, with a progress bar and Cancel, and downloads carry on if
+  you leave the page instead of holding a five-minute request open. A new
+  Recent jobs tab shows what happened to each call (done, failed with the
+  reason, skipped, queued) with filters and **Retry**.
+- **Systems, rebuilt.** The systems sit on the left with their LED colour,
+  auto/manual marker, talkgroup count and calls in the last 24 hours; the
+  chosen one shows its **Talkgroups**, **Units** and **Blocked** tabs on the
+  right (a phone shows the list first). Talkgroups carry calls in 24 hours
+  and last heard, filter by group, tag or **unlabeled**, and take bulk
+  changes from a selection bar (set group, tag or LED; block; delete). A
+  talkgroup opens with its activity and fields to edit in place, a **Listen
+  to recent calls** link into the scanner search, and block and delete
+  actions. **Add talkgroup** has **Save and add another**. Import moves onto
+  the system: choose a Squelch, rdio-scanner or RadioReference CSV, review
+  what is new, what changes field by field and which rows were skipped, pick
+  **Fill in blanks only** or **Overwrite**, untick rows, then apply. System
+  settings warn when the number changes and ask for the label before a
+  delete; **Reorder** replaces the order field. Units show when each radio
+  was last heard. Every change is written to the audit trail in plain words.
+- **Settings, rebuilt.** One page of named groups (General, Scanner, Radio
+  data, Ingest & audio, Storage, Sharing, Access & security, Integrations,
+  Logging) with a **Find a setting** box, group links under the title, and a
+  save bar that lists what changed with a **Discard** button. Dependent rows
+  sit indented under their parent and grey out while it is off; negative
+  options read positively (**Reject duplicate calls**). Settings that lived
+  on other pages come home: **Create systems from uploads** (from Systems),
+  the **Default upload rate limit** (from API keys), the **Log level** (from
+  Logs & audit) and the **Keypad beeps** default, which had no control at all.
+  The Storage group shows how much the recordings take, the volume's size
+  and free space, the database size and the oldest call. **Access & security**
+  shows the trusted addresses and makes the sign-in lockout configurable:
+  **Lock out sign-in after** N failures and **Lockout lasts** M minutes, both
+  applied at once. Values are checked on the server too (a plain support
+  address, whole numbers within range). `/admin/options` redirects to
+  `/admin/settings`.
+
+- **Logs & audit, rebuilt.** The server log is a real table with the level
+  as text, range and level chips that apply at once, a **Following** switch
+  that pauses while you read, and **Download**. A line opens in the side
+  panel with its attributes, raw JSON, newer/older navigation, a similar-lines
+  search and a link to the page it is about. A new **Audit trail** tab reads
+  the events the server has always written to the database (sign-ins, admin
+  changes, blocks, delivery failures) but nothing showed until now; they are
+  kept for `auditRetentionDays` (90 by default) and pruned daily.
+- **Folder monitors, rebuilt.** The list now shows what each monitor is
+  doing (**watching**, **polling**, **stopped** with the reason, or
+  **disabled**), where its calls go, the last file it saw and what came of
+  it, and calls in the last 24 hours. A stopped monitor can be restarted
+  from its details. The form shows only the fields the chosen recorder
+  needs, browses the server's folders inside the panel, takes the wait in
+  seconds, and tests a filename mask against a real filename as you type.
+- **Forwarding, rebuilt.** Downstreams and webhooks share one **Forwarding**
+  page with two tabs. Each target has a label, a status badge that explains
+  a failing delivery, the last delivery time and failures in the last 24
+  hours, and a details panel with **Send a test** that shows the other end's
+  answer in place. Webhooks can be generic JSON (signed with
+  `X-Squelch-Signature` when a secret is set, with a payload preview) or a
+  Discord embed. The old **/admin/downstreams** and **/admin/webhooks**
+  addresses redirect to the new page.
+- **Shared links, rebuilt.** The list shows how many times each shared
+  call has been opened and when it expires (expired links are dimmed and can
+  be filtered or revoked in one go), with search by talkgroup, system or
+  user. A link's details offer **Copy link**, **Open shared page** and
+  **Revoke** with a ten-second **Undo** that keeps the same address. Errors
+  while revoking are now shown instead of ignored.
+- **API keys, rebuilt.** Keys are listed by label with their status, the
+  systems they may upload to by name, calls uploaded in the last 24 hours and
+  when and from where they were last used, with search and filters for
+  disabled, never-used and **legacy uploads** (keys still sending to the
+  deprecated `/api/*` path now carry a badge and an explanation of their
+  own). A key's details offer **Rotate secret**, which issues a new secret
+  while the old one keeps working for 24 hours, plus disable, enable and
+  delete with in-place confirmation. Creating a key shows the secret once
+  together with a `curl` test command and a Trunk-Recorder plugin entry ready
+  to paste; a label is now required.
+- **Groups & tags, edited in place.** Add a group or tag from a row at the
+  top of its list, rename with the pencil, and see how many talkgroups use
+  each one (click the count to open Systems filtered to them). Deleting an
+  unused label offers a ten-second **Undo**; deleting one that talkgroups
+  still use asks where they should go and moves them first, instead of
+  failing.
+- **Users, rebuilt.** The table shows each account's status (active,
+  disabled, expired, temporary password), its systems by name, open
+  connections, signed-in devices and when it was last seen, with search,
+  status filters, sortable columns and bulk sign-out, disable and delete. The
+  **›** button opens the account's details with every action explained and
+  confirmed in place. New accounts get a temporary password (with a
+  **Generate** button) and, by default, must pick their own at first sign-in;
+  that requirement is now visible and can be switched on or off per user.
+- **Reset a user's password from Admin → Users.** Set a temporary password,
+  choose whether they must change it at their next sign-in, and whether to
+  sign them out everywhere. Each reset is recorded in **Logs**.
+- **Sign-in lockouts are visible.** Addresses locked out after failed
+  sign-ins are listed under Admin → Users, and an admin can clear one to let
+  it try again.
+- **A new admin shell.** The sidebar is grouped into Overview, People &
+  access, Radio data, Ingest & delivery and Server, with **Webhooks** finally
+  listed (the page existed but nothing linked to it) and **Trunk Recorder**
+  as a page of its own. Press **Ctrl K** to jump to any section by typing a
+  few letters. The top bar shows whether the admin's live connection to the
+  server is up. On a phone the sidebar becomes a bottom bar with a **More**
+  sheet listing every section, and details panels open as a bottom sheet.
+  Messages from actions now appear as a toast at the bottom of the page, with
+  **Undo** where an action can be undone.
+- **Admin → Connections.** See everyone connected right now — listening
+  (LIVE), on background audio (BKGND) or on the admin dashboard — with their
+  address, whether they are on the Squelch app or a browser, and how long they
+  have been connected. A second tab lists every device that can sign back in
+  without a password, with where it was last used from, and a third keeps a
+  history of every connection and how it ended, so someone who has already
+  left can still be found. Click a user or an address to see everything they
+  did. The **›** button on a row opens its details, with everything known
+  about it and every action, each explained before you confirm it. History is
+  kept for 30 days by default; change it under **Options → Connections**.
+- **See where listeners connect from.** Point the new `--geoip-db` option
+  (`SQUELCH_GEOIP_DB`) at a free country database, DB-IP IP to Country Lite or
+  MaxMind GeoLite2-Country, and Admin → Connections shows each connection's
+  country. Lookups happen on the server, and no address is sent anywhere. The
+  deployment guide explains how to download the database and keep it current.
+- **Block an address from Admin → Connections.** Block one address or a range
+  for an hour, a day, a week or until removed. Blocked addresses are refused
+  everywhere, including recorder uploads, and anyone connected from one is
+  dropped at once. Addresses listed with the new `--trusted-addresses` option
+  (`SQUELCH_TRUSTED_ADDRESSES`) can never be blocked, and that list cannot be
+  changed from the dashboard, so a stolen admin password cannot lock the
+  operator out.
+- **Disconnect or sign out from Admin → Connections.** Close a single
+  connection, sign out one browser or phone, or sign an account out on every
+  device at once. Each action is recorded in **Logs** with who did it.
+
+- **Reverse proxy guide covers the real client address.** The deployment
+  guide now explains how to set `SQUELCH_TRUSTED_PROXIES` to just your proxy
+  (with a table for where to find its address, including Docker), how to
+  check it in the log, and why the default private ranges let a LAN device
+  fake its address. Adds setups for Nginx Proxy Manager, Traefik, Apache and
+  Cloudflare, and removes a visitor-supplied `X-Real-IP` in the Caddy example.
+  Troubleshooting gains "everyone is locked out at once".
+
+- **A Listener Guide** (`docs/listener-guide.md`), for the person doing the
+  listening rather than the one running the server: starting playback, reading
+  the display, selection, AVOID and HOLD, transcripts, search, bookmarks,
+  sharing, themes and beeps, listening on a locked phone, and what to check
+  when nothing plays.
+
+- **A Troubleshooting page** (`docs/troubleshooting.md`) for operators,
+  arranged by symptom: the server not starting, uploads rejected or silently
+  deduplicated, calls arriving but not reaching listeners, background audio
+  failing without FFmpeg, calls pruned after a week by default, and resetting a
+  forgotten administrator password.
+
+- **`CONTRIBUTING.md` and `SECURITY.md`.** Contributing covers setup, the make
+  targets, running one test, the branch and commit conventions, and the
+  changelog gate. Security says which versions get fixes, how to report a
+  vulnerability privately, and what is in scope.
+
+- **An Avoids tab under SELECT.** It lists the talkgroups you have avoided
+  for a set time, each with the time left counting down, and a Resume button
+  that puts one back on the air early. A permanent avoid has no clock to
+  show, so it is not listed; it is turned back on from the talkgroup itself
+  under Groups, Tags or Systems.
+
+- **Shared-call pages offer "Open in app" on a phone.** A share link opened on
+  Android or iOS now shows a button that hands the token to the native app
+  through a custom scheme, falling back to the page itself on Android when no
+  app is installed. Universal Links and App Links cannot do this job for a
+  self-hosted server — both platforms bind the app to a domain at signing
+  time, and iOS fetches its association file through an Apple-operated CDN
+  that a LAN-only instance is invisible to — so the handoff is explicit. The
+  button appears only for a well-formed share token, and only on a phone.
+
+- **Native clients can hold the refresh token themselves.** `POST /auth/login`
+  with the header `X-Squelch-Client: native` returns `refreshToken` in the
+  response body and sets no cookies, and `POST /auth/refresh` accepts
+  `{"refreshToken": "…"}` in the body when no cookie is present, returning the
+  rotated token the same way. Browsers are unaffected: the cookie wins
+  whenever it is present, and a cookie-authenticated refresh never echoes the
+  raw token into the body, so an httpOnly cookie still cannot be read by page
+  script. Rotation, family revocation and the replay grace window behave
+  identically on both paths. `POST /auth/logout` now also accepts the body
+  token, so a client without cookies can revoke its refresh family — before
+  this, logging out of such a client left the family valid for its full
+  30 days.
+
+### Removed
+
+- The unused `activityDashboard` setting. Nothing ever read it; the Overview
+  is always on. It is deleted from the database by migration 030.
+- **Display brightness.** The ⋮ menu no longer has it, and the readout
+  always draws at full strength. The device's own brightness does the job
+  better. A level saved in the browser is ignored.
+
+### Changed
+
+- **A new API key comes with a Squelch uploader entry.** The plugin entry
+  shown with the secret is now written for the Squelch uploader
+  (`libsquelch_uploader.so`, one key for the plugin), which posts to
+  `/api/v1/calls`. **Built-in rdio-scanner** switches it back to the uploader
+  that ships with Trunk-Recorder, marked as posting to the deprecated
+  `/api/call-upload`. The test command now prints the status code, since a
+  good key gets an empty 204, and the hint no longer says to expect 200. The
+  recorder guide covers both uploaders.
+- **Squelch classic is calmer.** The default theme kept Material's bright
+  green, sky blue and signal red; its accents are now muted to sit with the
+  other six themes: green `#6a9a6c`, blue `#6fa3c4` and red `#d9675e`. The
+  greys, the pale display panel and the LIVE and paused lights keep their
+  colours. Dark text on the red fill now reads at 5.4:1, up from 4.9:1.
+- **Overview matches the redesign.** A Needs attention card lists what
+  wants you now, worst first, each with a button that opens the place to
+  fix it: a stopped folder monitor, a disk under 10% free, a failing
+  downstream or webhook, a Trunk Recorder broker that will not connect,
+  transcription failures or a queue of 25 or more, legacy `/api/*` uploads by
+  key, and users still on a temporary password. The legacy-API banner is
+  gone; its rows live here now. Service health pills cover ingest,
+  listeners, Trunk Recorder, transcription, forwarding and storage. Ingest
+  turns amber after 30 minutes without a call. Five linked tiles show
+  calls today against the same time yesterday, the week with its daily
+  average, listeners now, calls transcribed in 24 hours and uptime with
+  the version. The calls chart and Busiest talkgroups take a range of
+  24 hours, 7 days or 30 days, kept in the link, and a talkgroup opens in
+  Systems & talkgroups. Recent admin activity shows the last four audit
+  lines. The sidebar shows counts beside Overview, Users, Connections, API
+  keys, Folder monitors and Forwarding, and the top bar says how long ago the last call
+  came in. The `activity.stats`, `activity.chart` and
+  `activity.top-talkgroups` operations take an optional `range`; stats add
+  `callsYesterday`, `lastCallAt`, `startedAt` and `version`, and top
+  talkgroups add `systemId` and `talkgroupNumber`.
+- **Settings, Logs & audit, Trunk Recorder and Backup & import match the
+  redesign.** Settings lists its groups down the left side and marks the
+  one you are reading as you scroll. Log lines show the time as a clock
+  and the level as a coloured dot, and the level chips carry the same
+  dots. Refresh is gone from Logs because Following already reloads.
+  Trunk Recorder's dashboard puts the decode-rate chart and a Per system
+  table side by side on a wide window and stacks them on a narrower one,
+  so the table never scrolls; the table has a Health column, and each
+  system's P25 identifiers sit on one line as RadioReference writes them
+  (sysid 2EE). Backup & import
+  puts the configuration backup beside the Radio data table. One picker
+  in that table's header now chooses the system for talkgroup and unit
+  exports.
+- **Folder monitors and Forwarding match the redesign.** A monitor's row
+  shows its folder with the file type and options under it, then its
+  recorder, where calls go ("From filename"), its state, last file and
+  calls in 24 hours. Forwarding's first tab is Downstream servers. Each
+  tab opens with a line on what it does and its Add button. Rows read
+  Server, Systems, Status ("delivering", "sending" or "failing"), Last
+  delivery with its time or response code, and Failed 24 h with the last
+  error. A stopped monitor or a failing target opens with a red notice.
+- **Systems & talkgroups, Groups & tags and Transcription match the
+  redesign.** A system's header gives its number, counts and last call.
+  The talkgroup filters sit in one row with Add talkgroup, and unlabeled
+  talkgroups read "TG" and the number with an unlabeled badge. A
+  talkgroup's details open with three tiles and pick its LED colour from
+  colour chips. Blocked talkgroups are chips with the number field below.
+  Groups and tags are tables with Rename, Show and Delete on each row and
+  the add field at the foot, and they stack as cards on a phone.
+  Transcription's connection line is a green notice when connected. Its
+  settings put each control on the right, and the save bar stays in the
+  page. Model downloads show their percentage in the status, and recent
+  jobs show the time of the call.
+- **Users, Connections, API keys and Shared links match the redesign.**
+  Users shows each account's role, sessions and last sign-in in the table,
+  with an Admins chip. A user's panel lists who is live now, with links to
+  their connections and devices. Sign-in lockouts sit in a card below the
+  table. Connections tables turn into cards on a phone. Each connection
+  names its browser and system, such as "Chrome 129 · Windows". History
+  filters by range and type with chips, and removing a block asks first in
+  the page. API keys are edited in their details panel, which also copies
+  a test command. The user and key forms pick systems with an "All
+  systems" chip that covers systems added later. Shared links has Copy
+  link, Listen and Revoke on each row, with Undo, and Revoke expired in
+  the header. Across the admin, times read as the redesign writes them:
+  "2 h 41 m", "3 min ago", "in 28 d", and dates as 2026-09-22.
+- **The admin's sidebar and top bar are laid out like the redesign.**
+  Trunk Recorder and Logs & audit sit under Overview. API keys and Shared
+  links moved to People & access, and Transcription to Radio data. Systems
+  is now called Systems & talkgroups. The current page is marked with a
+  gold bar. The top bar is a search field (Ctrl K) with the connection
+  status beside it. Open scanner and Sign out, with your username, are at
+  the foot of the sidebar, and a menu button opens every section on a
+  phone. The phone's bottom bar uses short labels. The SQUELCH sign keeps
+  its own lettering at the top of the sidebar.
+- **The admin takes the redesign's look.** It now uses IBM Plex Sans and
+  Mono, bundled with the app. Buttons are bordered and full height, and the
+  main action on a page is gold. Status badges are small tinted labels.
+  Tabs underline in gold, switches turn green when on, and tick boxes are
+  square. Table headers are small capitals, and a table's pages are
+  stepped with Previous and Next. The admin still follows the theme picked
+  in the scanner, and in Midnight it matches the design exactly. On a
+  phone each table row is a card of labelled values.
+- **Keypad beeps are a listener's own setting now, and they follow the
+  account.** The button-press sound moved out of the admin options panel and
+  into the scanner's ⋮ menu — Off, Uniden or Whistler, and picking one plays
+  it. The person listening is the one in the quiet room, and they are not
+  always the admin. A signed-in listener's choice is stored against their
+  account and applies on every browser they sign in on; an anonymous listener
+  keeps it in that browser, which is also where a choice made before signing
+  in is held. The instance's `keypadBeeps` setting is still the starting
+  point, so nobody has to choose twice, and the listener's own choice wins
+  from then on — including Off. Operators set the default with
+  `squelch config-set keypadBeeps <style>`.
+  New: `GET`/`PUT /api/v1/listener/preferences`.
+
+- **The scanner looks like the mobile app.** The web scanner page now uses the
+  app's design: the display's clock, tag and talkgroup name sit in a solid ink
+  block over a dithered edge, with the name in a condensed display face sized
+  to fit. The transport is a large play/pause between replay and skip, and the
+  mode buttons are an even row that wraps on narrow screens. Recent calls are
+  one-line rows below the controls; tap one to replay it, and a talkgroup's LED
+  colour shows as a rail. The live transcript follows playback in a three-line
+  window with a timeline above it. The menu (⋮) now holds the theme, keypad
+  beeps, bookmarks, admin, password and sign-in/out.
+- **Seven dark themes, chosen per browser.** Squelch classic (the default,
+  the original pale LCD), Midnight, Graphite, Ember, Moss, Plum and Ash — the
+  same set the mobile app offers, from the same palette. Pick one from
+  ⋮ → Theme. It applies to every page, admin included, and is remembered in
+  that browser. The light theme is retired; a browser that had it selected
+  moves to Squelch classic.
+- **Bundled fonts.** Selawik, JetBrains Mono and Big Shoulders Display now ship
+  with the app (SIL Open Font License), so the display looks the same on every
+  machine and no font is fetched from a third party.
+
+### Fixed
+
+- **A Call's audio arrives in one request instead of four.** AAC
+  recordings were written as fragmented MP4, whose index sits at the end of
+  the file, so the Android app's player fetched each Call four times over:
+  the start, the last few bytes, the index, and back to the audio. They are
+  now written with the index in front (`-movflags +faststart`), which also
+  gives every player the length straight away. Only new recordings change;
+  the audio itself, the encoding preset and MP3 output are untouched.
+
+- **A listener closing the tab is no longer a warning.** When a browser or
+  phone drops its live connection without saying goodbye (the tab closed,
+  the screen locked, the network went), the server logged `ws: read error`
+  at warn, so the Warn filter in Logs & Audit filled with them. Those now
+  log at debug as `ws: connection dropped`; other read failures still warn.
+
+- **Trunk Recorder's messages stay live after you look at Live.** Opening
+  Live and going back to By opcode froze the table, and Live grew into a
+  scroll of hundreds of rows. A busy control channel sends several messages
+  in the same millisecond with the same opcode and system, and the table
+  told rows apart by exactly those, so it could never remove the
+  duplicates. They piled up in Live and then sat on top of By opcode. Each
+  message now has its own number; Units and Calls › Recent use it too.
+  By opcode counts are also running totals since the page connected,
+  rather than a tally of the newest 500 messages, and Live shows 20 a page.
+- **Logs level counts are the real totals.** The chips counted the lines on
+  screen, which are at most 500 and only the chosen level. So Warn read 0
+  under All, while All read 48 under Warn. The server now counts the whole
+  range and search for each level, whichever chip is chosen (new admin
+  operation `logs.counts`).
+- **Shared links' Shared by stays on one line.**
+- **The configuration backup carries the Trunk Recorder brokers.** A
+  backup left them out, so a restore onto a new server came back without
+  the MQTT connections. They are in the file now (passwords as stored, so
+  encrypted ones need the same `--encryption-key`), the restore review has
+  a Trunk Recorder brokers row, and a restore reconnects the restored
+  brokers and disconnects the removed ones without a restart.
+- **Result messages agree with the review.** Replace everything counted a
+  removed system as one row though the review listed its talkgroups and
+  units too; it counts them all now. An import's message counted only the
+  rows it sent, so rows the review showed unchanged, or that you
+  unticked, came out as "0 unchanged"; they are counted now.
+- **Overwrite updates order.** Importing talkgroups or units with an
+  `order` column in Overwrite mode left the existing order as it was. The
+  review lists order changes and Overwrite applies them; Fill in blanks
+  only still leaves order alone. The option reads "Overwrite with the
+  file's values", since colour and frequency were overwritten too.
+- **Transcription recognises the go-whisper you run.** Deployed go-whisper
+  builds answer the model list with a bare array, not the documented
+  `{"models": […]}`, so the Transcription page said "Not connected" and the
+  Models tab could not load while calls were being transcribed. Both shapes
+  are read now, and a Models failure says why instead of "internal error".
+- **Busiest talkgroups fits a long system name.** A system named like "Ohio
+  MARCS-IP: Multi-Agency Radio Communications" squeezed the talkgroup names
+  to a few letters and pushed the call counts out of the card. The System
+  column now shows only when the card has room, cut short with the full
+  name on hover; otherwise the system sits under the talkgroup. Uptime's
+  restart date no longer breaks across lines, and a long address in the
+  Transcription and Trunk Recorder banners wraps instead of running under
+  the button.
+- **Enrich from RadioReference fills in only the talkgroups a system has.**
+  It opened the ordinary import, so a statewide RadioReference export
+  offered to add every talkgroup the system didn't have (thousands on a
+  MARCS system). Enrich now matches existing talkgroups only and says how
+  many in the file it left out. Import review counts follow the chosen
+  mode, so "Fill in blanks only" no longer counts talkgroups it would
+  leave as they are.
+- **The talkgroup import API reads RadioReference's Category as the
+  group.** `POST /api/v1/admin/import/talkgroups` (and the deprecated
+  `/api/admin/import/talkgroups`) stored Category as the tag and dropped
+  the Tag column; it now matches the import wizard: Category is the group
+  and Tag the tag.
+- **Admin pages hold their shape with real data.** On Systems & talkgroups
+  a long talkgroup name no longer pushes Calls 24 h and Last heard out of
+  view: the label is cut short (full name on hover), the columns sit
+  closer, and when the pane is narrow the tag moves under the group. Users, API keys and Shared links keep "3 live · 20 devices", a
+  sign-in time, "created 2026-09-25" and the row's buttons on one line.
+  On a phone a user with a long system name no longer squeezes the card's
+  other column to one letter, and the RadioReference system picker on
+  Backup & import stays inside the screen. The Overview chart's last hour
+  label is no longer clipped, and Settings no longer shows the oldest
+  call's date twice.
+- **Trunk Recorder's decode-rate chart covers the last 5 minutes.** It
+  kept the last 300 samples, which is 15 minutes when Trunk Recorder
+  publishes every 3 seconds, so the chart said "last 5 min" over a
+  "−15 min" axis and the tile's min and max came from the longer span.
+  Samples are now kept by time.
+- **API keys counts legacy uploads for every key.** The legacy report
+  keeps only the first six characters of a key's label, and the API keys
+  page matched that against the whole label. A key named longer than six
+  characters always showed no legacy use. The report now records which
+  key made each request, and two keys that start alike no longer share a
+  count. `GET /api/v1/admin/legacy-usage` entries carry `apiKeyId`.
+- **Transcription no longer claims more than 100% of calls.** The
+  transcribed count goes by when a call finished transcribing, so a
+  catch-up or a retry could pass the day's calls. The tile now says it
+  includes older calls instead.
+- **A mistyped admin address opens Overview instead of freezing the tab.**
+  An address such as `/admin/groups-tags` redirected to a relative path
+  under itself, again and again, until the browser tab hung.
+- **Shared links show each call's real length.** The page read the call's
+  length in milliseconds as seconds, so an eight-second call showed as over
+  two hours.
+- **Text on coloured badges, buttons and alerts is readable in every
+  theme.** The themes gave no text colour for their info, success,
+  warning, error, accent and secondary fills, so labels such as
+  "temporary password" drew light text on a light fill, and the scanner's
+  LIVE button did the same in Squelch classic. Each fill now takes the
+  theme's own dark or light ink, whichever reads better on it (4.5:1 or
+  more in all seven themes).
+
+- **Webhooks are now delivered.** They could be created but nothing ever
+  posted to them. A webhook's secret is no longer sent to the browser or
+  pre-filled in the edit form; it is write-only and stored encrypted like a
+  downstream's API key.
+- **Changing a user's password from Admin → Users now works.** The edit
+  form sent the new password but the server dropped it, so the old password
+  stayed in force.
+- **Disabling an account now signs its devices out for good.** Before, a
+  disabled account's browsers and phones stayed signed in behind the scenes.
+  If the account was enabled again, they came straight back without the
+  password.
+
+- **The deployment guide's "bind to localhost" tip broke Docker installs.** It
+  set `SQUELCH_LISTEN=127.0.0.1:3022` inside the container, which leaves the
+  published port with nothing to reach. The tip now keeps the container on
+  `0.0.0.0` and restricts the published port to `127.0.0.1` instead.
+
+- **A pause no longer outlives the session that made it.** Pausing is about
+  the call playing right now, so turning LIVE off and on resets it, and a
+  reloaded page always comes back playing. Previously the pause was kept in
+  the browser and restored on load, so a page could come up silent with no
+  sign of why — the only clue was a transport button sitting on Resume.
+
+- **Resume starts the call playing again.** Pausing a call and pressing resume
+  left the audio stopped: the player still considered the call "playing" while
+  it was paused, and resume used that flag to decide whether there was anything
+  to start. Backgrounding the browser and coming back was the only way to get
+  it going again, because the stall recovery that runs on returning to the
+  foreground re-issued playback. The call now resumes from where it stopped.
+
+- **The deployment guide no longer tells you to put the encryption key in the
+  config file.** It showed an `encryption_key` field in the saved JSON and said
+  the resolved key was written there — the opposite of what the server does. A
+  key actually written into that file stops the server from starting. The
+  example now matches what `--config-save` really writes, and the guide says
+  what the refusal looks like and how to clear the field from an older config
+  file.
+
+- **Replay works after a call has finished.** It did nothing unless a call
+  was still playing, which is the opposite of when it is reached for. It now
+  replays the last call played, and is greyed out only when nothing has
+  played yet.
+- **The display no longer bounces as calls come in.** Every row of the
+  readout now has a fixed height — including the talkgroup name, which is
+  sized down to fit — so the panel keeps one height whether a call is on the
+  air, idle, tagged, or has a transcript arriving under it.
+- **Squelch classic keeps to its own palette.** The transcript timeline and
+  the HOLD/AVOID/PATCH badges were drawn in the blue accent and the tag chip
+  in orange, neither of which belongs on the pale LCD; they now use the
+  panel's own ink, as the mobile app does.
+- **The display's bookmark and share buttons stop growing a background.**
+  They now dim and brighten under the pointer with nothing behind them, in
+  every theme, and both carry a tooltip that opens above them. On the
+  classic theme the pointer used to repaint them near-white on the pale
+  panel, which all but erased them; they keep the panel's ink now.
+- **One tooltip style throughout.** The last few controls that showed the
+  browser's own tooltip — share in the search and bookmark lists, and Copy
+  and Open in the share popup — now use the same one as everything else,
+  and a tip anchored at a panel's edge no longer has its first or last
+  words clipped. HOLD and AVOID have tooltips too.
+- **The transcript window scrolls without a scrollbar.** The bar is gone;
+  the wheel and touch still scroll it.
+- **HOLD and AVOID sit to the right of the error and spike counts**, rather
+  than pushing them along the row.
+
+- **`/.well-known/*` and `/apple-app-site-association` returned the web app
+  with HTTP 200.** Those paths are fetched by machines — App Links and
+  Universal Links verifiers, ACME clients, `security.txt` readers — and the
+  SPA fallback answered every one of them with `index.html` and a
+  `text/html` content type. A verifier reads that as a malformed association
+  file rather than a missing one, which is the harder failure to diagnose.
+  They now return a clean 404. Client-side routes such as `/call/<token>`
+  are unaffected.
+
+### Security
+
+- **Hardening from an internal security review.** Access checks, session
+  handling and file handling were tightened across the server. The changes
+  operators may notice:
+  - **System restrictions are applied everywhere.** Per-listener, per-API-key
+    and per-downstream system selections made in the admin UI now govern
+    every path that serves or accepts calls — search, transcripts, share
+    links, bookmarks, the audio stream, the live feed and the scanner's
+    system list. A listener restricted to some systems may see less than
+    before; an API key limited to some systems gets `403` when it uploads to
+    any other, and can no longer auto-create systems. Keys and users with no
+    selection are unaffected.
+  - **New `--trusted-proxies` / `SQUELCH_TRUSTED_PROXIES` option.**
+    `X-Forwarded-For` is honoured only from trusted proxies — by default
+    loopback and private addresses, which covers a reverse proxy on the same
+    host, LAN or Docker network. List your proxy if it connects from
+    anywhere else, or set `none` when Squelch faces clients directly.
+  - **`--admin-password` / `SQUELCH_ADMIN_PASSWORD` now resets the first
+    admin's password**, as documented, and signs that account out
+    everywhere. Remove it again after use.
+  - **The database and log file are created owner-only**, and existing ones
+    are tightened on startup. A backup job that reads the database as a
+    different user will need its permissions adjusted.
+  - After a restart, clients silently refresh their session once.
+  - Talkgroup selections are capped at 50,000 entries per list.
+
 ## [3.0.0] — 2026-09-19
 
 ### Fixed
@@ -473,7 +1063,8 @@ Rdio Scanner streaming target).
   untested.
 - Transcription requires a separately deployed go-whisper sidecar.
 
-[Unreleased]: https://github.com/revtex/squelch/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/revtex/squelch/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/revtex/squelch/releases/tag/v3.1.0
 [3.0.0]: https://github.com/revtex/squelch/releases/tag/v3.0.0
 [2.0.0]: https://github.com/revtex/squelch/releases/tag/v2.0.0
 [1.4.0]: https://github.com/revtex/squelch/releases/tag/v1.4.0

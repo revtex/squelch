@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,9 @@ type Config struct {
 	EncryptionKeyFile string // Path to file containing encryption key
 	AdminPassword     string // Reset first admin user's password on startup
 	Timezone          string // IANA timezone for recorder timestamps (default: TZ env or "UTC")
+	TrustedProxies    string // Comma-separated proxy IPs/CIDRs whose X-Forwarded-For is honoured; "none" disables
+	TrustedAddresses  string // Comma-separated IPs/CIDRs that can never be blocked
+	GeoIPDB           string // Path to an IP-to-country MMDB file; empty turns country lookup off
 	ConfigFile        string // Path to JSON config file (default "squelch.json")
 	ConfigSave        bool   // Write current flags to JSON config file and exit
 	ShowVersion       bool   // Print version and exit
@@ -51,6 +55,12 @@ type jsonFileConfig struct {
 	SSLKey        string `json:"ssl_key_file"`
 	SSLAutoCert   string `json:"ssl_auto_cert"`
 	Timezone      string `json:"timezone"`
+	// TrustedProxies is a comma-separated list; see Config.TrustedProxies.
+	TrustedProxies string `json:"trusted_proxies,omitempty"`
+	// TrustedAddresses is a comma-separated list; see Config.TrustedAddresses.
+	TrustedAddresses string `json:"trusted_addresses,omitempty"`
+	// GeoIPDB is the path to an IP-to-country MMDB file.
+	GeoIPDB string `json:"geoip_db,omitempty"`
 
 	// LegacyEncryptionKey captures the deprecated "encryption_key" field to
 	// detect and refuse startup on legacy config files that leaked the key to disk.
@@ -80,6 +90,9 @@ func Load() (*Config, error) {
 	flag.StringVar(&cfg.EncryptionKeyFile, "encryption-key-file", "", "Path to file containing encryption key")
 	flag.StringVar(&cfg.AdminPassword, "admin-password", "", "Reset first admin user's password on startup")
 	flag.StringVar(&cfg.Timezone, "timezone", "", "IANA timezone for recorder timestamps (e.g. America/New_York)")
+	flag.StringVar(&cfg.GeoIPDB, "geoip-db", "", "Path to an IP-to-country MMDB file (DB-IP Country Lite or GeoLite2-Country)")
+	flag.StringVar(&cfg.TrustedAddresses, "trusted-addresses", "", "Comma-separated IPs/CIDRs that can never be blocked (loopback always is)")
+	flag.StringVar(&cfg.TrustedProxies, "trusted-proxies", "", "Comma-separated proxy IPs/CIDRs allowed to set X-Forwarded-For (default: loopback and private ranges; \"none\" to disable)")
 	flag.StringVar(&cfg.ConfigFile, "config", "squelch.json", "Path to JSON config file")
 	flag.BoolVar(&cfg.ConfigSave, "config-save", false, "Write current flags to JSON config file and exit")
 	flag.BoolVar(&cfg.ShowVersion, "version", false, "Print version and exit")
@@ -155,6 +168,15 @@ func loadJSON(cfg *Config) {
 	if v := fileCfg.Timezone; v != "" {
 		cfg.Timezone = v
 	}
+	if v := fileCfg.TrustedProxies; v != "" {
+		cfg.TrustedProxies = v
+	}
+	if v := fileCfg.TrustedAddresses; v != "" {
+		cfg.TrustedAddresses = v
+	}
+	if v := fileCfg.GeoIPDB; v != "" {
+		cfg.GeoIPDB = v
+	}
 }
 
 // applyEnv applies environment variable overrides.
@@ -188,6 +210,15 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("SQUELCH_ADMIN_PASSWORD"); v != "" {
 		cfg.AdminPassword = v
+	}
+	if v := os.Getenv("SQUELCH_TRUSTED_PROXIES"); v != "" {
+		cfg.TrustedProxies = v
+	}
+	if v := os.Getenv("SQUELCH_TRUSTED_ADDRESSES"); v != "" {
+		cfg.TrustedAddresses = v
+	}
+	if v := os.Getenv("SQUELCH_GEOIP_DB"); v != "" {
+		cfg.GeoIPDB = v
 	}
 	if v := os.Getenv("SQUELCH_TIMEZONE"); v != "" {
 		cfg.Timezone = v
@@ -232,6 +263,98 @@ func restoreExplicitFlags(cfg *Config, explicit map[string]string) {
 	if v, ok := explicit["timezone"]; ok {
 		cfg.Timezone = v
 	}
+	if v, ok := explicit["trusted-proxies"]; ok {
+		cfg.TrustedProxies = v
+	}
+	if v, ok := explicit["trusted-addresses"]; ok {
+		cfg.TrustedAddresses = v
+	}
+	if v, ok := explicit["geoip-db"]; ok {
+		cfg.GeoIPDB = v
+	}
+}
+
+// DefaultTrustedProxies are the peers whose X-Forwarded-For is honoured when
+// no list is configured: loopback and private ranges, which covers a reverse
+// proxy on the same host, LAN, or container network. A client connecting
+// directly from a public address can never choose its own client IP.
+var DefaultTrustedProxies = []string{
+	"127.0.0.0/8", "::1/128",
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"fc00::/7",
+}
+
+// TrustedProxyList returns the proxies to pass to gin's SetTrustedProxies.
+// An empty setting yields DefaultTrustedProxies; "none" yields nil, so the
+// client IP is always the TCP peer.
+func (c *Config) TrustedProxyList() []string {
+	v := strings.TrimSpace(c.TrustedProxies)
+	switch strings.ToLower(v) {
+	case "":
+		return DefaultTrustedProxies
+	case "none":
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ProxiesAreDefault reports whether --trusted-proxies was left unset, so
+// every loopback and private-range peer may set the client address.
+func (c *Config) ProxiesAreDefault() bool {
+	return strings.TrimSpace(c.TrustedProxies) == ""
+}
+
+// TrustedAddressList parses --trusted-addresses: the addresses and ranges
+// that can never be blocked. A bare address becomes a single-address
+// prefix. Loopback is not included here; it is always trusted, but only for
+// a request that really arrives over loopback (see package ipblock).
+func (c *Config) TrustedAddressList() ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, raw := range strings.Split(c.TrustedAddresses, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		p, err := ParsePrefix(raw)
+		if err != nil {
+			return nil, fmt.Errorf("trusted address %q: %w", raw, err)
+		}
+		out = append(out, p.Masked())
+	}
+	return out, nil
+}
+
+// ParsePrefix accepts an address or a CIDR range, with IPv4-mapped IPv6
+// turned into plain IPv4 so it compares equal to the addresses requests
+// arrive from. The prefix is returned as written, not masked: callers that
+// insist on canonical form compare it with p.Masked().
+func ParsePrefix(s string) (netip.Prefix, error) {
+	s = strings.TrimSpace(s)
+	if !strings.Contains(s, "/") {
+		a, err := netip.ParseAddr(s)
+		if err != nil {
+			return netip.Prefix{}, fmt.Errorf("not an IP address or CIDR range")
+		}
+		a = a.Unmap()
+		return netip.PrefixFrom(a, a.BitLen()), nil
+	}
+	p, err := netip.ParsePrefix(s)
+	if err != nil {
+		return netip.Prefix{}, fmt.Errorf("not an IP address or CIDR range")
+	}
+	if a := p.Addr(); a.Is4In6() {
+		if p.Bits() < 96 {
+			return netip.Prefix{}, fmt.Errorf("an IPv4-mapped range must be /96 or narrower")
+		}
+		p = netip.PrefixFrom(a.Unmap(), p.Bits()-96)
+	}
+	return p, nil
 }
 
 // SaveJSON writes the current configuration to the JSON config file.
@@ -246,6 +369,10 @@ func (c *Config) SaveJSON() error {
 		SSLKey:        c.SSLKey,
 		SSLAutoCert:   c.SSLAutoCert,
 		Timezone:      c.Timezone,
+
+		TrustedProxies:   c.TrustedProxies,
+		TrustedAddresses: c.TrustedAddresses,
+		GeoIPDB:          c.GeoIPDB,
 	}
 
 	data, err := json.MarshalIndent(fileCfg, "", "  ")
@@ -367,6 +494,10 @@ Server Flags:
   --db-file <path>        SQLite database file path (default "squelch.db")
   --recordings-dir <dir>  Directory for call audio recordings
   --timezone <tz>         IANA timezone (e.g. America/New_York)
+  --trusted-proxies <list> Proxy IPs/CIDRs allowed to set X-Forwarded-For
+                          (default: loopback + private ranges; "none" = off)
+  --trusted-addresses <list> IPs/CIDRs that can never be blocked
+  --geoip-db <path>       IP-to-country MMDB file for the Connections page
   --config <path>         Path to JSON config file (default "squelch.json")
   --config-save           Write current flags to JSON config file and exit
   --version               Print version and exit
@@ -401,6 +532,9 @@ Environment Variables:
   SQUELCH_ENCRYPTION_KEY_FILE  Equivalent to --encryption-key-file
   SQUELCH_ADMIN_PASSWORD  Equivalent to --admin-password
   SQUELCH_TIMEZONE        Equivalent to --timezone
+  SQUELCH_TRUSTED_PROXIES Equivalent to --trusted-proxies
+  SQUELCH_TRUSTED_ADDRESSES Equivalent to --trusted-addresses
+  SQUELCH_GEOIP_DB        Equivalent to --geoip-db
   SQUELCH_SERVER          Server URL for CLI commands
   TZ                          Fallback timezone
 

@@ -10,6 +10,70 @@ import (
 	"database/sql"
 )
 
+const countTalkgroupsPerSystem = `-- name: CountTalkgroupsPerSystem :many
+SELECT system_id, COUNT(*) AS talkgroups FROM talkgroups GROUP BY system_id
+`
+
+type CountTalkgroupsPerSystemRow struct {
+	SystemID   int64 `db:"system_id" json:"system_id"`
+	Talkgroups int64 `db:"talkgroups" json:"talkgroups"`
+}
+
+func (q *Queries) CountTalkgroupsPerSystem(ctx context.Context) ([]CountTalkgroupsPerSystemRow, error) {
+	rows, err := q.db.QueryContext(ctx, countTalkgroupsPerSystem)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountTalkgroupsPerSystemRow{}
+	for rows.Next() {
+		var i CountTalkgroupsPerSystemRow
+		if err := rows.Scan(&i.SystemID, &i.Talkgroups); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countUnitsPerSystem = `-- name: CountUnitsPerSystem :many
+SELECT system_id, COUNT(*) AS units FROM units GROUP BY system_id
+`
+
+type CountUnitsPerSystemRow struct {
+	SystemID int64 `db:"system_id" json:"system_id"`
+	Units    int64 `db:"units" json:"units"`
+}
+
+func (q *Queries) CountUnitsPerSystem(ctx context.Context) ([]CountUnitsPerSystemRow, error) {
+	rows, err := q.db.QueryContext(ctx, countUnitsPerSystem)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountUnitsPerSystemRow{}
+	for rows.Next() {
+		var i CountUnitsPerSystemRow
+		if err := rows.Scan(&i.SystemID, &i.Units); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createSystem = `-- name: CreateSystem :one
 INSERT INTO systems (
     system_id,
@@ -183,5 +247,33 @@ func (q *Queries) UpdateSystem(ctx context.Context, arg UpdateSystemParams) erro
 		arg.Order,
 		arg.ID,
 	)
+	return err
+}
+
+const updateSystemBlacklists = `-- name: UpdateSystemBlacklists :exec
+UPDATE systems SET blacklists_json = ? WHERE id = ?
+`
+
+type UpdateSystemBlacklistsParams struct {
+	BlacklistsJson sql.NullString `db:"blacklists_json" json:"blacklists_json"`
+	ID             int64          `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateSystemBlacklists(ctx context.Context, arg UpdateSystemBlacklistsParams) error {
+	_, err := q.db.ExecContext(ctx, updateSystemBlacklists, arg.BlacklistsJson, arg.ID)
+	return err
+}
+
+const updateSystemOrder = `-- name: UpdateSystemOrder :exec
+UPDATE systems SET "order" = ? WHERE id = ?
+`
+
+type UpdateSystemOrderParams struct {
+	Order int64 `db:"order" json:"order"`
+	ID    int64 `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateSystemOrder(ctx context.Context, arg UpdateSystemOrderParams) error {
+	_, err := q.db.ExecContext(ctx, updateSystemOrder, arg.Order, arg.ID)
 	return err
 }

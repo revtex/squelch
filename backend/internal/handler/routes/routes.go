@@ -20,6 +20,7 @@ import (
 
 	"github.com/revtex/squelch/internal/audio"
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 	"github.com/revtex/squelch/internal/downstream"
 	"github.com/revtex/squelch/internal/handler/admin/imports"
@@ -34,6 +35,7 @@ import (
 	"github.com/revtex/squelch/internal/handler/setup"
 	"github.com/revtex/squelch/internal/handler/share"
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
+	"github.com/revtex/squelch/internal/ipblock"
 	"github.com/revtex/squelch/internal/middleware"
 	"github.com/revtex/squelch/internal/static"
 	streamsvc "github.com/revtex/squelch/internal/stream"
@@ -77,6 +79,8 @@ type Deps struct {
 	// not started) leaves the endpoint responding 503 rather than absent,
 	// so clients get a clear answer instead of a 404.
 	StreamManager *streamsvc.Manager
+	// IPBlocks refuses blocked addresses on every route. Nil blocks nothing.
+	IPBlocks *ipblock.Matcher
 }
 
 // RegisterRoutes wires all API routes onto the Gin engine.
@@ -108,7 +112,10 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	legacyUsageHandler := legacyusage.New(nil, nil)
 	trMqttHandler := trmqttadmin.New(deps.Queries, deps.TRMqttManager, deps.EncryptionKey)
 
-	// Global middleware applied to every request.
+	// Global middleware applied to every request. The address block runs
+	// first so a blocked client is refused before anything else happens;
+	// gin applies middleware only to routes registered after it.
+	r.Use(middleware.IPBlock(deps.IPBlocks))
 	r.Use(middleware.RequestID())
 	r.Use(middleware.CORS())
 	r.Use(middleware.Logger())
@@ -138,11 +145,11 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	authRequired := api.Group("/auth")
 	authRequired.Use(middleware.JWTAuth())
 	{
-		authRequired.POST("/logout", dep("/api/v1/auth/logout"), authH.PostLogout)
-		authRequired.PUT("/password", dep("/api/v1/auth/password"), authH.PutPassword)
+		authRequired.POST("/logout", dep("/api/v1/auth/logout"), middleware.MaxBodySize(1<<20), authH.PostLogout)
+		authRequired.PUT("/password", dep("/api/v1/auth/password"), middleware.MaxBodySize(1<<20), authH.PutPassword)
 		authRequired.GET("/me", dep("/api/v1/auth/me"), authH.GetMe)
 		authRequired.GET("/tg-selection", dep("/api/v1/listener/tg-selection"), authH.GetTGSelection)
-		authRequired.PUT("/tg-selection", dep("/api/v1/listener/tg-selection"), authH.PutTGSelection)
+		authRequired.PUT("/tg-selection", dep("/api/v1/listener/tg-selection"), middleware.MaxBodySize(1<<20), authH.PutTGSelection)
 	}
 
 	// Call search — public access with optional auth for bookmarks.
@@ -222,16 +229,16 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	// /api/ws is the canonical Squelch listener route. /ws is a temporary
 	// compatibility alias that delegates to the same handler so existing
 	// rdio-scanner-shaped clients keep working during the legacy-API transition.
-	listenerWS := gin.WrapF(ws.HandleListenerWS(deps.Hub, deps.Queries))
+	listenerWS := wsHandler(ws.HandleListenerWS(deps.Hub, deps.Queries))
 	r.GET("/api/ws", dep("/api/v1/ws/listener"), listenerWS)
 	r.GET("/ws", dep("/api/v1/ws/listener"), listenerWS)
-	r.GET("/api/admin/ws", dep("/api/v1/ws/admin"), gin.WrapF(ws.HandleAdminWS(deps.Hub, deps.Queries)))
+	r.GET("/api/admin/ws", dep("/api/v1/ws/admin"), wsHandler(ws.HandleAdminWS(deps.Hub, deps.Queries)))
 
 	// Native (v1) WebSocket endpoints. Registered on the root router rather
 	// than inside the /api/v1 group because the V1ErrorEnvelope middleware
 	// buffers HTTP response bodies, which would corrupt the WebSocket upgrade.
-	r.GET("/api/v1/ws/listener", gin.WrapF(ws.HandleListenerWSv1(deps.Hub, deps.Queries)))
-	r.GET("/api/v1/ws/admin", gin.WrapF(ws.HandleAdminWSv1(deps.Hub, deps.Queries)))
+	r.GET("/api/v1/ws/listener", wsHandler(ws.HandleListenerWSv1(deps.Hub, deps.Queries)))
+	r.GET("/api/v1/ws/admin", wsHandler(ws.HandleAdminWSv1(deps.Hub, deps.Queries)))
 
 	// ----- Native API (Phase N-1, plan §4.1) ---------------------------------
 	// All v1 routes carry the V1Marker so version-aware middleware can branch,
@@ -263,13 +270,17 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	v1Auth := v1.Group("")
 	v1Auth.Use(middleware.JWTAuth())
 	{
-		v1Auth.POST("/auth/logout", authH.PostLogout)
-		v1Auth.PUT("/auth/password", authH.PutPassword)
+		v1Auth.POST("/auth/logout", middleware.MaxBodySize(1<<20), authH.PostLogout)
+		v1Auth.PUT("/auth/password", middleware.MaxBodySize(1<<20), authH.PutPassword)
 		v1Auth.GET("/auth/me", authH.GetMe)
 		// /api/auth/tg-selection is renamed to /api/v1/listener/tg-selection
 		// per plan §4.1; the handler body is reused unchanged.
 		v1Auth.GET("/listener/tg-selection", authH.GetTGSelection)
-		v1Auth.PUT("/listener/tg-selection", authH.PutTGSelection)
+		v1Auth.PUT("/listener/tg-selection", middleware.MaxBodySize(1<<20), authH.PutTGSelection)
+		// A listener's own client settings, kept against the account so they
+		// follow the person to any browser they sign in on.
+		v1Auth.GET("/listener/preferences", authH.GetPreferences)
+		v1Auth.PUT("/listener/preferences", middleware.MaxBodySize(1<<16), authH.PutPreferences)
 		v1Auth.POST("/calls/:id/share", shareHandler.PostShareCall)
 		v1Auth.DELETE("/calls/:id/share", shareHandler.DeleteShareCall)
 		v1Auth.GET("/calls/:id/share", shareHandler.GetCallShare)
@@ -292,9 +303,13 @@ func RegisterRoutes(r *gin.Engine, deps Deps) {
 	v1Admin.Use(middleware.JWTAuth(), middleware.RequireAdmin(), middleware.MaxBodySize(2<<20))
 	{
 		v1Admin.POST("/import/talkgroups", importsHandler.ImportTalkgroups)
+		v1Admin.POST("/import/talkgroups/preview", importsHandler.PreviewTalkgroups)
 		v1Admin.POST("/import/units", importsHandler.ImportUnits)
+		v1Admin.POST("/import/units/preview", importsHandler.PreviewUnits)
 		v1Admin.POST("/import/groups", importsHandler.ImportGroups)
+		v1Admin.POST("/import/groups/preview", importsHandler.PreviewGroups)
 		v1Admin.POST("/import/tags", importsHandler.ImportTags)
+		v1Admin.POST("/import/tags/preview", importsHandler.PreviewTags)
 		// Plan §4.1 drops the trailing `/csv` segment on the v1 path.
 		v1Admin.POST("/radioreference/preview", rrHandler.PreviewCSV)
 		v1Admin.GET("/transcriptions/status", transcriptionsHandler.GetStatus)
@@ -346,6 +361,18 @@ func serveFrontend(r *gin.Engine) {
 			return
 		}
 
+		// Machine-fetched well-known documents must never fall through to
+		// index.html. RFC 8615 paths and the legacy root-level Apple
+		// association file are requested by verifiers that expect JSON (or
+		// a clean 404 meaning "this server has no such association"); the
+		// SPA fallback answered both with HTTP 200 and an HTML body, which
+		// a verifier reports as a malformed file rather than a missing one.
+		// Nothing is served here yet — this only makes the absence honest.
+		if strings.HasPrefix(path, "/.well-known/") || path == "/apple-app-site-association" {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
 		// Try to serve the exact file (JS, CSS, images, etc.).
 		if f, err := distFS.Open(strings.TrimPrefix(path, "/")); err == nil {
 			f.Close()
@@ -357,4 +384,15 @@ func serveFrontend(r *gin.Engine) {
 		c.Request.URL.Path = "/"
 		fileServer.ServeHTTP(c.Writer, c.Request)
 	})
+}
+
+// wsHandler mounts a WebSocket handler. It is gin.WrapF plus one thing: the
+// client address gin resolved through the trusted-proxy list rides along on
+// the request context, so the connection list shows the real client rather
+// than the reverse proxy in front of it.
+func wsHandler(h http.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		client := connections.ClientFromRequest(c.Request, c.ClientIP())
+		h(c.Writer, c.Request.WithContext(connections.WithClient(c.Request.Context(), client)))
+	}
 }

@@ -28,11 +28,15 @@ var LegacyAPISunset = time.Date(2027, time.April, 26, 0, 0, 0, 0, time.UTC)
 // LegacyUsageEntry is one row in the 24-hour aggregate report produced by
 // LegacyUsageStore.Aggregate24h. JSON tags match the admin endpoint contract.
 type LegacyUsageEntry struct {
-	Path        string    `json:"path"`
-	Method      string    `json:"method"`
-	APIKeyIdent string    `json:"apiKeyIdent"`
-	Count       int       `json:"count"`
-	LastSeen    time.Time `json:"lastSeen"`
+	Path        string `json:"path"`
+	Method      string `json:"method"`
+	APIKeyIdent string `json:"apiKeyIdent"`
+	// APIKeyID is the key's id when an API key authenticated the request.
+	// The ident is cut to six characters, so two keys can share one; the
+	// id tells them apart.
+	APIKeyID int64     `json:"apiKeyId,omitempty"`
+	Count    int       `json:"count"`
+	LastSeen time.Time `json:"lastSeen"`
 }
 
 // legacyUsageRecord is one ring-buffer slot. Stored as a value type so the
@@ -43,6 +47,7 @@ type legacyUsageRecord struct {
 	method      string
 	status      int
 	apiKeyIdent string
+	apiKeyID    int64
 	used        bool
 }
 
@@ -80,6 +85,12 @@ var DefaultLegacyUsageStore = NewLegacyUsageStore(nil)
 
 // Record appends one legacy-hit observation. Never blocks; never errors.
 func (s *LegacyUsageStore) Record(path, method, apiKeyIdent string, status int) {
+	s.RecordKey(path, method, apiKeyIdent, 0, status)
+}
+
+// RecordKey is Record with the id of the API key that made the request,
+// or 0 when none did.
+func (s *LegacyUsageStore) RecordKey(path, method, apiKeyIdent string, apiKeyID int64, status int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.buf[s.head] = legacyUsageRecord{
@@ -88,6 +99,7 @@ func (s *LegacyUsageStore) Record(path, method, apiKeyIdent string, status int) 
 		method:      method,
 		status:      status,
 		apiKeyIdent: apiKeyIdent,
+		apiKeyID:    apiKeyID,
 		used:        true,
 	}
 	s.head = (s.head + 1) % len(s.buf)
@@ -104,20 +116,24 @@ func (s *LegacyUsageStore) Aggregate24h() []LegacyUsageEntry {
 	defer s.mu.Unlock()
 
 	cutoff := s.clock().Add(-s.maxAge)
-	type aggKey struct{ path, method, ident string }
+	type aggKey struct {
+		path, method, ident string
+		keyID               int64
+	}
 	agg := make(map[aggKey]*LegacyUsageEntry)
 
 	walk := func(rec legacyUsageRecord) {
 		if !rec.used || rec.at.Before(cutoff) {
 			return
 		}
-		k := aggKey{rec.path, rec.method, rec.apiKeyIdent}
+		k := aggKey{rec.path, rec.method, rec.apiKeyIdent, rec.apiKeyID}
 		e, ok := agg[k]
 		if !ok {
 			agg[k] = &LegacyUsageEntry{
 				Path:        rec.path,
 				Method:      rec.method,
 				APIKeyIdent: rec.apiKeyIdent,
+				APIKeyID:    rec.apiKeyID,
 				Count:       1,
 				LastSeen:    rec.at,
 			}
@@ -182,7 +198,13 @@ func Deprecated(successor string, sunset time.Time) gin.HandlerFunc {
 			path = c.Request.URL.Path
 		}
 		status := c.Writer.Status()
-		DefaultLegacyUsageStore.Record(path, c.Request.Method, ident, status)
+		var keyID int64
+		if v, ok := c.Get("apiKeyID"); ok {
+			if id, ok := v.(int64); ok {
+				keyID = id
+			}
+		}
+		DefaultLegacyUsageStore.RecordKey(path, c.Request.Method, ident, keyID, status)
 		slog.WarnContext(c.Request.Context(), "legacy endpoint hit",
 			"path", path,
 			"method", c.Request.Method,

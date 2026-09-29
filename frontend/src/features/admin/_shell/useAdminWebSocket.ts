@@ -3,8 +3,8 @@ import { useAppDispatch, useAppSelector } from "@/app/store";
 import { adminWsClient } from "@/shared/services/ws/adminClient";
 import { setCredentials, usePostRefreshMutation } from "@/features/auth";
 import { api } from "@/app/api";
-import { applyTrEvent } from "@/features/admin/dashboards";
-import type { TrEventEnvelope } from "@/features/admin/dashboards";
+import { applyTrEvent } from "@/features/admin/trunk-recorder";
+import type { TrEventEnvelope } from "@/features/admin/trunk-recorder";
 
 export function useAdminWebSocket(): void {
   const dispatch = useAppDispatch();
@@ -71,6 +71,8 @@ export function useAdminWebSocket(): void {
           "dirmonitors.updated": ["DirMonitors"],
           "downstreams.updated": ["Downstreams"],
           "webhooks.updated": ["Webhooks"],
+          // Not "tr.*": those are MQTT frames for the live dashboard.
+          "trinstances.updated": ["TrInstances"],
           "config.updated": ["Config"],
           "shared-links.updated": ["SharedLinks"],
         };

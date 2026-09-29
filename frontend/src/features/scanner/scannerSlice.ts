@@ -1,4 +1,4 @@
-import { readStored, writeStored } from "@/shared/utils/storage";
+import { writeStored } from "@/shared/utils/storage";
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import type { AvoidEntry, ConnectionStatus, ScannerConfig } from "@/types";
 import type { StreamState } from "@/shared/services/audio/streamPlayer";
@@ -58,9 +58,11 @@ const initialState: ScannerState = {
   // Never restored: a stream can only be opened from a user gesture, so a
   // freshly loaded page is never streaming yet however the preference reads.
   streamState: "idle",
-  isPaused:
-    typeof sessionStorage !== "undefined" &&
-    readStored(sessionStorage, "squelch-paused") === "true",
+  // Never restored, for the same reason as the two above: pause is about
+  // the call playing right now, and a freshly loaded page has none. A
+  // restored pause reads as broken audio — nothing plays and the reason
+  // is a button the listener last touched in another session.
+  isPaused: false,
   isAudioActive: false,
   heldSystem: null,
   heldTG: null,
@@ -158,28 +160,24 @@ export const scannerSlice = createSlice({
     },
     togglePause(state) {
       state.isPaused = !state.isPaused;
-      try {
-        writeStored(sessionStorage, "squelch-paused", String(state.isPaused));
-      } catch {
-        /* quota exceeded or SSR */
-      }
     },
     setAudioActive(state, action: PayloadAction<boolean>) {
       state.isAudioActive = action.payload;
     },
     setPaused(state, action: PayloadAction<boolean>) {
       state.isPaused = action.payload;
-      try {
-        writeStored(sessionStorage, "squelch-paused", String(state.isPaused));
-      } catch {
-        /* quota exceeded or SSR */
-      }
     },
+    // Both clear a pause: LIVE off and on is how a listener restarts
+    // listening, so it has to come back playing. The player is resumed
+    // alongside this in useScanner — leaving it paused here would queue
+    // calls instead of playing them.
     toggleLive(state) {
       state.isLive = !state.isLive;
+      state.isPaused = false;
     },
     setLive(state, action: PayloadAction<boolean>) {
       state.isLive = action.payload;
+      state.isPaused = false;
     },
     holdSystem(state, action: PayloadAction<number | null>) {
       state.heldSystem = action.payload;

@@ -73,6 +73,9 @@ class AudioPlayer {
   private volume = 1;
   private queue: QueueItem[] = [];
   private currentItem: QueueItem | null = null;
+  /** The last Call started, kept after it ends so Replay has something to
+   *  replay — which is exactly when anyone reaches for it. */
+  private lastItem: QueueItem | null = null;
   private _paused = false;
   private _playing = false;
   private callStartCb: ((call: Call) => void) | null = null;
@@ -302,13 +305,23 @@ class AudioPlayer {
   }
 
   replay(): void {
-    if (!this.currentItem || !this.audio) return;
-    try {
-      this.audio.currentTime = 0;
-    } catch {
-      // ignore — element may not be ready
+    if (this.currentItem && this.audio) {
+      try {
+        this.audio.currentTime = 0;
+      } catch {
+        // ignore — element may not be ready
+      }
+      void this.playElement(this.audio, this.currentItem);
+      return;
     }
-    void this.playElement(this.audio, this.currentItem);
+    // Nothing on the air: play the last Call again, the way an on-demand
+    // play does, so a queued ingested Call is not thrown away for it.
+    if (this.lastItem) this.playNow(this.lastItem.call);
+  }
+
+  /** True when there is something for [replay] to play. */
+  canReplay(): boolean {
+    return this.currentItem !== null || this.lastItem !== null;
   }
 
   pause(): void {
@@ -321,7 +334,13 @@ class AudioPlayer {
     this._paused = false;
     this.ensureContext();
     this.ctx?.resume().catch(() => {});
-    if (this.currentItem && this.audio && !this._playing) {
+    // `_playing` is not the thing to gate on: pause() leaves it true —
+    // the player still owns the call — so this branch never ran and the
+    // element was left paused for good. Only a trip through the
+    // background/foreground stall recovery got it going again, which is
+    // how the bug showed up. play() does not seek, so the call picks up
+    // where it stopped.
+    if (this.currentItem && this.audio) {
       this._playing = true;
       void this.playElement(this.audio, this.currentItem);
     } else if (!this.currentItem && this.queue.length > 0) {
@@ -547,6 +566,7 @@ class AudioPlayer {
 
   private startPlayback(item: QueueItem): void {
     this.currentItem = item;
+    this.lastItem = item;
     this.callStartCb?.(item.call);
     this.updateMediaSession(item.call);
     this.ensureContext();

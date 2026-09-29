@@ -3,11 +3,13 @@ package ws
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/revtex/squelch/internal/admin"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
 )
 
@@ -51,6 +53,22 @@ type Hub struct {
 	// path having to know about it. Never nil-checked by callers; see
 	// notifyCall.
 	callNotifier func(context.Context, int64)
+
+	// sessionRevoker, when set, ends non-WebSocket sessions (the
+	// continuous audio stream) whenever the hub disconnects a user or a
+	// token, so every revocation path covers both transports.
+	sessionRevoker SessionRevoker
+
+	// conns is the admin's view of live connections. Clients are added and
+	// removed on the Run goroutine alongside h.clients so the two never
+	// disagree. Nil when unset; the registry's methods are nil-safe.
+	conns *connections.Registry
+}
+
+// SessionRevoker ends live sessions that are not WebSocket clients.
+type SessionRevoker interface {
+	DisconnectUser(userID int64)
+	DisconnectJTI(jti string)
 }
 
 const lscDebounceDuration = 3 * time.Second
@@ -99,6 +117,7 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.Lock()
 			h.clients[c] = struct{}{}
 			h.mu.Unlock()
+			h.conns.Add(c.connInfo(), func() { h.endSession(c) })
 			if !c.isAdmin {
 				h.debounceLSC()
 			}
@@ -108,6 +127,7 @@ func (h *Hub) Run(ctx context.Context) {
 			if _, ok := h.clients[c]; ok {
 				delete(h.clients, c)
 				c.closeSend()
+				h.conns.Remove(c.connID)
 			}
 			h.mu.Unlock()
 			if !c.isAdmin {
@@ -197,6 +217,29 @@ func (h *Hub) SendStreamCue(userID int64, sid string, callID int64, offset float
 	})
 }
 
+// SetSessionRevoker registers a revoker that DisconnectByUser and
+// DisconnectByJTI also call. Set once at startup.
+func (h *Hub) SetSessionRevoker(r SessionRevoker) {
+	h.sessionRevoker = r
+}
+
+// SetConnections registers the connection registry the hub reports its
+// clients to. Set once at startup, before Run.
+func (h *Hub) SetConnections(r *connections.Registry) {
+	h.conns = r
+	if h.admin != nil {
+		h.admin.Deps.Connections = r
+	}
+}
+
+// endSession tells a client its session is over and drops it — the same
+// thing a sign-out does. Must not be called from the Run goroutine:
+// Unregister hands the client to Run over an unbuffered channel.
+func (h *Hub) endSession(c *Client) {
+	c.trySend(c.encodeSessionExpired())
+	h.Unregister(c)
+}
+
 // SetCallNotifier registers a sink for newly ingested calls. Safe to leave
 // unset, in which case new calls are only fanned out over WebSocket.
 func (h *Hub) SetCallNotifier(fn func(context.Context, int64)) {
@@ -236,12 +279,43 @@ func (h *Hub) BroadcastCFG(ctx context.Context) {
 		return
 	}
 	slog.Debug("ws: rebuilding and broadcasting CFG")
-	legacy, v1, err := buildCFGFrames(ctx, h.queries)
+	legacy, v1, err := buildCFGFrames(ctx, h.queries, nil)
 	if err != nil {
 		slog.Error("ws: failed to build CFG for broadcast", "error", err)
 		return
 	}
-	h.broadcastBoth(legacy, v1, nil)
+	h.broadcastBoth(legacy, v1, func(c *Client) bool { return c.grants == nil })
+
+	// Grant-restricted clients get a config scoped to their grants, built
+	// once per distinct grant set.
+	h.mu.RLock()
+	var restricted []*Client
+	for c := range h.clients {
+		if c.grants != nil {
+			restricted = append(restricted, c)
+		}
+	}
+	h.mu.RUnlock()
+	type frames struct{ legacy, v1 []byte }
+	built := make(map[string]frames)
+	for _, c := range restricted {
+		key := fmt.Sprint(c.grants)
+		f, ok := built[key]
+		if !ok {
+			l, v, err := buildCFGFrames(ctx, h.queries, c.grants)
+			if err != nil {
+				slog.Error("ws: failed to build scoped CFG", "user_id", c.userID, "error", err)
+				continue
+			}
+			f = frames{l, v}
+			built[key] = f
+		}
+		if c.isV1() {
+			c.trySend(f.v1)
+		} else {
+			c.trySend(f.legacy)
+		}
+	}
 	slog.Debug("ws: cfg broadcast complete", "clients", h.ClientCount())
 }
 
@@ -263,12 +337,14 @@ func (h *Hub) BroadcastAdminEvent(topic string, data any) {
 }
 
 // BroadcastTRN sends a transcript-ready message (legacy TRN / native
-// call.transcript) to all connected listener clients in both wire formats.
-// segments may be nil when diarization is disabled.
-func (h *Hub) BroadcastTRN(callID int64, text string, segments any) {
+// call.transcript) to the clients allowed to receive the call — the same
+// grant rule as its call.new. systemID and talkgroupID are the call's
+// database ids. segments may be nil when diarization is disabled.
+func (h *Hub) BroadcastTRN(callID, systemID, talkgroupID int64, text string, segments any) {
 	if h == nil {
 		return
 	}
+	filter := func(c *Client) bool { return c.CanReceive(systemID, talkgroupID) }
 	legacy, err := NewTRNMessage(callID, text, segments)
 	if err != nil {
 		slog.Error("ws: failed to build TRN message", "call_id", callID, "error", err)
@@ -277,10 +353,10 @@ func (h *Hub) BroadcastTRN(callID int64, text string, segments any) {
 	v1, err := NewCallTranscriptV1(callID, text, segments)
 	if err != nil {
 		slog.Error("ws: failed to build native call.transcript", "call_id", callID, "error", err)
-		h.Broadcast(legacy, nil)
+		h.Broadcast(legacy, filter)
 		return
 	}
-	h.broadcastBoth(legacy, v1, nil)
+	h.broadcastBoth(legacy, v1, filter)
 }
 
 // ClientCount returns the number of non-admin (listener) clients.
@@ -329,6 +405,9 @@ func (h *Hub) countByUser(userID int64) int {
 // DisconnectByUser closes all WS connections for the given user ID.
 // Sends an XPR message before closing so the client knows to re-authenticate.
 func (h *Hub) DisconnectByUser(userID int64) {
+	if h.sessionRevoker != nil {
+		h.sessionRevoker.DisconnectUser(userID)
+	}
 	h.mu.RLock()
 	var targets []*Client
 	for c := range h.clients {
@@ -340,27 +419,56 @@ func (h *Hub) DisconnectByUser(userID int64) {
 
 	for _, c := range targets {
 		slog.Info("ws: disconnecting user session", "user_id", userID, "is_admin", c.isAdmin)
-		c.trySend(c.encodeSessionExpired())
-		h.Unregister(c)
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
+		h.endSession(c)
 	}
 }
 
-// DisconnectByJTI closes the WS connection associated with the given JWT ID.
-func (h *Hub) DisconnectByJTI(jti string) {
+// DisconnectAnonymous closes every unauthenticated listener connection. It is
+// called when public access is turned off: those clients were admitted only
+// because of it and are otherwise never re-checked.
+func (h *Hub) DisconnectAnonymous() {
 	h.mu.RLock()
-	var target *Client
+	var targets []*Client
 	for c := range h.clients {
-		if c.jti == jti {
-			target = c
-			break
+		if c.userID == 0 && !c.isAdmin {
+			targets = append(targets, c)
 		}
 	}
 	h.mu.RUnlock()
 
-	if target != nil {
-		slog.Info("ws: disconnecting session by JTI", "jti", jti, "user_id", target.userID)
-		target.trySend(target.encodeSessionExpired())
-		h.Unregister(target)
+	for _, c := range targets {
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
+		h.endSession(c)
+	}
+	if len(targets) > 0 {
+		slog.Info("ws: disconnected anonymous listeners after public access was disabled", "count", len(targets))
+	}
+}
+
+// DisconnectByJTI closes every WS connection opened with the given JWT ID.
+// One token can hold several: a listener socket and an admin socket from
+// the same tab, or two tabs that authenticated before the next refresh.
+func (h *Hub) DisconnectByJTI(jti string) {
+	if jti == "" {
+		return
+	}
+	if h.sessionRevoker != nil {
+		h.sessionRevoker.DisconnectJTI(jti)
+	}
+	h.mu.RLock()
+	var targets []*Client
+	for c := range h.clients {
+		if c.jti == jti {
+			targets = append(targets, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range targets {
+		slog.Info("ws: disconnecting session by JTI", "user_id", c.userID, "is_admin", c.isAdmin)
+		h.conns.SetCloseReason(c.connID, connections.ReasonSignout)
+		h.endSession(c)
 	}
 }
 
@@ -370,6 +478,22 @@ func (h *Hub) DisconnectByJTI(jti string) {
 func (h *Hub) SetDirMonitorReloader(r Reloader) {
 	if h.admin != nil {
 		h.admin.Deps.DirMonitorReload = r
+	}
+}
+
+// SetTRInstanceSync lets a configuration restore reconnect the Trunk
+// Recorder brokers it rewrote; the MQTT manager starts after the hub.
+func (h *Hub) SetTRInstanceSync(s admin.TRInstanceSync) {
+	if h.admin != nil {
+		h.admin.Deps.TRInstances = s
+	}
+}
+
+// SetDirMonitorStatus gives the admin the folder monitors' runtime state,
+// after hub creation for the same reason as SetDirMonitorReloader.
+func (h *Hub) SetDirMonitorStatus(m admin.MonitorStatus) {
+	if h.admin != nil {
+		h.admin.Deps.DirMonitors = m
 	}
 }
 
@@ -406,6 +530,8 @@ func (h *Hub) closeAll() {
 	for c := range h.clients {
 		c.closeSend()
 		delete(h.clients, c)
+		h.conns.SetCloseReason(c.connID, connections.ReasonShutdown)
+		h.conns.Remove(c.connID)
 	}
 	h.lscMu.Lock()
 	if h.lscTimer != nil {

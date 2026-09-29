@@ -574,3 +574,74 @@ func TestV1ErrorEnvelope_StillRewritesLegacyErrors(t *testing.T) {
 		t.Errorf("legacy error was not rewritten into the v1 envelope: %s", w.Body.String())
 	}
 }
+
+func TestAPIKeyAuth_RotatedKeyWorksUntilGraceEnds(t *testing.T) {
+	queries := newMiddlewareDB(t)
+	oldKey := "old-secret-value"
+	newKey := "new-secret-value"
+	id := seedAPIKey(t, queries, oldKey, "rotated", 0)
+	if err := queries.RotateAPIKey(context.Background(), db.RotateAPIKeyParams{
+		Key:                  auth.HashAPIKey(newKey),
+		PreviousKey:          sql.NullString{String: auth.HashAPIKey(oldKey), Valid: true},
+		PreviousKeyExpiresAt: sql.NullInt64{Int64: time.Now().Add(time.Hour).Unix(), Valid: true},
+		ID:                   id,
+	}); err != nil {
+		t.Fatalf("RotateAPIKey: %v", err)
+	}
+
+	for _, key := range []string{newKey, oldKey} {
+		r, got := newAPIKeyRouter(queries)
+		req := httptest.NewRequest(http.MethodPost, "/upload", nil)
+		req.Header.Set("X-API-Key", key)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("key %q: status = %d, want 200; body=%s", key, w.Code, w.Body.String())
+		}
+		if *got != id {
+			t.Errorf("key %q: apiKeyID = %d, want %d", key, *got, id)
+		}
+	}
+
+	// Grace over: only the new secret works.
+	if err := queries.RotateAPIKey(context.Background(), db.RotateAPIKeyParams{
+		Key:                  auth.HashAPIKey(newKey),
+		PreviousKey:          sql.NullString{String: auth.HashAPIKey(oldKey), Valid: true},
+		PreviousKeyExpiresAt: sql.NullInt64{Int64: time.Now().Add(-time.Minute).Unix(), Valid: true},
+		ID:                   id,
+	}); err != nil {
+		t.Fatalf("RotateAPIKey: %v", err)
+	}
+	r, _ := newAPIKeyRouter(queries)
+	req := httptest.NewRequest(http.MethodPost, "/upload", nil)
+	req.Header.Set("X-API-Key", oldKey)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expired old key: status = %d, want 401", w.Code)
+	}
+}
+
+func TestAPIKeyAuth_RecordsLastUse(t *testing.T) {
+	queries := newMiddlewareDB(t)
+	id := seedAPIKey(t, queries, "used-key", "used", 0)
+	r, _ := newAPIKeyRouter(queries)
+	req := httptest.NewRequest(http.MethodPost, "/upload", nil)
+	req.Header.Set("X-API-Key", "used-key")
+	req.RemoteAddr = "203.0.113.9:4444"
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	k, err := queries.GetAPIKey(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetAPIKey: %v", err)
+	}
+	if !k.LastUsedAt.Valid || time.Since(time.Unix(k.LastUsedAt.Int64, 0)) > time.Minute {
+		t.Fatalf("lastUsedAt = %v, want just now", k.LastUsedAt)
+	}
+	if k.LastUsedIp.String != "203.0.113.9" {
+		t.Fatalf("lastUsedIp = %q, want 203.0.113.9", k.LastUsedIp.String)
+	}
+}

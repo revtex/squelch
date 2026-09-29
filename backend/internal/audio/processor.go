@@ -64,9 +64,6 @@ func (p *Processor) Store(ctx context.Context, fh *multipart.FileHeader, mode Co
 	if err != nil {
 		return "", fmt.Errorf("create destination file: %w", err)
 	}
-	// Update safeName to whatever filename we actually wrote so the
-	// downstream conversion step uses the unique base name.
-	safeName = filepath.Base(destPath)
 	if _, err := io.Copy(dst, src); err != nil {
 		dst.Close()
 		os.Remove(destPath) //nolint:errcheck
@@ -75,97 +72,31 @@ func (p *Processor) Store(ctx context.Context, fh *multipart.FileHeader, mode Co
 	dst.Close()
 	slog.Debug("audio: file written", "path", destPath, "size_bytes", fh.Size)
 
-	relPath, err := filepath.Rel(p.recordingsDir, destPath)
-	if err != nil {
-		return "", fmt.Errorf("compute relative path: %w", err)
-	}
-
-	if mode == ConversionDisabled {
-		return relPath, nil
-	}
-
-	// Validate mode — treat unknown values as disabled to avoid silent data
-	// loss (ffmpegArgs returns nil for unknown modes, so no output file would
-	// be created but the original would be deleted).
-	if mode != ConversionEnabled && mode != ConversionNorm && mode != ConversionLoudNorm {
-		return relPath, nil
-	}
-
-	// Build output path with appropriate extension for the preset.
-	ext := filepath.Ext(safeName)
-	outExt := OutputExt(preset)
-	outName := strings.TrimSuffix(safeName, ext) + outExt
-	outPath := filepath.Join(dayDir, outName)
-
-	// When the input already has the target extension, FFmpeg would try to
-	// read and write the same file.  Write to a temp path then rename.
-	sameFile := strings.EqualFold(ext, outExt)
-	ffmpegOut := outPath
-	if sameFile {
-		ffmpegOut = outPath + ".tmp" + outExt
-	}
-
-	done := make(chan error, 1)
-	if err := p.pool.Submit(ctx, ConversionJob{
-		InputPath:  destPath,
-		OutputPath: ffmpegOut,
-		Mode:       mode,
-		Preset:     preset,
-		Done:       done,
-	}); err != nil {
-		os.Remove(destPath) //nolint:errcheck
-		return "", fmt.Errorf("submit conversion job: %w", err)
-	}
-
-	select {
-	case <-ctx.Done():
-		os.Remove(destPath) //nolint:errcheck
-		if sameFile {
-			os.Remove(ffmpegOut) //nolint:errcheck
-		}
-		return "", ctx.Err()
-	case err := <-done:
-		if err != nil {
-			os.Remove(destPath) //nolint:errcheck
-			if sameFile {
-				os.Remove(ffmpegOut) //nolint:errcheck
-			}
-			return "", fmt.Errorf("audio conversion: %w", err)
-		}
-	}
-
-	// Rename temp file to final output path when input/output extensions match.
-	if sameFile {
-		if err := os.Rename(ffmpegOut, outPath); err != nil {
-			os.Remove(ffmpegOut) //nolint:errcheck
-			return "", fmt.Errorf("rename converted file: %w", err)
-		}
-	}
-
-	// Remove original after successful conversion (skip if same path — already replaced by rename).
-	if !sameFile {
-		if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-			slog.Warn("audio: failed to remove original after conversion", "path", destPath, "error", err)
-		}
-	}
-
-	relOut, err := filepath.Rel(p.recordingsDir, outPath)
-	if err != nil {
-		return "", fmt.Errorf("compute relative output path: %w", err)
-	}
-	slog.Debug("audio: conversion complete", "input", safeName, "output", relOut)
-	return relOut, nil
+	return p.convertStored(ctx, dayDir, destPath, mode, preset)
 }
 
 // StoreFile stores a local file (by path) identically to Store, but reads
 // directly from the filesystem rather than from a multipart upload.
-// SECURITY: the filename is sanitised via filepath.Base — strips directory
-// components and rejects names containing "..".
 func (p *Processor) StoreFile(ctx context.Context, srcPath string, mode ConversionMode, preset EncodingPreset) (string, error) {
-	slog.Debug("audio: storing local file", "src", srcPath, "mode", mode, "preset", preset)
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("open audio file: %w", err)
+	}
+	defer src.Close()
+	return p.StoreReader(ctx, src, filepath.Base(srcPath), mode, preset)
+}
+
+// StoreReader stores audio read from src under the given file name,
+// identically to Store. Callers that must confine where the audio comes from
+// open the file themselves and pass the handle, so the file that was checked
+// is the file that gets copied.
+// SECURITY: the name is sanitised via filepath.Base — strips directory
+// components and rejects names containing "..".
+func (p *Processor) StoreReader(ctx context.Context, src io.Reader, name string, mode ConversionMode, preset EncodingPreset) (string, error) {
+	slog.Debug("audio: storing local file", "name", name, "mode", mode, "preset", preset)
 	// filepath.Base strips all directory components; the == ".." guard catches
 	// the only remaining traversal case.  No further Contains check is needed.
-	safeName := filepath.Base(srcPath)
+	safeName := filepath.Base(name)
 	if safeName == "" || safeName == "." || safeName == ".." {
 		return "", fmt.Errorf("invalid filename")
 	}
@@ -180,8 +111,7 @@ func (p *Processor) StoreFile(ctx context.Context, srcPath string, mode Conversi
 	if err != nil {
 		return "", fmt.Errorf("create destination file: %w", err)
 	}
-	safeName = filepath.Base(destPath)
-	if err := copyFileTo(srcPath, dst); err != nil {
+	if _, err := io.Copy(dst, src); err != nil {
 		dst.Close()
 		os.Remove(destPath) //nolint:errcheck
 		return "", fmt.Errorf("copy audio file: %w", err)
@@ -192,30 +122,53 @@ func (p *Processor) StoreFile(ctx context.Context, srcPath string, mode Conversi
 	}
 	slog.Debug("audio: file written", "path", destPath)
 
+	return p.convertStored(ctx, dayDir, destPath, mode, preset)
+}
+
+// convertStored runs the configured conversion on a freshly stored file and
+// returns the path of the file to keep, relative to recordingsDir. With
+// conversion off (or an unknown mode, which would otherwise delete the
+// original without producing output) the stored file is kept as is.
+//
+// The output name is reserved with O_EXCL before FFmpeg runs, because
+// FFmpeg is invoked with -y: writing to an unreserved name would overwrite
+// another call's recording that happens to share the base name.
+func (p *Processor) convertStored(ctx context.Context, dayDir, destPath string, mode ConversionMode, preset EncodingPreset) (string, error) {
 	relPath, err := filepath.Rel(p.recordingsDir, destPath)
 	if err != nil {
 		return "", fmt.Errorf("compute relative path: %w", err)
 	}
-
-	if mode == ConversionDisabled {
-		return relPath, nil
-	}
-
 	if mode != ConversionEnabled && mode != ConversionNorm && mode != ConversionLoudNorm {
 		return relPath, nil
 	}
 
+	safeName := filepath.Base(destPath)
 	ext := filepath.Ext(safeName)
 	outExt := OutputExt(preset)
-	outName := strings.TrimSuffix(safeName, ext) + outExt
-	outPath := filepath.Join(dayDir, outName)
+	base := strings.TrimSuffix(safeName, ext)
 
-	// When the input already has the target extension, FFmpeg would try to
-	// read and write the same file.  Write to a temp path then rename.
-	sameFile := strings.EqualFold(ext, outExt)
-	ffmpegOut := outPath
-	if sameFile {
-		ffmpegOut = outPath + ".tmp" + outExt
+	// When the stored file already has the target name, FFmpeg cannot read
+	// and write the same file: write to a reserved temp file, then rename it
+	// over the input. Otherwise FFmpeg writes straight to a reserved name.
+	outPath := filepath.Join(dayDir, base+outExt)
+	inPlace := outPath == destPath
+	reserveName := base + outExt
+	if inPlace {
+		reserveName = base + ".tmp" + outExt
+	}
+	ffmpegOut, placeholder, err := createUniqueFile(dayDir, reserveName)
+	if err != nil {
+		os.Remove(destPath) //nolint:errcheck
+		return "", fmt.Errorf("reserve conversion output: %w", err)
+	}
+	placeholder.Close()
+	if !inPlace {
+		outPath = ffmpegOut
+	}
+	fail := func(err error) (string, error) {
+		os.Remove(destPath)  //nolint:errcheck
+		os.Remove(ffmpegOut) //nolint:errcheck
+		return "", err
 	}
 
 	done := make(chan error, 1)
@@ -226,38 +179,25 @@ func (p *Processor) StoreFile(ctx context.Context, srcPath string, mode Conversi
 		Preset:     preset,
 		Done:       done,
 	}); err != nil {
-		os.Remove(destPath) //nolint:errcheck
-		return "", fmt.Errorf("submit conversion job: %w", err)
+		return fail(fmt.Errorf("submit conversion job: %w", err))
 	}
 
 	select {
 	case <-ctx.Done():
-		os.Remove(destPath) //nolint:errcheck
-		if sameFile {
-			os.Remove(ffmpegOut) //nolint:errcheck
-		}
-		return "", ctx.Err()
+		return fail(ctx.Err())
 	case err := <-done:
 		if err != nil {
-			os.Remove(destPath) //nolint:errcheck
-			if sameFile {
-				os.Remove(ffmpegOut) //nolint:errcheck
-			}
-			return "", fmt.Errorf("audio conversion: %w", err)
+			return fail(fmt.Errorf("audio conversion: %w", err))
 		}
 	}
 
-	if sameFile {
+	if inPlace {
 		if err := os.Rename(ffmpegOut, outPath); err != nil {
 			os.Remove(ffmpegOut) //nolint:errcheck
 			return "", fmt.Errorf("rename converted file: %w", err)
 		}
-	}
-
-	if !sameFile {
-		if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-			slog.Warn("audio: failed to remove original after conversion", "path", destPath, "error", err)
-		}
+	} else if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
+		slog.Warn("audio: failed to remove original after conversion", "path", destPath, "error", err)
 	}
 
 	relOut, err := filepath.Rel(p.recordingsDir, outPath)
@@ -266,18 +206,6 @@ func (p *Processor) StoreFile(ctx context.Context, srcPath string, mode Conversi
 	}
 	slog.Debug("audio: conversion complete", "input", safeName, "output", relOut)
 	return relOut, nil
-}
-
-// copyFileTo streams the file at src into an already-open destination handle.
-// The caller is responsible for closing dst.
-func copyFileTo(src string, dst *os.File) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	_, err = io.Copy(dst, in)
-	return err
 }
 
 // createUniqueFile creates a new file under dir named filename, failing

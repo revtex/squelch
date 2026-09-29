@@ -10,16 +10,33 @@ import (
 )
 
 type Querier interface {
+	// An admin's reset: the new hash, and whether the user must pick their own
+	// password at the next sign-in.
+	AdminSetUserPassword(ctx context.Context, arg AdminSetUserPasswordParams) error
+	CloseConnectionLog(ctx context.Context, arg CloseConnectionLogParams) error
+	// At startup: rows still open were left by a process that did not shut
+	// down cleanly. Their real end time is unknown.
+	CloseOpenConnectionLogs(ctx context.Context, arg CloseOpenConnectionLogsParams) error
 	CountActiveRefreshTokenFamilies(ctx context.Context, arg CountActiveRefreshTokenFamiliesParams) (int64, error)
 	CountCalls(ctx context.Context) (int64, error)
 	CountCallsFiltered(ctx context.Context, arg CountCallsFilteredParams) (int64, error)
+	CountCallsPerAPIKeySince(ctx context.Context, dateTime int64) ([]CountCallsPerAPIKeySinceRow, error)
+	CountCallsSince(ctx context.Context, dateTime int64) (int64, error)
+	CountConnectionLog(ctx context.Context, arg CountConnectionLogParams) (int64, error)
+	CountLogsSince(ctx context.Context, since int64) (int64, error)
+	CountTalkgroupsInGroup(ctx context.Context, groupID sql.NullInt64) (int64, error)
+	CountTalkgroupsPerSystem(ctx context.Context) ([]CountTalkgroupsPerSystemRow, error)
+	CountTalkgroupsWithTag(ctx context.Context, tagID sql.NullInt64) (int64, error)
+	CountTranscriptionJobs(ctx context.Context, since sql.NullInt64) (CountTranscriptionJobsRow, error)
 	CountTranscriptions(ctx context.Context) (int64, error)
+	CountUnitsPerSystem(ctx context.Context) ([]CountUnitsPerSystemRow, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (int64, error)
 	CreateBookmark(ctx context.Context, arg CreateBookmarkParams) (int64, error)
 	CreateCall(ctx context.Context, arg CreateCallParams) (int64, error)
 	CreateDirMonitor(ctx context.Context, arg CreateDirMonitorParams) (int64, error)
 	CreateDownstream(ctx context.Context, arg CreateDownstreamParams) (int64, error)
 	CreateGroup(ctx context.Context, label string) (int64, error)
+	CreateIPBlock(ctx context.Context, arg CreateIPBlockParams) (int64, error)
 	CreateLog(ctx context.Context, arg CreateLogParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSharedLink(ctx context.Context, arg CreateSharedLinkParams) (SharedLink, error)
@@ -34,22 +51,36 @@ type Querier interface {
 	DeleteAPIKey(ctx context.Context, id int64) error
 	DeleteBookmarkByCallAndUser(ctx context.Context, arg DeleteBookmarkByCallAndUserParams) error
 	DeleteCallBatch(ctx context.Context, id int64) error
+	DeleteConnectionLogBefore(ctx context.Context, connectedAt int64) error
 	DeleteDirMonitor(ctx context.Context, id int64) error
 	DeleteDownstream(ctx context.Context, id int64) error
-	DeleteExpiredRefreshTokens(ctx context.Context, arg DeleteExpiredRefreshTokensParams) error
+	DeleteExpiredIPBlocks(ctx context.Context, expiresAt sql.NullInt64) error
+	// Revoked rows are kept until they expire: they are the tombstones that let
+	// a replayed, already-rotated token be detected as reuse.
+	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error
 	DeleteGroup(ctx context.Context, id int64) error
+	DeleteIPBlock(ctx context.Context, id int64) error
+	DeleteLogsBefore(ctx context.Context, before int64) (int64, error)
 	DeleteSharedLink(ctx context.Context, id int64) error
 	DeleteSharedLinkByCallID(ctx context.Context, callID int64) error
 	DeleteSystem(ctx context.Context, id int64) error
 	DeleteTRInstance(ctx context.Context, id int64) error
 	DeleteTag(ctx context.Context, id int64) error
 	DeleteTalkgroup(ctx context.Context, id int64) error
+	DeleteTranscriptionJobsBefore(ctx context.Context, createdAt int64) (int64, error)
 	DeleteUnit(ctx context.Context, id int64) error
 	DeleteUser(ctx context.Context, id int64) error
 	DeleteWebhook(ctx context.Context, id int64) error
+	FinishTranscriptionJob(ctx context.Context, arg FinishTranscriptionJobParams) error
 	GetAPIKey(ctx context.Context, id int64) (ApiKey, error)
 	GetAPIKeyByKey(ctx context.Context, key string) (ApiKey, error)
-	// Returns aggregate stats: today's calls, this week's calls, total calls.
+	GetAPIKeyByPreviousKey(ctx context.Context, arg GetAPIKeyByPreviousKeyParams) (ApiKey, error)
+	// The account a signed-in device belongs to, if the device can still mint
+	// an access token. Backed by idx_refresh_tokens_family_id.
+	GetActiveSessionOwner(ctx context.Context, arg GetActiveSessionOwnerParams) (GetActiveSessionOwnerRow, error)
+	// Returns aggregate stats: today's calls, yesterday's calls up to the same
+	// time of day (a fair comparison while today is still running), this
+	// week's calls, total calls and when the newest call was made.
 	GetActivityStats(ctx context.Context, arg GetActivityStatsParams) (GetActivityStatsRow, error)
 	GetAppState(ctx context.Context) (AppState, error)
 	GetBookmarkByCallAndUser(ctx context.Context, arg GetBookmarkByCallAndUserParams) (Bookmark, error)
@@ -61,6 +92,7 @@ type Querier interface {
 	GetDownstream(ctx context.Context, id int64) (Downstream, error)
 	GetGroup(ctx context.Context, id int64) (Group, error)
 	GetGroupByLabel(ctx context.Context, label string) (Group, error)
+	GetIPBlock(ctx context.Context, id int64) (IpBlock, error)
 	GetOldestActiveRefreshTokenFamily(ctx context.Context, arg GetOldestActiveRefreshTokenFamilyParams) (string, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
@@ -78,6 +110,7 @@ type Querier interface {
 	// Returns top N busiest talkgroups (by call count) in a time range.
 	GetTopTalkgroups(ctx context.Context, arg GetTopTalkgroupsParams) ([]GetTopTalkgroupsRow, error)
 	GetTranscriptionByCallID(ctx context.Context, callID int64) (Transcription, error)
+	GetTranscriptionJob(ctx context.Context, callID int64) (TranscriptionJob, error)
 	GetUnit(ctx context.Context, id int64) (Unit, error)
 	GetUnitBySystemAndUnitID(ctx context.Context, arg GetUnitBySystemAndUnitIDParams) (Unit, error)
 	GetUser(ctx context.Context, id int64) (User, error)
@@ -85,9 +118,18 @@ type Querier interface {
 	GetWebhook(ctx context.Context, id int64) (Webhook, error)
 	HasCallAtTimestamp(ctx context.Context, arg HasCallAtTimestampParams) (int64, error)
 	HasCallInTimeRange(ctx context.Context, arg HasCallInTimeRangeParams) (int64, error)
+	InsertConnectionLog(ctx context.Context, arg InsertConnectionLogParams) (int64, error)
+	// Whether the device session is the Squelch app. Backed by
+	// idx_refresh_tokens_family_id.
+	IsNativeRefreshFamily(ctx context.Context, familyID string) (int64, error)
 	ListAPIKeys(ctx context.Context) ([]ApiKey, error)
 	ListActiveDirMonitors(ctx context.Context) ([]Dirmonitor, error)
 	ListActiveDownstreams(ctx context.Context) ([]Downstream, error)
+	// Every block still in force, newest first, with who added it.
+	ListActiveIPBlocks(ctx context.Context, now sql.NullInt64) ([]ListActiveIPBlocksRow, error)
+	// One row per signed-in device: the newest unrevoked, unexpired token of
+	// each family. user_id NULL lists every account.
+	ListActiveSessions(ctx context.Context, arg ListActiveSessionsParams) ([]ListActiveSessionsRow, error)
 	ListActiveWebhooks(ctx context.Context) ([]Webhook, error)
 	ListAllTalkgroups(ctx context.Context) ([]Talkgroup, error)
 	ListAllUnits(ctx context.Context) ([]Unit, error)
@@ -96,32 +138,61 @@ type Querier interface {
 	ListBookmarksByUser(ctx context.Context, userID sql.NullInt64) ([]Bookmark, error)
 	ListCalls(ctx context.Context, arg ListCallsParams) ([]Call, error)
 	ListCallsAsc(ctx context.Context, arg ListCallsAscParams) ([]Call, error)
+	ListConnectionLog(ctx context.Context, arg ListConnectionLogParams) ([]ConnectionLog, error)
 	ListDirMonitors(ctx context.Context) ([]Dirmonitor, error)
 	ListDownstreams(ctx context.Context) ([]Downstream, error)
 	ListEnabledTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListGroups(ctx context.Context) ([]Group, error)
+	ListGroupsWithUsage(ctx context.Context) ([]ListGroupsWithUsageRow, error)
+	// level_pattern and query_pattern are LIKE patterns; "%" matches anything.
+	ListLogs(ctx context.Context, arg ListLogsParams) ([]Log, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListSharedLinks(ctx context.Context) ([]ListSharedLinksRow, error)
 	ListSystems(ctx context.Context) ([]System, error)
 	ListTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListTags(ctx context.Context) ([]Tag, error)
+	ListTagsWithUsage(ctx context.Context) ([]ListTagsWithUsageRow, error)
 	ListTalkgroupsBySystem(ctx context.Context, systemID int64) ([]Talkgroup, error)
+	// Recent jobs with the call they belong to; an empty status lists them all.
+	ListTranscriptionJobs(ctx context.Context, arg ListTranscriptionJobsParams) ([]ListTranscriptionJobsRow, error)
 	ListUnitsBySystem(ctx context.Context, systemID int64) ([]Unit, error)
+	// One row per account that has ever signed in (within the token retention
+	// window): where it was last seen, when, and how many devices can still
+	// sign back in. Backed by idx_refresh_tokens_user_id.
+	ListUserSessionStats(ctx context.Context, now int64) ([]ListUserSessionStatsRow, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListWebhooks(ctx context.Context) ([]Webhook, error)
+	MoveTalkgroupsToGroup(ctx context.Context, arg MoveTalkgroupsToGroupParams) error
+	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
+	OldestCallTime(ctx context.Context) (int64, error)
+	RecordDownstreamDelivery(ctx context.Context, arg RecordDownstreamDeliveryParams) error
+	RecordWebhookDelivery(ctx context.Context, arg RecordWebhookDeliveryParams) error
+	RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, id int64) error
 	RevokeRefreshTokenFamily(ctx context.Context, familyID string) error
+	RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error
 	SetSetupComplete(ctx context.Context, setupComplete int64) error
+	SetTalkgroupGroup(ctx context.Context, arg SetTalkgroupGroupParams) error
+	SetTalkgroupLed(ctx context.Context, arg SetTalkgroupLedParams) error
+	SetTalkgroupTag(ctx context.Context, arg SetTalkgroupTagParams) error
+	SetUserPasswordNeedChange(ctx context.Context, arg SetUserPasswordNeedChangeParams) error
+	SystemCallStats(ctx context.Context, since int64) ([]SystemCallStatsRow, error)
+	TalkgroupCallStats(ctx context.Context, arg TalkgroupCallStatsParams) ([]TalkgroupCallStatsRow, error)
+	TouchAPIKeyUsed(ctx context.Context, arg TouchAPIKeyUsedParams) error
+	TouchSharedLinkOpened(ctx context.Context, arg TouchSharedLinkOpenedParams) error
 	TouchTRInstanceLastSeen(ctx context.Context, arg TouchTRInstanceLastSeenParams) error
 	TranscriptionStats(ctx context.Context, since int64) (TranscriptionStatsRow, error)
 	TranscriptionsByLanguage(ctx context.Context) ([]TranscriptionsByLanguageRow, error)
 	TranscriptionsByModel(ctx context.Context) ([]TranscriptionsByModelRow, error)
+	UnitCallStats(ctx context.Context, systemID int64) ([]UnitCallStatsRow, error)
 	UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) error
 	UpdateDirMonitor(ctx context.Context, arg UpdateDirMonitorParams) error
 	UpdateDownstream(ctx context.Context, arg UpdateDownstreamParams) error
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) error
 	UpdateSystem(ctx context.Context, arg UpdateSystemParams) error
+	UpdateSystemBlacklists(ctx context.Context, arg UpdateSystemBlacklistsParams) error
+	UpdateSystemOrder(ctx context.Context, arg UpdateSystemOrderParams) error
 	UpdateTRInstance(ctx context.Context, arg UpdateTRInstanceParams) (TrInstance, error)
 	UpdateTRInstancePassword(ctx context.Context, arg UpdateTRInstancePasswordParams) error
 	UpdateTag(ctx context.Context, arg UpdateTagParams) error
@@ -129,10 +200,13 @@ type Querier interface {
 	UpdateUnit(ctx context.Context, arg UpdateUnitParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error
 	UpdateUserTGSelection(ctx context.Context, arg UpdateUserTGSelectionParams) error
 	UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 	UpsertTalkgroup(ctx context.Context, arg UpsertTalkgroupParams) error
+	// A call handed to the transcriber (again): back to queued with a clean slate.
+	UpsertTranscriptionJob(ctx context.Context, arg UpsertTranscriptionJobParams) error
 	UpsertUnit(ctx context.Context, arg UpsertUnitParams) error
 }
 

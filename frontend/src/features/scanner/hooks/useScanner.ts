@@ -60,6 +60,10 @@ export function useScanner() {
   // LIVE and BACKGROUND are two ways of listening, so picking one drops
   // the other rather than leaving a control that looks active but is not.
   const doToggleLive = useCallback(() => {
+    // Touching LIVE clears a pause (see the reducer), so the player has to
+    // be let go of too. Left paused it would queue arriving calls instead
+    // of playing them, and the button would say Pause over silence.
+    audioPlayer.resume();
     if (backgroundAudio) {
       streamPlayer.stop();
       audioPlayer.setSuspended(false);

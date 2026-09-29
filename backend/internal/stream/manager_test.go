@@ -3,9 +3,12 @@ package stream
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/revtex/squelch/internal/connections"
 )
 
 // makeFrame builds a valid MPEG-2 Layer III frame header for the canonical
@@ -205,7 +208,7 @@ func TestServe_PrimesBufferThenStopsOnCancel(t *testing.T) {
 
 	var out syncBuffer
 	done := make(chan error, 1)
-	go func() { done <- m.Serve(ctx, 5, "sid-test", &out, nil) }()
+	go func() { done <- m.Serve(ctx, connections.Conn{UserID: 5}, "sid-test", &out, nil) }()
 
 	// The prime is written before pacing starts, so it lands immediately.
 	deadline := time.After(2 * time.Second)
@@ -239,7 +242,7 @@ func TestServe_PrimesBufferThenStopsOnCancel(t *testing.T) {
 
 func TestServe_RequiresStart(t *testing.T) {
 	m := New(nil, nil)
-	if err := m.Serve(context.Background(), 1, "", &syncBuffer{}, nil); err == nil {
+	if err := m.Serve(context.Background(), connections.Conn{UserID: 1}, "", &syncBuffer{}, nil); err == nil {
 		t.Error("Serve succeeded before Start; it must refuse to stream without silence")
 	}
 }
@@ -294,7 +297,7 @@ func TestServe_CuesCallAtItsActualStreamOffset(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out syncBuffer
-	go func() { _ = m.Serve(ctx, 7, "tab-a", &out, nil) }()
+	go func() { _ = m.Serve(ctx, connections.Conn{UserID: 7}, "tab-a", &out, nil) }()
 
 	// Let the prime drain so the call lands during paced streaming.
 	time.Sleep(200 * time.Millisecond)
@@ -337,10 +340,105 @@ func TestServe_NoCuePublisherIsSafe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var out syncBuffer
-	go func() { _ = m.Serve(ctx, 1, "", &out, nil) }()
+	go func() { _ = m.Serve(ctx, connections.Conn{UserID: 1}, "", &out, nil) }()
 	time.Sleep(150 * time.Millisecond)
 
 	// Must not panic with no publisher registered.
 	m.Notify(context.Background(), 1)
 	time.Sleep(150 * time.Millisecond)
+}
+
+// Revoking a session must end the open stream: a disabled user or a logged-out
+// token keeps no live audio feed.
+func TestDisconnect_EndsMatchingStreamsOnly(t *testing.T) {
+	tests := []struct {
+		name       string
+		disconnect func(m *Manager)
+	}{
+		{name: "by user", disconnect: func(m *Manager) { m.DisconnectUser(5) }},
+		{name: "by jti", disconnect: func(m *Manager) { m.DisconnectJTI("jti-a") }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestManager(t, nil, nil)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			target := make(chan error, 1)
+			other := make(chan error, 1)
+			go func() { target <- m.Serve(ctx, connections.Conn{UserID: 5, JTI: "jti-a"}, "", &syncBuffer{}, nil) }()
+			go func() { other <- m.Serve(ctx, connections.Conn{UserID: 6, JTI: "jti-b"}, "", &syncBuffer{}, nil) }()
+
+			deadline := time.After(2 * time.Second)
+			for m.ListenerCount() != 2 {
+				select {
+				case <-deadline:
+					t.Fatalf("ListenerCount = %d, want 2", m.ListenerCount())
+				case <-time.After(5 * time.Millisecond):
+				}
+			}
+
+			tc.disconnect(m)
+
+			select {
+			case err := <-target:
+				if !errors.Is(err, context.Canceled) {
+					t.Errorf("Serve returned %v, want context.Canceled", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("revoked stream kept running")
+			}
+			select {
+			case err := <-other:
+				t.Fatalf("unrelated stream ended: %v", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+			if m.ListenerCount() != 1 {
+				t.Errorf("ListenerCount = %d, want 1", m.ListenerCount())
+			}
+		})
+	}
+}
+
+// A stream shows up in the connection list while it plays, can be ended from
+// there, and leaves the list when it ends.
+func TestServe_ReportsToConnectionRegistry(t *testing.T) {
+	m := newTestManager(t, nil, nil)
+	reg := connections.New()
+	m.SetConnections(reg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	who := connections.Conn{UserID: 9, Username: "bob", JTI: "jti-9", FamilyID: "fam-9"}
+	done := make(chan error, 1)
+	go func() { done <- m.Serve(ctx, who, "sid", &syncBuffer{}, nil) }()
+
+	deadline := time.After(2 * time.Second)
+	for reg.Len() != 1 {
+		select {
+		case <-deadline:
+			t.Fatalf("registry Len = %d, want 1", reg.Len())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	got := reg.List()[0]
+	if got.Kind != connections.KindStream || got.ID == "" || got.UserID != 9 ||
+		got.Username != "bob" || got.FamilyID != "fam-9" {
+		t.Fatalf("registry entry = %+v", got)
+	}
+
+	if !reg.Close(got.ID) {
+		t.Fatal("Close = false, want true")
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Serve returned %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream kept running after registry Close")
+	}
+	if reg.Len() != 0 {
+		t.Errorf("registry Len = %d after the stream ended, want 0", reg.Len())
+	}
 }

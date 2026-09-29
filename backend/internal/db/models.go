@@ -9,13 +9,18 @@ import (
 )
 
 type ApiKey struct {
-	ID            int64          `db:"id" json:"id"`
-	Key           string         `db:"key" json:"key"`
-	Ident         sql.NullString `db:"ident" json:"ident"`
-	Disabled      int64          `db:"disabled" json:"disabled"`
-	SystemsJson   sql.NullString `db:"systems_json" json:"systems_json"`
-	CallRateLimit sql.NullInt64  `db:"call_rate_limit" json:"call_rate_limit"`
-	Order         int64          `db:"order" json:"order"`
+	ID                   int64          `db:"id" json:"id"`
+	Key                  string         `db:"key" json:"key"`
+	Ident                sql.NullString `db:"ident" json:"ident"`
+	Disabled             int64          `db:"disabled" json:"disabled"`
+	SystemsJson          sql.NullString `db:"systems_json" json:"systems_json"`
+	CallRateLimit        sql.NullInt64  `db:"call_rate_limit" json:"call_rate_limit"`
+	Order                int64          `db:"order" json:"order"`
+	CreatedAt            int64          `db:"created_at" json:"created_at"`
+	LastUsedAt           sql.NullInt64  `db:"last_used_at" json:"last_used_at"`
+	LastUsedIp           sql.NullString `db:"last_used_ip" json:"last_used_ip"`
+	PreviousKey          sql.NullString `db:"previous_key" json:"previous_key"`
+	PreviousKeyExpiresAt sql.NullInt64  `db:"previous_key_expires_at" json:"previous_key_expires_at"`
 }
 
 type AppState struct {
@@ -51,6 +56,22 @@ type Call struct {
 	ErrorCount      sql.NullInt64  `db:"error_count" json:"error_count"`
 	SpikeCount      sql.NullInt64  `db:"spike_count" json:"spike_count"`
 	TalkerAlias     sql.NullString `db:"talker_alias" json:"talker_alias"`
+	ApiKeyID        sql.NullInt64  `db:"api_key_id" json:"api_key_id"`
+}
+
+type ConnectionLog struct {
+	ID               int64          `db:"id" json:"id"`
+	Kind             string         `db:"kind" json:"kind"`
+	UserID           sql.NullInt64  `db:"user_id" json:"user_id"`
+	Username         sql.NullString `db:"username" json:"username"`
+	Ip               string         `db:"ip" json:"ip"`
+	CountryCode      sql.NullString `db:"country_code" json:"country_code"`
+	UserAgent        sql.NullString `db:"user_agent" json:"user_agent"`
+	Native           int64          `db:"native" json:"native"`
+	FamilyID         sql.NullString `db:"family_id" json:"family_id"`
+	ConnectedAt      int64          `db:"connected_at" json:"connected_at"`
+	DisconnectedAt   sql.NullInt64  `db:"disconnected_at" json:"disconnected_at"`
+	DisconnectReason sql.NullString `db:"disconnect_reason" json:"disconnect_reason"`
 }
 
 type Dirmonitor struct {
@@ -76,11 +97,26 @@ type Downstream struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
+	LastAt      sql.NullInt64  `db:"last_at" json:"last_at"`
+	LastOk      int64          `db:"last_ok" json:"last_ok"`
+	LastStatus  int64          `db:"last_status" json:"last_status"`
+	LastError   string         `db:"last_error" json:"last_error"`
+	LastOkAt    sql.NullInt64  `db:"last_ok_at" json:"last_ok_at"`
 }
 
 type Group struct {
 	ID    int64  `db:"id" json:"id"`
 	Label string `db:"label" json:"label"`
+}
+
+type IpBlock struct {
+	ID        int64         `db:"id" json:"id"`
+	Cidr      string        `db:"cidr" json:"cidr"`
+	Reason    string        `db:"reason" json:"reason"`
+	CreatedBy sql.NullInt64 `db:"created_by" json:"created_by"`
+	CreatedAt int64         `db:"created_at" json:"created_at"`
+	ExpiresAt sql.NullInt64 `db:"expires_at" json:"expires_at"`
 }
 
 type Log struct {
@@ -101,13 +137,17 @@ type PushSubscription struct {
 }
 
 type RefreshToken struct {
-	ID        int64  `db:"id" json:"id"`
-	UserID    int64  `db:"user_id" json:"user_id"`
-	TokenHash string `db:"token_hash" json:"token_hash"`
-	FamilyID  string `db:"family_id" json:"family_id"`
-	ExpiresAt int64  `db:"expires_at" json:"expires_at"`
-	Revoked   int64  `db:"revoked" json:"revoked"`
-	CreatedAt int64  `db:"created_at" json:"created_at"`
+	ID         int64          `db:"id" json:"id"`
+	UserID     int64          `db:"user_id" json:"user_id"`
+	TokenHash  string         `db:"token_hash" json:"token_hash"`
+	FamilyID   string         `db:"family_id" json:"family_id"`
+	ExpiresAt  int64          `db:"expires_at" json:"expires_at"`
+	Revoked    int64          `db:"revoked" json:"revoked"`
+	CreatedAt  int64          `db:"created_at" json:"created_at"`
+	Ip         sql.NullString `db:"ip" json:"ip"`
+	UserAgent  sql.NullString `db:"user_agent" json:"user_agent"`
+	Native     int64          `db:"native" json:"native"`
+	SignedInAt sql.NullInt64  `db:"signed_in_at" json:"signed_in_at"`
 }
 
 type Setting struct {
@@ -116,12 +156,14 @@ type Setting struct {
 }
 
 type SharedLink struct {
-	ID        int64         `db:"id" json:"id"`
-	CallID    int64         `db:"call_id" json:"call_id"`
-	UserID    int64         `db:"user_id" json:"user_id"`
-	Token     string        `db:"token" json:"token"`
-	CreatedAt int64         `db:"created_at" json:"created_at"`
-	ExpiresAt sql.NullInt64 `db:"expires_at" json:"expires_at"`
+	ID           int64         `db:"id" json:"id"`
+	CallID       int64         `db:"call_id" json:"call_id"`
+	UserID       int64         `db:"user_id" json:"user_id"`
+	Token        string        `db:"token" json:"token"`
+	CreatedAt    int64         `db:"created_at" json:"created_at"`
+	ExpiresAt    sql.NullInt64 `db:"expires_at" json:"expires_at"`
+	Opens        int64         `db:"opens" json:"opens"`
+	LastOpenedAt sql.NullInt64 `db:"last_opened_at" json:"last_opened_at"`
 }
 
 type System struct {
@@ -181,6 +223,17 @@ type Transcription struct {
 	CreatedAt  int64          `db:"created_at" json:"created_at"`
 }
 
+type TranscriptionJob struct {
+	ID         int64          `db:"id" json:"id"`
+	CallID     int64          `db:"call_id" json:"call_id"`
+	Status     string         `db:"status" json:"status"`
+	Error      sql.NullString `db:"error" json:"error"`
+	Model      sql.NullString `db:"model" json:"model"`
+	DurationMs sql.NullInt64  `db:"duration_ms" json:"duration_ms"`
+	CreatedAt  int64          `db:"created_at" json:"created_at"`
+	FinishedAt sql.NullInt64  `db:"finished_at" json:"finished_at"`
+}
+
 type Unit struct {
 	ID       int64          `db:"id" json:"id"`
 	SystemID int64          `db:"system_id" json:"system_id"`
@@ -200,6 +253,7 @@ type User struct {
 	Limit              sql.NullInt64  `db:"limit" json:"limit"`
 	PasswordNeedChange int64          `db:"password_need_change" json:"password_need_change"`
 	TgSelectionJson    sql.NullString `db:"tg_selection_json" json:"tg_selection_json"`
+	PreferencesJson    sql.NullString `db:"preferences_json" json:"preferences_json"`
 	CreatedAt          int64          `db:"created_at" json:"created_at"`
 	UpdatedAt          int64          `db:"updated_at" json:"updated_at"`
 }
@@ -212,4 +266,10 @@ type Webhook struct {
 	SystemsJson sql.NullString `db:"systems_json" json:"systems_json"`
 	Disabled    int64          `db:"disabled" json:"disabled"`
 	Order       int64          `db:"order" json:"order"`
+	Label       string         `db:"label" json:"label"`
+	LastAt      sql.NullInt64  `db:"last_at" json:"last_at"`
+	LastOk      int64          `db:"last_ok" json:"last_ok"`
+	LastStatus  int64          `db:"last_status" json:"last_status"`
+	LastError   string         `db:"last_error" json:"last_error"`
+	LastOkAt    sql.NullInt64  `db:"last_ok_at" json:"last_ok_at"`
 }

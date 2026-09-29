@@ -409,7 +409,7 @@ func TestIngestCall_SDRTrunk_SystemLabelResolvesSystem(t *testing.T) {
 
 	svc := &Service{queries: queries, processor: processor, hub: nil}
 
-	err = svc.ingestCall(ctx, db.Dirmonitor{ID: 2, Directory: watchDir, Type: "sdr-trunk"}, &ParsedCall{
+	_, err = svc.ingestCall(ctx, db.Dirmonitor{ID: 2, Directory: watchDir, Type: "sdr-trunk"}, &ParsedCall{
 		AudioFilePath: audioPath,
 		DateTime:      time.Unix(1700000000, 0).UTC(),
 		SystemID:      0,

@@ -39,3 +39,15 @@ WHERE id = :id;
 
 -- name: DeleteSystem :exec
 DELETE FROM systems WHERE id = ?;
+
+-- name: UpdateSystemOrder :exec
+UPDATE systems SET "order" = ? WHERE id = ?;
+
+-- name: UpdateSystemBlacklists :exec
+UPDATE systems SET blacklists_json = ? WHERE id = ?;
+
+-- name: CountTalkgroupsPerSystem :many
+SELECT system_id, COUNT(*) AS talkgroups FROM talkgroups GROUP BY system_id;
+
+-- name: CountUnitsPerSystem :many
+SELECT system_id, COUNT(*) AS units FROM units GROUP BY system_id;

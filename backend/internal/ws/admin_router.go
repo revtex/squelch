@@ -35,31 +35,54 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"activity.chart":          c.adaptClientOp(c.opActivityChart),
 		"activity.top-talkgroups": c.adaptClientOp(c.opTopTalkgroups),
 		"logs.query":              c.adaptClientOp(c.opLogsQuery),
+		"logs.counts":             c.adaptClientOp(c.opLogsCounts),
 		"logs.level":              c.adaptClientOp(c.opLogsLevel),
+		"logs.audit":              o.LogsAudit,
 
 		// Users
-		"users.list":   o.UsersList,
-		"users.create": o.UsersCreate,
-		"users.update": o.UsersUpdate,
-		"users.delete": o.UsersDelete,
+		"users.list":     o.UsersList,
+		"users.create":   o.UsersCreate,
+		"users.update":   o.UsersUpdate,
+		"users.delete":   o.UsersDelete,
+		"users.signout":  o.UsersSignout,
+		"lockouts.list":  o.LockoutsList,
+		"lockouts.clear": o.LockoutsClear,
+
+		// Connections
+		"connections.list":       o.ConnectionsList,
+		"connections.history":    o.ConnectionsHistory,
+		"connections.disconnect": o.ConnectionsDisconnect,
+		"sessions.list":          o.SessionsList,
+		"sessions.revoke":        o.SessionsRevoke,
+		"ipblocks.list":          o.IPBlocksList,
+		"ipblocks.create":        o.IPBlocksCreate,
+		"ipblocks.delete":        o.IPBlocksDelete,
 
 		// Systems
-		"systems.list":   o.SystemsList,
-		"systems.create": o.SystemsCreate,
-		"systems.update": o.SystemsUpdate,
-		"systems.delete": o.SystemsDelete,
+		"systems.list":    o.SystemsList,
+		"systems.create":  o.SystemsCreate,
+		"systems.update":  o.SystemsUpdate,
+		"systems.delete":  o.SystemsDelete,
+		"systems.reorder": o.SystemsReorder,
+		"systems.block":   o.SystemsBlock,
+		"systems.unblock": o.SystemsUnblock,
 
 		// Talkgroups
 		"talkgroups.list":   o.TalkgroupsList,
 		"talkgroups.create": o.TalkgroupsCreate,
 		"talkgroups.update": o.TalkgroupsUpdate,
 		"talkgroups.delete": o.TalkgroupsDelete,
+		"talkgroups.bulk":   o.TalkgroupsBulk,
+		"talkgroups.import": o.TalkgroupsImport,
+		"groups.import":     o.GroupsImport,
+		"tags.import":       o.TagsImport,
 
 		// Units
 		"units.list":   o.UnitsList,
 		"units.create": o.UnitsCreate,
 		"units.update": o.UnitsUpdate,
 		"units.delete": o.UnitsDelete,
+		"units.import": o.UnitsImport,
 
 		// Groups
 		"groups.list":   o.GroupsList,
@@ -78,28 +101,36 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"apikeys.create": o.APIKeysCreate,
 		"apikeys.update": o.APIKeysUpdate,
 		"apikeys.delete": o.APIKeysDelete,
+		"apikeys.rotate": o.APIKeysRotate,
 
 		// DirMonitors
-		"dirmonitors.list":   o.DirMonitorsList,
-		"dirmonitors.create": o.DirMonitorsCreate,
-		"dirmonitors.update": o.DirMonitorsUpdate,
-		"dirmonitors.delete": o.DirMonitorsDelete,
+		"dirmonitors.list":      o.DirMonitorsList,
+		"dirmonitors.create":    o.DirMonitorsCreate,
+		"dirmonitors.update":    o.DirMonitorsUpdate,
+		"dirmonitors.delete":    o.DirMonitorsDelete,
+		"dirmonitors.restart":   o.DirMonitorsRestart,
+		"dirmonitors.test-mask": o.DirMonitorsTestMask,
 
 		// Downstreams
 		"downstreams.list":   o.DownstreamsList,
 		"downstreams.create": o.DownstreamsCreate,
 		"downstreams.update": o.DownstreamsUpdate,
 		"downstreams.delete": o.DownstreamsDelete,
+		"downstreams.test":   o.DownstreamsTest,
 
 		// Webhooks
 		"webhooks.list":   o.WebhooksList,
 		"webhooks.create": o.WebhooksCreate,
 		"webhooks.update": o.WebhooksUpdate,
 		"webhooks.delete": o.WebhooksDelete,
+		"webhooks.test":   o.WebhooksTest,
+		"webhooks.sample": o.WebhooksSample,
 
 		// Shared Links
-		"shared-links.list":   o.SharedLinksList,
-		"shared-links.delete": o.SharedLinksDelete,
+		"shared-links.list":           o.SharedLinksList,
+		"shared-links.delete":         o.SharedLinksDelete,
+		"shared-links.restore":        o.SharedLinksRestore,
+		"shared-links.revoke-expired": o.SharedLinksRevokeExpired,
 
 		// Config
 		"config.get":    o.ConfigGet,
@@ -116,7 +147,9 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"export.tags":       o.ExportTags,
 
 		// Import
-		"import.config": o.ImportConfig,
+		"import.config":  o.ImportConfig,
+		"backup.preview": o.BackupPreview,
+		"backup.counts":  o.BackupCounts,
 
 		// RadioReference
 		"radioreference.apply": o.RadioReferenceApply,
@@ -127,6 +160,11 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"transcription.download": o.TranscriptionDownload,
 		"transcription.delete":   o.TranscriptionDelete,
 		"transcription.stats":    o.TranscriptionStats,
+		"transcription.test":     o.TranscriptionTest,
+		"transcription.jobs":     o.TranscriptionJobs,
+		"transcription.retry":    o.TranscriptionRetry,
+
+		"transcription.download.cancel": o.TranscriptionDownloadCancel,
 	}
 }
 

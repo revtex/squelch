@@ -1,180 +1,369 @@
-import { Trash2, ExternalLink } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Copy } from "lucide-react";
 import {
-  useGetSharedLinksQuery,
+  COUNT,
+  DataTable,
+  DetailsPanel,
+  FilterChips,
+  InlineConfirm,
+  PageHeader,
+  SearchBox,
+  formatAgo,
+  formatDateTime,
+  formatDay,
+  formatUntil,
+  formatWhen,
+  plural,
   useDeleteSharedLinkMutation,
+  useDetails,
+  useGetConfigQuery,
+  useGetSharedLinksQuery,
+  useHour12,
+  useRestoreSharedLinkMutation,
+  useRevokeExpiredSharedLinksMutation,
+  useToast,
+  type Column,
 } from "@/features/admin/_shell";
+import type { SharedLinkAdmin } from "@/types";
 
-function formatDate(unix: number): string {
-  return new Date(unix * 1000).toLocaleString();
+type Filter = "all" | "active" | "expired";
+
+type Panel = { key: string; kind: "bulk" };
+
+function callTitle(l: SharedLinkAdmin): string {
+  return l.talkgroupLabel || l.talkgroupName || `Call ${l.callId}`;
 }
 
-function formatDuration(secs: number): string {
-  if (!secs) return "-";
-  const minutes = Math.floor(secs / 60);
-  const seconds = secs % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+function linkUrl(l: SharedLinkAdmin): string {
+  return `${window.location.origin}/call/${l.token}`;
 }
 
+/** "0:41", "1:12", "12:05". */
+function clock(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function matches(l: SharedLinkAdmin, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return `${l.talkgroupLabel} ${l.talkgroupName} ${l.systemLabel} ${l.sharedBy}`
+    .toLowerCase()
+    .includes(needle);
+}
+
+function message(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
+/** Calls listeners have shared by link: who, when, how often opened, and a way to take a link back. */
 export default function SharedLinksPanel() {
   const { data: links, isLoading, isError } = useGetSharedLinksQuery();
+  const { data: config } = useGetConfigQuery();
   const [deleteLink] = useDeleteSharedLinkMutation();
+  const [restoreLink] = useRestoreSharedLinkMutation();
+  const [revokeExpired, { isLoading: revokingExpired }] = useRevokeExpiredSharedLinksMutation();
+  const toast = useToast();
+  const hour12 = useHour12();
 
-  const handleDelete = (id: number) => {
-    if (
-      confirm(
-        "Remove this shared link? The call will no longer be accessible via its share URL and will become eligible for pruning.",
-      )
-    ) {
-      void deleteLink(id);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const panel = useDetails<Panel>();
+  const p = panel.selected;
+
+  const all = useMemo(() => links ?? [], [links]);
+  const expiredCount = all.filter((l) => l.expired).length;
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (l) =>
+          (filter === "all" || (filter === "expired") === l.expired) && matches(l, query),
+      ),
+    [all, filter, query],
+  );
+  const expiryDays = Number(
+    config?.settings.find((s) => s.key === "sharedLinkExpiry")?.value ?? "0",
+  );
+
+  const copy = async (l: SharedLinkAdmin) => {
+    try {
+      await navigator.clipboard.writeText(linkUrl(l));
+      toast.success("Link copied.");
+    } catch {
+      toast.error("Could not copy. Open the link and copy it from the address bar.");
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <span className="loading loading-spinner loading-lg" />
-      </div>
-    );
-  }
+  const undoRevoke = (l: SharedLinkAdmin) => async () => {
+    try {
+      await restoreLink({
+        callId: l.callId,
+        userId: l.userId,
+        token: l.token,
+        createdAt: l.createdAt,
+        expiresAt: l.expiresAt,
+      }).unwrap();
+    } catch (e) {
+      toast.error(message(e, "Could not put the link back."));
+    }
+  };
 
-  if (isError) {
-    return (
-      <div className="alert alert-error">Failed to load shared links.</div>
-    );
-  }
+  const revokeOne = async (l: SharedLinkAdmin) => {
+    try {
+      await deleteLink(l.id).unwrap();
+      toast.success(
+        l.expired ? `Removed the link to ${callTitle(l)}.` : `Revoked the link to ${callTitle(l)}.`,
+        { undo: undoRevoke(l) },
+      );
+    } catch (e) {
+      toast.error(message(e, "Could not revoke the link."));
+    }
+  };
+
+  const revokeSelected = async () => {
+    setBusy(true);
+    setError(null);
+    const chosen = all.filter((l) => selected.has(l.id));
+    let done = 0;
+    let failed: string | null = null;
+    for (const l of chosen) {
+      try {
+        await deleteLink(l.id).unwrap();
+        done++;
+      } catch (e) {
+        failed = message(e, "Could not revoke a link.");
+      }
+    }
+    setBusy(false);
+    if (failed && done === 0) {
+      setError(failed);
+      return;
+    }
+    setSelected(new Set());
+    panel.close();
+    toast.success(`Revoked ${plural(done, "link")}.`);
+    if (failed) toast.error(failed);
+  };
+
+  const revokeAllExpired = async () => {
+    try {
+      const { revoked } = await revokeExpired().unwrap();
+      toast.success(
+        revoked === 0 ? "No expired links to revoke." : `Revoked ${plural(revoked, "expired link")}.`,
+      );
+    } catch (e) {
+      toast.error(message(e, "Could not revoke expired links."));
+    }
+  };
+
+  const columns: Column<SharedLinkAdmin>[] = [
+    {
+      id: "call",
+      header: "Call",
+      phone: "title",
+      sortValue: (l) => -l.dateTime,
+      cell: (l) => (
+        <>
+          <span>
+            <b className="font-semibold">{callTitle(l)}</b>
+            {" · "}
+            <span title={formatDateTime(l.dateTime)}>{formatWhen(l.dateTime, { hour12 })}</span>
+            {" · "}
+            <span className="tabular-nums">{clock(l.duration / 1000)}</span>
+          </span>
+          <span className="block text-xs text-base-content-dim">
+            {l.systemLabel || "Unknown system"}
+            {l.talkgroupName && l.talkgroupLabel ? ` · ${l.talkgroupName}` : ""}
+          </span>
+        </>
+      ),
+    },
+    {
+      id: "shared",
+      header: "Shared by",
+      className: "whitespace-nowrap",
+      sortValue: (l) => -l.createdAt,
+      cell: (l) => (
+        <span title={formatDateTime(l.createdAt)}>
+          {l.sharedBy || "unknown"} · {formatAgo(l.createdAt)}
+        </span>
+      ),
+    },
+    {
+      id: "opens",
+      header: "Opened",
+      sortValue: (l) => l.opens,
+      cell: (l) => (
+        <span
+          className="tabular-nums"
+          title={l.lastOpenedAt ? `Last opened ${formatDateTime(l.lastOpenedAt)}` : undefined}
+        >
+          {plural(l.opens, "time")}
+        </span>
+      ),
+    },
+    {
+      id: "expires",
+      header: "Expires",
+      sortValue: (l) => l.effectiveExpiresAt ?? Number.MAX_SAFE_INTEGER,
+      cell: (l) =>
+        l.expired ? (
+          <span className="badge badge-neutral">
+            expired{l.effectiveExpiresAt ? ` ${formatDay(l.effectiveExpiresAt)}` : ""}
+          </span>
+        ) : l.effectiveExpiresAt ? (
+          <span title={formatDateTime(l.effectiveExpiresAt)}>
+            {formatUntil(l.effectiveExpiresAt)}
+          </span>
+        ) : (
+          "Never"
+        ),
+    },
+    {
+      id: "actions",
+      header: "",
+      align: "right",
+      phone: "wide",
+      cell: (l) => (
+        <span className="inline-flex justify-end gap-1.5 max-sm:flex max-sm:flex-wrap max-sm:justify-start">
+          {!l.expired && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              aria-label={`Copy the link to ${callTitle(l)}`}
+              onClick={() => void copy(l)}
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              Copy link
+            </button>
+          )}
+          <a
+            href={`/call/${l.token}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost btn-sm"
+            aria-label={`Listen to ${callTitle(l)}`}
+          >
+            Listen
+          </a>
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${l.expired ? "" : "text-error"}`}
+            aria-label={`${l.expired ? "Remove" : "Revoke"} the link to ${callTitle(l)}`}
+            onClick={() => void revokeOne(l)}
+          >
+            {l.expired ? "Remove" : "Revoke"}
+          </button>
+        </span>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Shared Links</h2>
-        <span className="badge badge-neutral">{links?.length ?? 0} total</span>
+    <div className="flex flex-col gap-[18px]">
+      <PageHeader
+        title="Shared links"
+        subtitle="Calls listeners have shared publicly. A shared call is kept past the prune window until its link expires or is revoked."
+        actions={
+          expiredCount > 0 ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={revokingExpired}
+              onClick={() => void revokeAllExpired()}
+            >
+              Revoke expired
+              <span className={COUNT}>{expiredCount}</span>
+            </button>
+          ) : undefined
+        }
+      />
+
+      {isError && (
+        <div role="alert" className="alert alert-error">
+          Failed to load shared links.
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          label="Filter by talkgroup, system or user"
+          className="w-full md:min-w-[200px] md:max-w-[340px] md:flex-[1_1_240px]"
+        />
+        <FilterChips
+          label="Show"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { id: "all", label: "All", count: all.length },
+            { id: "active", label: "Active", count: all.length - expiredCount },
+            { id: "expired", label: "Expired", count: expiredCount },
+          ]}
+        />
       </div>
 
-      {!links?.length ? (
-        <div className="text-base-content/60 py-8 text-center">
-          No calls have been shared yet.
-        </div>
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="hidden md:block overflow-x-auto rounded-xl border border-base-300 bg-base-200/40">
-            <table className="table table-zebra w-full">
-              <thead>
-                <tr>
-                  <th>System</th>
-                  <th>Talkgroup</th>
-                  <th>Call Date</th>
-                  <th>Duration</th>
-                  <th>Shared By</th>
-                  <th>Shared At</th>
-                  <th>Expires</th>
-                  <th className="w-20">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {links.map((link) => (
-                  <tr key={link.id}>
-                    <td>{link.systemLabel || "-"}</td>
-                    <td>
-                      <div>{link.talkgroupLabel || "-"}</div>
-                      {link.talkgroupName && (
-                        <span className="text-xs text-base-content/60">
-                          {link.talkgroupName}
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap text-sm">
-                      {formatDate(link.dateTime)}
-                    </td>
-                    <td className="whitespace-nowrap font-medium">
-                      {formatDuration(link.duration)}
-                    </td>
-                    <td className="truncate">{link.sharedBy || "-"}</td>
-                    <td className="whitespace-nowrap text-sm">
-                      {formatDate(link.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap text-sm">
-                      {link.expiresAt ? (
-                        formatDate(link.expiresAt)
-                      ) : (
-                        <span className="text-base-content/40">Never</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <a
-                          href={`/call/${link.token}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-ghost btn-xs btn-square"
-                          title="Open shared link"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                        <button
-                          className="btn btn-ghost btn-xs btn-square text-error"
-                          onClick={() => handleDelete(link.id)}
-                          title="Revoke shared link"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <DataTable
+        caption="Shared links"
+        columns={columns}
+        rows={rows}
+        rowKey={(l) => l.id}
+        rowLabel={callTitle}
+        loading={isLoading}
+        empty={all.length === 0 ? "No calls have been shared yet." : "No link matches that search."}
+        defaultSort={{ id: "shared", dir: "asc" }}
+        selected={selected}
+        onSelectedChange={setSelected}
+        bulkActions={
+          <button
+            type="button"
+            className="btn btn-sm btn-error"
+            onClick={() => {
+              setError(null);
+              panel.open({ key: "bulk", kind: "bulk" });
+            }}
+          >
+            Revoke
+          </button>
+        }
+        rowClassName={(l) => (l.expired ? "opacity-60" : "")}
+      />
 
-          {/* Mobile card list */}
-          <div className="md:hidden space-y-3">
-            {links.map((link) => (
-              <div
-                key={link.id}
-                className="card bg-base-200 card-body p-3 gap-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {link.systemLabel || "-"}
-                    </div>
-                    <div className="text-xs text-base-content/60 truncate">
-                      {link.talkgroupLabel || "-"}
-                      {link.talkgroupName && ` — ${link.talkgroupName}`}
-                    </div>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <a
-                      href={`/call/${link.token}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-ghost btn-xs btn-square"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                    <button
-                      className="btn btn-ghost btn-xs btn-square text-error"
-                      onClick={() => handleDelete(link.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-base-content/60">
-                  <span>{formatDate(link.dateTime)}</span>
-                  <span className="font-medium text-base-content">
-                    {formatDuration(link.duration)}
-                  </span>
-                  <span>by {link.sharedBy || "-"}</span>
-                  <span>
-                    Expires:{" "}
-                    {link.expiresAt ? formatDate(link.expiresAt) : "Never"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
+      <p className="text-xs text-base-content-dim">
+        {expiryDays > 0
+          ? `Links expire after ${plural(expiryDays, "day")}.`
+          : "Links don't expire unless their own share set a date."}{" "}
+        <Link to="/admin/settings?q=Links%20expire" className="link text-secondary">
+          Change in Settings
+        </Link>
+        .
+      </p>
+
+      {p?.kind === "bulk" && (
+        <DetailsPanel
+          title={`${plural(selected.size, "link")} selected`}
+          onClose={panel.close}
+        >
+          {error && (
+            <div role="alert" className="alert alert-error">
+              {error}
+            </div>
+          )}
+          <InlineConfirm
+            title="Revoke these links?"
+            text="Anyone who has them loses access to those calls. The calls are kept."
+            button="Revoke"
+            danger
+            busy={busy}
+            onCancel={panel.close}
+            onConfirm={() => void revokeSelected()}
+          />
+        </DetailsPanel>
       )}
     </div>
   );

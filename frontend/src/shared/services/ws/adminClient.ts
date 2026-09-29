@@ -9,6 +9,14 @@ import type {
 type TokenExpiredCallback = () => Promise<string | null>;
 type EventCallback = (topic: string, data: unknown, at: number) => void;
 
+/**
+ * Where the admin socket is: `connected` once the server accepted the token,
+ * `connecting` while a handshake or a reconnect wait is in progress, and
+ * `offline` after an intentional close. Reported through the `__status__`
+ * topic so the chrome can show it.
+ */
+export type AdminWsStatus = "connecting" | "connected" | "offline";
+
 interface PendingRequest {
   resolve: (data: unknown) => void;
   reject: (error: Error) => void;
@@ -29,6 +37,7 @@ class AdminWsClient {
   private eventListeners = new Map<string, Set<EventCallback>>();
   private tokenExpiredCallback: TokenExpiredCallback | null = null;
   private connected = false;
+  private status: AdminWsStatus = "offline";
   private wakeHandlersBound = false;
 
   connect(dispatch: AppDispatch, token: string): void {
@@ -37,6 +46,19 @@ class AdminWsClient {
     this.intentionalClose = false;
     this.bindWakeHandlers();
     this.doConnect();
+  }
+
+  getStatus(): AdminWsStatus {
+    return this.status;
+  }
+
+  private setStatus(next: AdminWsStatus): void {
+    if (this.status === next) return;
+    this.status = next;
+    const listeners = this.eventListeners.get("__status__");
+    if (listeners) {
+      for (const cb of listeners) cb("__status__", next, Date.now());
+    }
   }
 
   disconnect(): void {
@@ -60,6 +82,7 @@ class AdminWsClient {
       this.ws = null;
     }
     this.connected = false;
+    this.setStatus("offline");
   }
 
   request<T = unknown>(
@@ -146,6 +169,7 @@ class AdminWsClient {
     const url = `${proto}//${location.host}/api/v1/ws/admin`;
 
     this.ws = new WebSocket(url);
+    this.setStatus("connecting");
 
     this.ws.onopen = () => {
       // Send JWT as first message for auth (token never appears in URL).
@@ -154,6 +178,7 @@ class AdminWsClient {
       }
       this.backoff = 1000;
       this.connected = true;
+      this.setStatus("connected");
       // Emit connection event so hooks can re-fetch
       const connListeners = this.eventListeners.get("__connected__");
       if (connListeners) {
@@ -170,7 +195,10 @@ class AdminWsClient {
     this.ws.onclose = () => {
       this.connected = false;
       if (!this.intentionalClose) {
+        this.setStatus("connecting");
         this.scheduleReconnect();
+      } else {
+        this.setStatus("offline");
       }
     };
 

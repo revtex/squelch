@@ -204,6 +204,10 @@ type Claims struct {
 	Username   string `json:"username"`
 	Role       string `json:"role"`
 	AccountExp int64  `json:"accountExp,omitempty"` // unix epoch; 0 = never expires
+	// FamilyID is the refresh-token family this token was minted from, so a
+	// live connection can be traced to the device session that opened it.
+	// Empty for tokens issued outside a login/refresh.
+	FamilyID string `json:"fam,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -225,6 +229,13 @@ func CheckPassword(password, hash string) bool {
 // accountExp is the user's account expiration as a unix epoch (0 means no expiry).
 // Returns the signed token string and the unique JTI (token ID).
 func GenerateToken(userID int64, username, role string, accountExp int64) (string, string, error) {
+	return GenerateSessionToken(userID, username, role, accountExp, "")
+}
+
+// GenerateSessionToken is GenerateToken for a token minted at login or
+// refresh: it also records the refresh-token family, so signing out one
+// device can find that device's live connections.
+func GenerateSessionToken(userID int64, username, role string, accountExp int64, familyID string) (string, string, error) {
 	now := time.Now()
 	jti := uuid.New().String()
 	claims := Claims{
@@ -232,6 +243,7 @@ func GenerateToken(userID int64, username, role string, accountExp int64) (strin
 		Username:   username,
 		Role:       role,
 		AccountExp: accountExp,
+		FamilyID:   familyID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -270,6 +282,11 @@ type TokenTracker struct {
 	MaxTokens  int
 	userTokens map[int64][]tokenEntry
 	denied     map[string]time.Time // JTI → expiry time
+	// deniedFamilies holds signed-out device sessions (refresh families):
+	// every access token minted from one is rejected until the longest it
+	// could still be valid has passed.
+	deniedFamilies map[string]time.Time // family ID → expiry time
+	validFrom      int64                // unix seconds; tokens issued earlier are rejected
 }
 
 type tokenEntry struct {
@@ -281,9 +298,11 @@ type tokenEntry struct {
 // active tokens per user.
 func NewTokenTracker() *TokenTracker {
 	return &TokenTracker{
-		MaxTokens:  MaxRefreshFamilies,
-		userTokens: make(map[int64][]tokenEntry),
-		denied:     make(map[string]time.Time),
+		MaxTokens:      MaxRefreshFamilies,
+		userTokens:     make(map[int64][]tokenEntry),
+		denied:         make(map[string]time.Time),
+		deniedFamilies: make(map[string]time.Time),
+		validFrom:      time.Now().Unix(),
 	}
 }
 
@@ -321,6 +340,51 @@ func (tt *TokenTracker) IsRevoked(jti string) bool {
 		return false
 	}
 	slog.Debug("auth: revocation check", "jti", jti, "revoked", true)
+	return true
+}
+
+// Rejects reports whether an access token must not be honoured: its JTI was
+// revoked, or it was issued before this tracker (and so this process)
+// started. Revocations live only in memory, so without the second rule a
+// token from an earlier run would survive a disable, demotion, deletion,
+// password change or logout that straddled a restart. Clients recover by
+// refreshing, and refresh re-checks the account in the database.
+func (tt *TokenTracker) Rejects(claims *Claims) bool {
+	if claims.IssuedAt == nil || claims.IssuedAt.Unix() < tt.validFrom {
+		slog.Debug("auth: token predates this process", "jti", claims.ID)
+		return true
+	}
+	if claims.FamilyID != "" && tt.familyRevoked(claims.FamilyID) {
+		slog.Debug("auth: token's device session was signed out", "jti", claims.ID)
+		return true
+	}
+	return tt.IsRevoked(claims.ID)
+}
+
+// RevokeFamily rejects every access token minted from one device session
+// (refresh family), including ones this process never tracked by JTI. The
+// family's refresh tokens must be revoked in the database as well, or the
+// device simply mints a new token.
+func (tt *TokenTracker) RevokeFamily(familyID string) {
+	if familyID == "" {
+		return
+	}
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	tt.deniedFamilies[familyID] = time.Now().Add(AccessTokenExpiry)
+}
+
+func (tt *TokenTracker) familyRevoked(familyID string) bool {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	exp, ok := tt.deniedFamilies[familyID]
+	if !ok {
+		return false
+	}
+	if time.Now().After(exp) {
+		delete(tt.deniedFamilies, familyID)
+		return false
+	}
 	return true
 }
 
@@ -365,6 +429,11 @@ func (tt *TokenTracker) cleanupLocked() {
 	for jti, exp := range tt.denied {
 		if now.After(exp) {
 			delete(tt.denied, jti)
+		}
+	}
+	for fam, exp := range tt.deniedFamilies {
+		if now.After(exp) {
+			delete(tt.deniedFamilies, fam)
 		}
 	}
 }

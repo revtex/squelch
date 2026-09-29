@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -173,5 +174,49 @@ func TestSaveJSON_RoundTrip(t *testing.T) {
 	}
 	if parsed["timezone"] != "America/New_York" {
 		t.Errorf("timezone not persisted; got %v", parsed["timezone"])
+	}
+}
+
+func TestTrustedProxyList(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", config.DefaultTrustedProxies},
+		{"none", nil},
+		{" NONE ", nil},
+		{"10.1.2.3, 172.18.0.0/16", []string{"10.1.2.3", "172.18.0.0/16"}},
+	}
+	for _, tc := range cases {
+		got := (&config.Config{TrustedProxies: tc.in}).TrustedProxyList()
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("TrustedProxyList(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestTrustedAddressList(t *testing.T) {
+	cfg := config.Config{TrustedAddresses: " 203.0.113.7, 10.0.0.0/8 ,2001:db8::1,192.168.1.5/24,, ::ffff:198.51.100.0/120"}
+	got, err := cfg.TrustedAddressList()
+	if err != nil {
+		t.Fatalf("TrustedAddressList: %v", err)
+	}
+	var strs []string
+	for _, p := range got {
+		strs = append(strs, p.String())
+	}
+	want := []string{"203.0.113.7/32", "10.0.0.0/8", "2001:db8::1/128", "192.168.1.0/24", "198.51.100.0/24"}
+	if !slices.Equal(strs, want) {
+		t.Fatalf("got %v, want %v", strs, want)
+	}
+
+	empty := config.Config{}
+	if got, err := empty.TrustedAddressList(); err != nil || len(got) != 0 {
+		t.Fatalf("empty setting = %v, %v; want none", got, err)
+	}
+
+	bad := config.Config{TrustedAddresses: "203.0.113.7,office"}
+	if _, err := bad.TrustedAddressList(); err == nil || !strings.Contains(err.Error(), `"office"`) {
+		t.Fatalf("bad entry err = %v, want it named", err)
 	}
 }

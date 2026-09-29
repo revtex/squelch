@@ -47,6 +47,10 @@ type TranscriptionResult struct {
 type TranscriptionJob struct {
 	CallID    int64
 	AudioPath string // Absolute path to the converted audio file
+	// DurationMs is the call's length when known; calls shorter than the
+	// configured minimum are skipped unless Force is set (an admin retry).
+	DurationMs int64
+	Force      bool
 }
 
 // TranscriptionJobResult is the outcome of a transcription attempt.
@@ -66,6 +70,7 @@ type TranscriberPool struct {
 	model    string
 	language string
 	diarize  bool
+	workers  int
 	wg       sync.WaitGroup // tracks worker goroutines so results can be closed safely
 }
 
@@ -97,6 +102,7 @@ func NewTranscriberPool(ctx context.Context, numWorkers int, baseURL, model, lan
 		model:    model,
 		language: language,
 		diarize:  diarize,
+		workers:  numWorkers,
 	}
 
 	p.wg.Add(numWorkers)
@@ -155,6 +161,11 @@ func (p *TranscriberPool) QueueDepth() int {
 // Model returns the whisper model name configured for this pool.
 func (p *TranscriberPool) Model() string {
 	return p.model
+}
+
+// Workers returns how many jobs the pool runs at once.
+func (p *TranscriberPool) Workers() int {
+	return p.workers
 }
 
 // Ping checks that go-whisper is reachable by hitting its model endpoint.

@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useGetSharedCallQuery } from "@/features/scanner";
-import { Download, Radio } from "lucide-react";
+import { Download, Radio, Smartphone } from "lucide-react";
+import { buildAppHandoff } from "./appHandoff";
 
 function formatDuration(secs: number): string {
   const minutes = Math.floor(secs / 60);
@@ -70,6 +71,16 @@ export default function SharedCall() {
       </div>
     );
   }
+
+  // Offered only to a phone, and only for a well-formed token: on a desktop
+  // browser a custom-scheme link is a dead end. Read from window here so the
+  // builder itself stays pure and testable.
+  const handoff = buildAppHandoff({
+    token,
+    pageUrl: window.location.href,
+    origin: window.location.origin,
+    userAgent: navigator.userAgent,
+  });
 
   const safeAudioUrl = getSafeSharedAudioUrl(call.audioUrl);
   if (!safeAudioUrl) {
@@ -163,8 +174,14 @@ export default function SharedCall() {
             </div>
           )}
 
-          {/* Download */}
+          {/* Open in app / Download */}
           <div className="card-actions justify-end">
+            {handoff && (
+              <a href={handoff.href} className="btn btn-sm btn-outline">
+                <Smartphone className="w-4 h-4" />
+                Open in app
+              </a>
+            )}
             <a href={safeAudioUrl} download className="btn btn-sm btn-outline">
               <Download className="w-4 h-4" />
               Download

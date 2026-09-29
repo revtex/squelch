@@ -226,3 +226,17 @@ func TestDeprecatedIdentResolution(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyUsageStore_KeepsKeysApartThatShareAnIdent(t *testing.T) {
+	store := middleware.NewLegacyUsageStore(nil)
+	store.RecordKey("/api/call-upload", "POST", "TR-Lak", 1, 200)
+	store.RecordKey("/api/call-upload", "POST", "TR-Lak", 1, 200)
+	store.RecordKey("/api/call-upload", "POST", "TR-Lak", 2, 200)
+	got := map[int64]int{}
+	for _, e := range store.Aggregate24h() {
+		got[e.APIKeyID] += e.Count
+	}
+	if got[1] != 2 || got[2] != 1 {
+		t.Fatalf("counts by key id = %v, want 1:2 2:1", got)
+	}
+}

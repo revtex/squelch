@@ -1,9 +1,12 @@
 package middleware
 
 import (
+	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,7 +32,7 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			c.AbortWithStatusJSON(401, gin.H{"error": "token has been revoked"})
 			return
 		}
@@ -45,6 +48,7 @@ func JWTAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Set("jti", claims.ID)
+		c.Set("fam", claims.FamilyID)
 		c.Next()
 	}
 }
@@ -67,7 +71,7 @@ func OptionalJWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		if auth.Tokens.IsRevoked(claims.ID) {
+		if auth.Tokens.Rejects(claims) {
 			c.Next()
 			return
 		}
@@ -82,6 +86,7 @@ func OptionalJWTAuth() gin.HandlerFunc {
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Set("jti", claims.ID)
+		c.Set("fam", claims.FamilyID)
 		c.Next()
 	}
 }
@@ -93,13 +98,14 @@ func applyClaimsToContext(c *gin.Context, claims *auth.Claims) {
 	c.Set("username", claims.Username)
 	c.Set("role", claims.Role)
 	c.Set("jti", claims.ID)
+	c.Set("fam", claims.FamilyID)
 }
 
 // claimsValid runs the same revocation, expiration and account-expiration
 // checks as JWTAuth/OptionalJWTAuth. Returns true when the token can be used
 // to identify the user.
 func claimsValid(claims *auth.Claims) bool {
-	if auth.Tokens.IsRevoked(claims.ID) {
+	if auth.Tokens.Rejects(claims) {
 		return false
 	}
 	if claims.AccountExp > 0 && time.Now().Unix() > claims.AccountExp {
@@ -200,6 +206,7 @@ func RequireAdmin() gin.HandlerFunc {
 // The API-key value format itself is unchanged; only the wire transport
 // differs between the two surfaces.
 func APIKeyAuth(queries *db.Queries) gin.HandlerFunc {
+	var touched sync.Map // key id -> unix seconds of the last last-used write
 	return func(c *gin.Context) {
 		requestID, _ := c.Get("requestID")
 		isV1 := c.GetString("apiVersion") == "v1"
@@ -265,6 +272,14 @@ func APIKeyAuth(queries *db.Queries) gin.HandlerFunc {
 		hashed := auth.HashAPIKey(key)
 		apiKey, err := queries.GetAPIKeyByKey(c.Request.Context(), hashed)
 		if err != nil {
+			// A rotated key keeps working until its grace period ends, so a
+			// recorder can be updated without a gap in uploads.
+			apiKey, err = queries.GetAPIKeyByPreviousKey(c.Request.Context(), db.GetAPIKeyByPreviousKeyParams{
+				PreviousKey:          sql.NullString{String: hashed, Valid: true},
+				PreviousKeyExpiresAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+			})
+		}
+		if err != nil {
 			slog.Warn("api key auth: invalid key",
 				"request_id", requestID,
 				"ip", c.ClientIP(),
@@ -285,6 +300,12 @@ func APIKeyAuth(queries *db.Queries) gin.HandlerFunc {
 		}
 
 		c.Set("apiKeyID", apiKey.ID)
+		touchAPIKey(c.Request.Context(), queries, &touched, apiKey.ID, c.ClientIP())
+		// A scoped key may only upload to its listed systems. An unparseable
+		// scope yields an empty (deny-all) list rather than no restriction.
+		if grants := auth.ParseSystemGrants(apiKey.SystemsJson); grants != nil {
+			c.Set(auth.APIKeySystemsContextKey, grants)
+		}
 		if apiKey.Ident.Valid {
 			c.Set("apiKeyIdent", apiKey.Ident.String)
 		}
@@ -297,6 +318,28 @@ func APIKeyAuth(queries *db.Queries) gin.HandlerFunc {
 			"path", c.Request.URL.Path,
 		)
 		c.Next()
+	}
+}
+
+// apiKeyTouchInterval is how often a key's last-used time and address are
+// written; uploads arrive many times a minute, and the admin only needs to
+// know "just now".
+const apiKeyTouchInterval = time.Minute
+
+// touchAPIKey records when and from where a key last authenticated, at most
+// once a minute per key and middleware instance.
+func touchAPIKey(ctx context.Context, queries *db.Queries, touched *sync.Map, id int64, ip string) {
+	now := time.Now().Unix()
+	if last, ok := touched.Load(id); ok && now-last.(int64) < int64(apiKeyTouchInterval.Seconds()) {
+		return
+	}
+	touched.Store(id, now)
+	if err := queries.TouchAPIKeyUsed(ctx, db.TouchAPIKeyUsedParams{
+		LastUsedAt: sql.NullInt64{Int64: now, Valid: true},
+		LastUsedIp: sql.NullString{String: ip, Valid: ip != ""},
+		ID:         id,
+	}); err != nil {
+		slog.Warn("api key auth: failed to record last use", "api_key_id", id, "error", err)
 	}
 }
 

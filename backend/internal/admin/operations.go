@@ -17,7 +17,11 @@ import (
 	"time"
 
 	"github.com/revtex/squelch/internal/auth"
+	"github.com/revtex/squelch/internal/connections"
 	"github.com/revtex/squelch/internal/db"
+	"github.com/revtex/squelch/internal/geoip"
+	"github.com/revtex/squelch/internal/ipblock"
+	"github.com/revtex/squelch/internal/middleware"
 )
 
 // ── Public helper types ──
@@ -34,12 +38,18 @@ type Reloader interface {
 	Reload()
 }
 
-// TranscriberReloader can hot-reload the transcription subsystem.
+// TranscriberReloader can hot-reload the transcription subsystem, report
+// on it, and take a call again on request.
 type TranscriberReloader interface {
 	Reload(enabled bool, baseURL, model, language string, diarize bool) bool
 	Enabled() bool
 	BaseURL() string
+	Model() string
 	QueueDepth() int
+	Workers() int
+	MinDurationMs() int64
+	SetMinDurationMs(ms int64)
+	Retry(ctx context.Context, callID int64, audioPath string) error
 }
 
 // EventSink is the interface Operations uses to push admin events and
@@ -57,15 +67,43 @@ type EventSink interface {
 // left zero disables the corresponding feature path at runtime (matches
 // the prior ws.HubDeps behaviour exactly).
 type Deps struct {
-	SQLDB             *sql.DB
-	DirMonitorReload  Reloader
-	DownstreamReload  Reloader
+	SQLDB            *sql.DB
+	DirMonitorReload Reloader
+	DownstreamReload Reloader
+	// TRInstances reconnects Trunk Recorder brokers after a restore; nil
+	// leaves the live MQTT clients until a restart.
+	TRInstances       TRInstanceSync
 	TranscriberReload TranscriberReloader
 	FFmpegAvailable   bool
 	FDKAACAvailable   bool
 	WhisperAvailable  bool
 	RecordingsDir     string
-	EncryptionKey     string
+	// DBFile is the SQLite database path, for the storage figures.
+	DBFile        string
+	EncryptionKey string
+	// Connections is the live connection registry; nil leaves the
+	// connection list empty.
+	Connections *connections.Registry
+	// IPBlocks is the address block list; nil turns blocking off.
+	IPBlocks *ipblock.Matcher
+	// GeoIP resolves addresses to countries; nil hides the country column.
+	GeoIP *geoip.DB
+	// LoginLimiter is the sign-in rate limiter; nil leaves the lockout
+	// list empty.
+	LoginLimiter *auth.RateLimiter
+	// LegacyUsage counts requests on the deprecated /api/* surface; nil
+	// reports none.
+	LegacyUsage *middleware.LegacyUsageStore
+	// Downstreams and Webhooks are the forwarding services, for delivery
+	// state and tests; nil reports nothing and refuses tests.
+	Downstreams Forwarder
+	Webhooks    Forwarder
+	// DirMonitors reports what each folder monitor is doing; nil reports
+	// nothing.
+	DirMonitors MonitorStatus
+	// MaskTester parses a filename with a mask, for the admin's mask
+	// tester; nil refuses the test.
+	MaskTester func(mask, filename string) (map[string]string, bool)
 }
 
 // Operations owns the admin CRUD business logic. It is transport-agnostic —
@@ -78,6 +116,9 @@ type Operations struct {
 	// StartTime is used by activity-stats and uptime calculations. It
 	// defaults to time.Now() on New() but can be overridden for tests.
 	StartTime time.Time
+
+	// storage caches the recordings measurement between Settings loads.
+	storage storageCache
 }
 
 // New constructs a new Operations bound to the given queries, deps, and
@@ -109,6 +150,28 @@ func (o *Operations) broadcastCFG(ctx context.Context) {
 	if o.Events != nil {
 		o.Events.BroadcastCFG(ctx)
 	}
+}
+
+// anonymousDisconnecter is implemented by sinks that can drop
+// unauthenticated listeners (the WS hub). It is optional so test sinks need
+// not implement it.
+type anonymousDisconnecter interface {
+	DisconnectAnonymous()
+}
+
+// enforcePublicAccess drops anonymous listeners unless publicAccess is
+// currently "true". Call it after any write that may have changed the
+// setting.
+func (o *Operations) enforcePublicAccess(ctx context.Context) {
+	d, ok := o.Events.(anonymousDisconnecter)
+	if !ok {
+		return
+	}
+	s, err := o.Queries.GetSetting(ctx, "publicAccess")
+	if err == nil && s.Value == "true" {
+		return
+	}
+	d.DisconnectAnonymous()
 }
 
 // disconnectByUser is a nil-safe wrapper around Events.DisconnectByUser.
@@ -221,10 +284,18 @@ var SensitiveSettingKeys = map[string]bool{
 	"jwtSecret":       true,
 }
 
+// serverOnlySettingKeys are settings the server reads but never hands to a
+// client, not even an admin: the JWT signing key would let its holder mint
+// tokens for any user, and it outlives the admin's own revocation.
+var serverOnlySettingKeys = map[string]bool{
+	auth.JWTSecretKeyName: true,
+	configBackupLastAtKey: true,
+}
+
 // allowedSettingKeys mirrors the allowed setting keys from config.go.
 var allowedSettingKeys = map[string]bool{
-	"activityDashboard":           true,
 	"apiKeyCallRate":              true,
+	"auditRetentionDays":          true,
 	"audioConversion":             true,
 	"audioEncodingPreset":         true,
 	"autoPopulateSystems":         true,
@@ -234,6 +305,9 @@ var allowedSettingKeys = map[string]bool{
 	"email":                       true,
 	"keypadBeeps":                 true,
 	"logLevel":                    true,
+	"loginMaxFailures":            true,
+	"loginLockoutMinutes":         true,
+	"connectionHistoryDays":       true,
 	"maxClients":                  true,
 	"pruneDays":                   true,
 	"publicAccess":                true,
@@ -243,6 +317,7 @@ var allowedSettingKeys = map[string]bool{
 	"time12hFormat":               true,
 	"transcriptionDiarize":        true,
 	"transcriptionEnabled":        true,
+	"transcriptionMinDurationMs":  true,
 	"transcriptionLanguage":       true,
 	"liveTranscriptDisplay":       true,
 	"transcriptionModel":          true,
@@ -277,6 +352,9 @@ func mapUser(u db.User) map[string]any {
 		"limit":       nullInt(u.Limit),
 		"createdAt":   u.CreatedAt,
 		"updatedAt":   u.UpdatedAt,
+		// The user has a temporary password and must pick their own at
+		// the next sign-in.
+		"passwordNeedChange": u.PasswordNeedChange,
 	}
 }
 
@@ -349,19 +427,34 @@ func mapUnits(units []db.Unit) []map[string]any {
 	return out
 }
 
-func mapAPIKey(k db.ApiKey) map[string]any {
+// apiKeyFingerprint is a short, stable handle for a key that never reveals
+// the secret: the first 12 hex characters of the hash of the stored hash.
+func apiKeyFingerprint(k db.ApiKey) string {
 	fingerprint := auth.HashAPIKey(k.Key)
 	if len(fingerprint) > 12 {
 		fingerprint = fingerprint[:12]
 	}
+	return fingerprint
+}
+
+func mapAPIKey(k db.ApiKey) map[string]any {
+	var rotating *int64
+	if k.PreviousKeyExpiresAt.Valid && k.PreviousKeyExpiresAt.Int64 > time.Now().Unix() {
+		v := k.PreviousKeyExpiresAt.Int64
+		rotating = &v
+	}
 	return map[string]any{
-		"id":            k.ID,
-		"fingerprint":   fingerprint,
-		"ident":         nullStr(k.Ident),
-		"disabled":      k.Disabled,
-		"systemsJson":   nullStr(k.SystemsJson),
-		"callRateLimit": nullInt(k.CallRateLimit),
-		"order":         k.Order,
+		"id":                   k.ID,
+		"fingerprint":          apiKeyFingerprint(k),
+		"ident":                nullStr(k.Ident),
+		"disabled":             k.Disabled,
+		"systemsJson":          nullStr(k.SystemsJson),
+		"callRateLimit":        nullInt(k.CallRateLimit),
+		"order":                k.Order,
+		"createdAt":            k.CreatedAt,
+		"lastUsedAt":           nullInt(k.LastUsedAt),
+		"lastUsedIp":           nullStr(k.LastUsedIp),
+		"previousKeyExpiresAt": rotating,
 	}
 }
 
@@ -399,9 +492,13 @@ func mapDirMonitors(dms []db.Dirmonitor) []map[string]any {
 	return out
 }
 
+// sqlNullInt is a short name for the nullable integer columns the mappers read.
+type sqlNullInt = sql.NullInt64
+
 func mapDownstream(d db.Downstream) map[string]any {
 	return map[string]any{
 		"id":          d.ID,
+		"label":       d.Label,
 		"url":         d.Url,
 		"hasApiKey":   d.ApiKey != "",
 		"systemsJson": nullStr(d.SystemsJson),
@@ -421,9 +518,10 @@ func mapDownstreams(ds []db.Downstream) []map[string]any {
 func mapWebhook(w db.Webhook) map[string]any {
 	return map[string]any{
 		"id":          w.ID,
+		"label":       w.Label,
 		"url":         w.Url,
 		"type":        w.Type,
-		"secret":      nullStr(w.Secret),
+		"hasSecret":   w.Secret.Valid && w.Secret.String != "",
 		"systemsJson": nullStr(w.SystemsJson),
 		"disabled":    w.Disabled,
 		"order":       w.Order,
@@ -442,8 +540,11 @@ func mapSharedLink(r db.ListSharedLinksRow) map[string]any {
 	m := map[string]any{
 		"id":             r.ID,
 		"callId":         r.CallID,
+		"userId":         r.UserID,
 		"token":          r.Token,
 		"createdAt":      r.CreatedAt,
+		"opens":          r.Opens,
+		"lastOpenedAt":   nullInt(r.LastOpenedAt),
 		"sharedBy":       r.SharedBy,
 		"dateTime":       r.DateTime,
 		"duration":       r.Duration.Int64,

@@ -86,7 +86,8 @@ INSERT INTO calls (
     decoder,
     error_count,
     spike_count,
-    talker_alias
+    talker_alias,
+    api_key_id
 ) VALUES (
     :audio_path,
     :audio_name,
@@ -105,7 +106,8 @@ INSERT INTO calls (
     :decoder,
     :error_count,
     :spike_count,
-    :talker_alias
+    :talker_alias,
+    :api_key_id
 ) RETURNING id;
 
 -- name: CountCalls :one
@@ -137,3 +139,37 @@ LIMIT 500;
 
 -- name: DeleteCallBatch :exec
 DELETE FROM calls WHERE id = ?;
+
+-- name: CountCallsPerAPIKeySince :many
+SELECT api_key_id, COUNT(*) AS calls
+FROM calls
+WHERE api_key_id IS NOT NULL AND date_time >= ?
+GROUP BY api_key_id;
+
+-- name: OldestCallTime :one
+SELECT CAST(COALESCE(MIN(date_time), 0) AS INTEGER) AS oldest FROM calls;
+
+-- name: SystemCallStats :many
+SELECT system_id,
+       CAST(SUM(CASE WHEN date_time >= @since THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+GROUP BY system_id;
+
+-- name: TalkgroupCallStats :many
+SELECT talkgroup_id,
+       CAST(SUM(CASE WHEN date_time >= @since THEN 1 ELSE 0 END) AS INTEGER) AS calls_recent,
+       CAST(MAX(date_time) AS INTEGER) AS last_call,
+       CAST(COALESCE(AVG(duration), 0) AS INTEGER) AS avg_duration
+FROM calls
+WHERE system_id = @system_id AND talkgroup_id IS NOT NULL
+GROUP BY talkgroup_id;
+
+-- name: UnitCallStats :many
+SELECT source, CAST(MAX(date_time) AS INTEGER) AS last_call
+FROM calls
+WHERE system_id = @system_id AND source IS NOT NULL
+GROUP BY source;
+
+-- name: CountCallsSince :one
+SELECT COUNT(*) FROM calls WHERE date_time >= ?;
