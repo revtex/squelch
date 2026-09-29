@@ -385,6 +385,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A listener closing the tab is no longer a warning.** When a browser or
+  phone drops its live connection without saying goodbye (the tab closed,
+  the screen locked, the network went), the server logged `ws: read error`
+  at warn, so the Warn filter in Logs & Audit filled with them. Those now
+  log at debug as `ws: connection dropped`; other read failures still warn.
+
 - **Trunk Recorder's messages stay live after you look at Live.** Opening
   Live and going back to By opcode froze the table, and Live grew into a
   scroll of hundreds of rows. A busy control channel sends several messages

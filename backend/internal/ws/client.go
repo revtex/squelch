@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -526,9 +528,13 @@ func (c *Client) readPump(ctx context.Context) {
 				// Clean disconnect or normal close — nothing to log.
 				return
 			}
-			// Anything else is an unexpected read failure (network drop,
-			// oversized frame, malformed framing). Log at warn so it
-			// surfaces in operator dashboards.
+			if isOrdinaryDisconnect(err) {
+				slog.Debug("ws: connection dropped", "error", err, "admin", c.isAdmin)
+				return
+			}
+			// Anything else is an unexpected read failure (oversized
+			// frame, malformed framing). Log at warn so it surfaces in
+			// operator dashboards.
 			slog.Warn("ws: read error", "error", err, "admin", c.isAdmin)
 			return
 		}
@@ -1099,4 +1105,12 @@ func buildCFGPayload(ctx context.Context, queries *db.Queries, grants []systemGr
 	}
 
 	return cfgPayload, nil
+}
+
+// isOrdinaryDisconnect reports whether a read failed only because the peer
+// went away without a close frame (tab closed, phone asleep, network lost)
+// or because we closed the connection ourselves. Browsers and phones do
+// this all the time, so it is not worth a warning.
+func isOrdinaryDisconnect(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
 }
