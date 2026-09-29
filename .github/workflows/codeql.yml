@@ -9,6 +9,10 @@ on:
     - cron: "23 5 * * 1"
   workflow_dispatch:
 
+# Read-only by default; the analyze job adds what uploading results needs.
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -25,6 +29,10 @@ jobs:
           - language: go
             build-mode: manual
           - language: javascript-typescript
+            build-mode: none
+          # The workflows themselves: token permissions, untrusted input in
+          # run steps, unpinned third-party actions.
+          - language: actions
             build-mode: none
 
     steps:

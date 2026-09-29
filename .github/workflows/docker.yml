@@ -5,6 +5,10 @@ on:
     branches: [main, dev]
     tags: ["v*"]
 
+# Read-only by default; only the job that pushes the image can write.
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
