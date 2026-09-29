@@ -184,24 +184,8 @@ func QueryEntries(level string, from, to int64, query string, limit int) []LogEn
 	result := make([]LogEntry, 0, min(len(all), limit))
 	for i := len(all) - 1; i >= 0; i-- {
 		e := all[i]
-		if from > 0 && e.Time.Unix() < from {
+		if (level != "" && e.Level != level) || !entryMatches(e, from, to, query) {
 			continue
-		}
-		if to > 0 && e.Time.Unix() > to {
-			continue
-		}
-		if level != "" && e.Level != level {
-			continue
-		}
-		if query != "" {
-			msg := strings.ToLower(e.Message)
-			attrs := ""
-			for _, v := range e.Attrs {
-				attrs += " " + strings.ToLower(v)
-			}
-			if !strings.Contains(msg+attrs, query) {
-				continue
-			}
 		}
 		result = append(result, e)
 		if len(result) >= limit {
@@ -214,6 +198,39 @@ func QueryEntries(level string, from, to int64, query string, limit int) []LogEn
 		result[i], result[j] = result[j], result[i]
 	}
 	return result
+}
+
+// CountEntries counts the buffer's entries by level for a time range and
+// search, whatever the level filter and row limit of the list beside it.
+func CountEntries(from, to int64, query string) map[string]int {
+	query = strings.ToLower(strings.TrimSpace(query))
+	counts := map[string]int{}
+	for _, e := range ring.snapshot() {
+		if entryMatches(e, from, to, query) {
+			counts[e.Level]++
+		}
+	}
+	return counts
+}
+
+// entryMatches applies the range and search shared by QueryEntries and
+// CountEntries. query is lower-case.
+func entryMatches(e LogEntry, from, to int64, query string) bool {
+	if from > 0 && e.Time.Unix() < from {
+		return false
+	}
+	if to > 0 && e.Time.Unix() > to {
+		return false
+	}
+	if query == "" {
+		return true
+	}
+	msg := strings.ToLower(e.Message)
+	attrs := ""
+	for _, v := range e.Attrs {
+		attrs += " " + strings.ToLower(v)
+	}
+	return strings.Contains(msg+attrs, query)
 }
 
 // LoadHistoricalLogs reads the log file and prepopulates the ring buffer

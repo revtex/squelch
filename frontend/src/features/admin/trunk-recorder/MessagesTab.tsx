@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { DataTable, FilterChips, SearchBox, plural, type Column } from "@/features/admin/_shell";
 import { fmtTime } from "./format";
-import { messageStats, type MessageStat } from "./trunk";
+import { messageStats, type MessageStat, type MessageTally } from "./trunk";
 import { useFreeze } from "./useFreeze";
 import type { MessageEntry } from "./types";
 
@@ -14,11 +14,18 @@ function matches(m: MessageEntry, q: string): boolean {
   return [m.shortname, m.type, m.opcode, m.opcodeType, m.opcodeDesc, m.meta].filter(Boolean).join(" ").toLowerCase().includes(q);
 }
 
-export default function MessagesTab({ messages }: { messages: MessageEntry[] }) {
+interface MessagesTabProps {
+  /** The newest messages, capped; the Live view. */
+  messages: MessageEntry[];
+  /** Every message since the page connected, counted by opcode. */
+  tallies?: Record<string, MessageTally>;
+}
+
+export default function MessagesTab({ messages, tallies }: MessagesTabProps) {
   const [view, setView] = useState<View>("stats");
   const [query, setQuery] = useState("");
   const { rows, paused, newCount, toggle } = useFreeze(messages);
-  const stats = useMemo(() => messageStats(messages), [messages]);
+  const stats = useMemo(() => messageStats(tallies), [tallies]);
   const live = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((m) => matches(m, q)).slice().reverse();
@@ -92,7 +99,7 @@ export default function MessagesTab({ messages }: { messages: MessageEntry[] }) 
           rowKey={(r) => `${r.at}-${r.opcode ?? ""}-${r.shortname ?? ""}`}
           caption="Live messages"
           defaultSort={{ id: "when", dir: "desc" }}
-          pageSize={50}
+          pageSize={20}
           empty={query ? "No messages match." : "No control-channel messages yet."}
         />
       )}

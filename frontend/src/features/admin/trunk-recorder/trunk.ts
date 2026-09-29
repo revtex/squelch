@@ -328,36 +328,45 @@ export interface MessageStat {
   description: string;
 }
 
-export function messageStats(msgs: MessageEntry[]): MessageStat[] {
-  const map = new Map<string, MessageStat & { sys: Set<string> }>();
-  for (const m of msgs) {
-    const k = `${m.opcode ?? "?"}|${m.opcodeType ?? "?"}|${m.type ?? "?"}`;
-    const sys = m.shortname ?? "?";
-    const desc = m.meta ?? m.opcodeDesc ?? m.trunkMsg ?? "";
-    const cur = map.get(k);
-    if (cur) {
-      cur.count++;
-      cur.sys.add(sys);
-      if (m.at > cur.lastSeen) {
-        cur.lastSeen = m.at;
-        cur.description = desc;
-      }
-    } else {
-      map.set(k, {
-        key: k,
-        type: m.type ?? "—",
-        opcode: m.opcode ?? "—",
-        opcodeType: m.opcodeType ?? "—",
-        systems: "",
-        count: 1,
-        lastSeen: m.at,
-        description: desc,
-        sys: new Set([sys]),
-      });
-    }
+/** A running count for one opcode, kept in the store as messages arrive. */
+export interface MessageTally extends Omit<MessageStat, "systems"> {
+  systems: string[];
+}
+
+/**
+ * Counts one message into the running tallies. The tallies outlive the
+ * capped live list: a busy control channel fills that list in seconds, and
+ * counts taken from it would stop climbing.
+ */
+export function tallyMessage(tallies: Record<string, MessageTally>, m: MessageEntry): void {
+  const k = `${m.opcode ?? "?"}|${m.opcodeType ?? "?"}|${m.type ?? "?"}`;
+  const sys = m.shortname ?? "?";
+  const desc = m.meta ?? m.opcodeDesc ?? m.trunkMsg ?? "";
+  const cur = tallies[k];
+  if (!cur) {
+    tallies[k] = {
+      key: k,
+      type: m.type ?? "—",
+      opcode: m.opcode ?? "—",
+      opcodeType: m.opcodeType ?? "—",
+      systems: [sys],
+      count: 1,
+      lastSeen: m.at,
+      description: desc,
+    };
+    return;
   }
-  return [...map.values()]
-    .map(({ sys, ...rest }) => ({ ...rest, systems: [...sys].sort().join(", ") }))
+  cur.count++;
+  if (!cur.systems.includes(sys)) cur.systems.push(sys);
+  if (m.at >= cur.lastSeen) {
+    cur.lastSeen = m.at;
+    cur.description = desc;
+  }
+}
+
+export function messageStats(tallies: Record<string, MessageTally> | undefined): MessageStat[] {
+  return Object.values(tallies ?? {})
+    .map((t) => ({ ...t, systems: [...t.systems].sort().join(", ") }))
     .sort((a, b) => b.count - a.count);
 }
 

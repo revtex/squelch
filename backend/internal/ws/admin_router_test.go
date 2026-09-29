@@ -46,7 +46,7 @@ func TestAdminOpHandlers_CoversEveryWireOp(t *testing.T) {
 		"fs.directories",
 		"groups.create", "groups.delete", "groups.import", "groups.list", "groups.update",
 		"import.config",
-		"logs.audit", "logs.level", "logs.query",
+		"logs.audit", "logs.counts", "logs.level", "logs.query",
 		"radioreference.apply",
 		"ipblocks.create", "ipblocks.delete", "ipblocks.list",
 		"lockouts.clear", "lockouts.list",

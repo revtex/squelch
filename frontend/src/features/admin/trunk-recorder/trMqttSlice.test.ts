@@ -6,6 +6,7 @@ import reducer, {
   type TrMqttState,
 } from "./trMqttSlice";
 import type { TrEventEnvelope, SnapshotView } from "./types";
+import { messageStats } from "./trunk";
 
 const ID = 1;
 
@@ -147,6 +148,27 @@ describe("trMqttSlice", () => {
       );
     }
     expect(s.trunkingMessages[ID]).toHaveLength(500);
+  });
+
+  it("keeps counting messages by opcode after the live list is full", () => {
+    let s = reducer(undefined, { type: "@@INIT" });
+    for (let i = 0; i < 1200; i++) {
+      s = reducer(
+        s,
+        applyTrEvent({
+          topic: "tr.message",
+          envelope: envelope({ message: { opcode: i % 3 ? 0x02 : 0x3c, sys_name: i % 2 ? "lake" : "geauga" } }),
+          at: i,
+        }),
+      );
+    }
+    expect(s.trunkingMessages[ID]).toHaveLength(500);
+    const stats = messageStats(s.messageTallies[ID]);
+    expect(stats.map((r) => [r.opcode, r.count])).toEqual([
+      ["2", 800],
+      ["60", 400],
+    ]);
+    expect(stats[0].systems).toBe("geauga, lake");
   });
 
   it("tr.unit.* pushes unit events and caps to 200", () => {

@@ -94,8 +94,7 @@ where to send it.
   link to a single call with an expiry date.
 - **Works on a phone** — mobile-first layout, and a background mode that keeps
   playing when the screen locks.
-- **Seven dark themes**, chosen per browser, with a per-listener keypad beep
-  and display brightness.
+- **Seven dark themes**, chosen per browser, with a per-listener keypad beep.
 
 ### Getting calls in
 

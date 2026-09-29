@@ -17,6 +17,7 @@ import type {
   TrEventEnvelope,
   UnitEventEntry,
 } from "./types";
+import { tallyMessage, type MessageTally } from "./trunk";
 
 // Caps mirror the plan: rolling windows are bounded so memory stays flat
 // even on a busy P25 system.
@@ -42,6 +43,8 @@ export interface TrMqttState {
   unitEvents: Record<number, UnitEventEntry[]>;
   recentCalls: Record<number, RecentCallEntry[]>;
   trunkingMessages: Record<number, MessageEntry[]>;
+  /** Every message counted by opcode since the page connected, uncapped. */
+  messageTallies: Record<number, Record<string, MessageTally>>;
   /** Unix millis of the last `tr.warn.lag` event for each instance. */
   lagWarning: Record<number, number>;
 }
@@ -59,6 +62,7 @@ const initialState: TrMqttState = {
   unitEvents: {},
   recentCalls: {},
   trunkingMessages: {},
+  messageTallies: {},
   lagWarning: {},
 };
 
@@ -318,7 +322,12 @@ function hydrateFromSnapshot(state: TrMqttState, id: number, snapshot: SnapshotV
         raw: f,
       });
     }
-    if (entries.length > 0) state.trunkingMessages[id] = entries.slice(-MESSAGE_CAP);
+    if (entries.length > 0) {
+      state.trunkingMessages[id] = entries.slice(-MESSAGE_CAP);
+      const tallies: Record<string, MessageTally> = {};
+      for (const e of entries) tallyMessage(tallies, e);
+      state.messageTallies[id] = tallies;
+    }
   }
 }
 
@@ -361,6 +370,7 @@ export const trMqttSlice = createSlice({
       delete state.unitEvents[id];
       delete state.recentCalls[id];
       delete state.trunkingMessages[id];
+      delete state.messageTallies[id];
       delete state.lagWarning[id];
     },
     /** Single entry point for every `tr.*` admin WS event. */
@@ -479,9 +489,7 @@ export const trMqttSlice = createSlice({
           // meta }, timestamp, instance_id }
           const env = asRecord(envelope.payload);
           const msg = asRecord(env?.message) ?? env;
-          state.trunkingMessages[id] = pushCapped(
-            state.trunkingMessages[id],
-            {
+          const entry: MessageEntry = {
               at: now,
               topic,
               type: asString(msg?.trunk_msg_type ?? msg?.message_type),
@@ -493,9 +501,9 @@ export const trMqttSlice = createSlice({
               sysNum: asNumber(msg?.sys_num),
               meta: asString(msg?.meta),
               raw: envelope.payload,
-            },
-            MESSAGE_CAP,
-          );
+          };
+          state.trunkingMessages[id] = pushCapped(state.trunkingMessages[id], entry, MESSAGE_CAP);
+          tallyMessage((state.messageTallies[id] ??= {}), entry);
           state.instances[id] = { ...conn, connected: true, lastSeenAt: now };
           return;
         }

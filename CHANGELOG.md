@@ -249,6 +249,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The unused `activityDashboard` setting. Nothing ever read it; the Overview
   is always on. It is deleted from the database by migration 030.
+- **Display brightness.** The ⋮ menu no longer has it, and the readout
+  always draws at full strength. The device's own brightness does the job
+  better. A level saved in the browser is ignored.
 
 ### Changed
 
@@ -368,8 +371,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mode buttons are an even row that wraps on narrow screens. Recent calls are
   one-line rows below the controls; tap one to replay it, and a talkgroup's LED
   colour shows as a rail. The live transcript follows playback in a three-line
-  window with a timeline above it. The menu (⋮) now holds the theme, display
-  brightness, bookmarks, admin, password and sign-in/out.
+  window with a timeline above it. The menu (⋮) now holds the theme, keypad
+  beeps, bookmarks, admin, password and sign-in/out.
 - **Seven dark themes, chosen per browser.** Squelch classic (the default,
   the original pale LCD), Midnight, Graphite, Ember, Moss, Plum and Ash — the
   same set the mobile app offers, from the same palette. Pick one from
@@ -382,6 +385,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Trunk Recorder's message counts keep counting.** By opcode tallied the
+  live list, which holds the newest 500 messages. A busy control channel
+  fills that in seconds, so the counts stopped climbing. They are now
+  running totals since the page connected. The Live view shows 20 messages
+  a page instead of 50.
+- **Logs level counts are the real totals.** The chips counted the lines on
+  screen, which are at most 500 and only the chosen level. So Warn read 0
+  under All, while All read 48 under Warn. The server now counts the whole
+  range and search for each level, whichever chip is chosen (new admin
+  operation `logs.counts`).
+- **Shared links' Shared by stays on one line.**
 - **The configuration backup carries the Trunk Recorder brokers.** A
   backup left them out, so a restore onto a new server came back without
   the MQTT connections. They are in the file now (passwords as stored, so

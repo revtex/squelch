@@ -251,7 +251,7 @@ export default function TrunkRecorderPanel() {
           )}
           {tab === "recorders" && <RecordersTab instance={selected} payload={live.recorders[id]} />}
           {tab === "units" && <UnitsTab events={live.unitEvents[id] ?? []} />}
-          {tab === "messages" && <MessagesTab messages={live.trunkingMessages[id] ?? []} />}
+          {tab === "messages" && <MessagesTab messages={live.trunkingMessages[id] ?? []} tallies={live.messageTallies[id]} />}
           {tab === "config" && <ConfigTab payload={live.config[id]} />}
           {instances.length > 1 && (
             <p className="text-xs text-base-content-dim">{plural(instances.length, "instance")} configured; switch with the selector above.</p>

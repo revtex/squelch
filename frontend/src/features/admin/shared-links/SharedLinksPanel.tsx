@@ -185,10 +185,11 @@ export default function SharedLinksPanel() {
     {
       id: "shared",
       header: "Shared by",
+      className: "whitespace-nowrap",
       sortValue: (l) => -l.createdAt,
       cell: (l) => (
         <span title={formatDateTime(l.createdAt)}>
-          {l.sharedBy || "unknown"} · <span className="whitespace-nowrap">{formatAgo(l.createdAt)}</span>
+          {l.sharedBy || "unknown"} · {formatAgo(l.createdAt)}
         </span>
       ),
     },

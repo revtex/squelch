@@ -33,7 +33,7 @@ import {
   type RangeId,
   type Tab,
 } from "./logLines";
-import { useAdminLogs, useAuditTrail } from "./useAdminLogs";
+import { useAdminLogs, useAuditTrail, useLogCounts } from "./useAdminLogs";
 
 type Panel = { key: string; kind: "line"; index: number } | { key: string; kind: "audit"; id: number };
 
@@ -121,13 +121,11 @@ export default function LogsPanel() {
 
   const lines = useMemo(() => server.logs ?? [], [server.logs]);
   const auditRows = useMemo(() => audit.rows ?? [], [audit.rows]);
-  const counts = useMemo(() => {
-    const c: Record<LevelFilter, number> = { all: lines.length, debug: 0, info: 0, warn: 0, error: 0 };
-    for (const l of lines) {
-      if (l.level in c) c[l.level as LevelFilter]++;
-    }
-    return c;
-  }, [lines]);
+  // The chips count the whole range from the server; the lines above are
+  // one level and at most `limit` of them, so tallying them would not.
+  const countParams = useMemo(() => ({ sinceSeconds: params.sinceSeconds, q: params.q }), [params.sinceSeconds, params.q]);
+  const serverCounts = useLogCounts(countParams, tab === "server" && following, paused);
+  const counts: Record<LevelFilter, number> = serverCounts ?? { all: 0, debug: 0, info: 0, warn: 0, error: 0 };
 
   const selectTab = (next: Tab) => {
     panel.reset();

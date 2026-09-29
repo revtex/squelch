@@ -243,11 +243,6 @@ default — the pale green readout), **Midnight**, **Graphite**, **Ember**,
 **Moss**, **Plum** and **Ash**. Each row previews its colours. The choice applies
 to every page, admin included, and is remembered in that browser.
 
-### Display brightness
-
-Dims or brightens the readout panel alone, for a dark room. It does not change
-the rest of the page.
-
 ### Keypad beeps
 
 The sound the buttons make: **Off**, **Uniden** or **Whistler**. Picking one

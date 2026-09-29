@@ -12,7 +12,6 @@ import { useGetBookmarkIDsQuery, useToggleBookmarkMutation } from "@/app/api";
 import { useShareCallMutation } from "../shareSlice";
 import { TranscriptPanel } from "../components/TranscriptPanel";
 import { useActiveUnit } from "../hooks/useActiveUnit";
-import { useLcdBrightness } from "../hooks/useLcdBrightness";
 import {
   usePlaybackPosition,
   formatElapsed,
@@ -136,7 +135,6 @@ export function DisplayPanel({
   const liveTranscriptDisplay = useAppSelector(
     (s) => s.scanner.config?.liveTranscriptDisplay ?? false,
   );
-  const { brightness } = useLcdBrightness();
   const isAudioActive = useAppSelector((s) => s.scanner.isAudioActive);
   const position = usePlaybackPosition(isAudioActive);
 
@@ -458,16 +456,7 @@ export function DisplayPanel({
 
   return (
     <>
-      <div
-        className="lcd-display"
-        style={
-          brightness !== 100
-            ? { filter: `brightness(${brightness / 100})` }
-            : undefined
-        }
-      >
-        {displayContent}
-      </div>
+      <div className="lcd-display">{displayContent}</div>
 
       {shareUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

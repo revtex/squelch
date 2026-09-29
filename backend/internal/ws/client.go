@@ -823,6 +823,28 @@ func (c *Client) opLogsQuery(_ context.Context, params json.RawMessage) (any, er
 	return resp, nil
 }
 
+// opLogsCounts counts the in-memory log by level for the range and search
+// the list uses, so the level chips show real totals rather than a tally of
+// the rows one page happened to load.
+func (c *Client) opLogsCounts(_ context.Context, params json.RawMessage) (any, error) {
+	var p struct {
+		From  int64  `json:"from"`
+		To    int64  `json:"to"`
+		Query string `json:"q"`
+	}
+	if params != nil {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+	}
+	counts := logging.CountEntries(p.From, p.To, p.Query)
+	all := 0
+	for _, n := range counts {
+		all += n
+	}
+	return map[string]int{"all": all, "debug": counts["debug"], "info": counts["info"], "warn": counts["warn"], "error": counts["error"]}, nil
+}
+
 // writePump sends messages from the send channel to the WebSocket connection
 // and sends periodic pings for keepalive.
 func (c *Client) writePump(ctx context.Context) {

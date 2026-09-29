@@ -31,6 +31,8 @@ vi.mock("./useAdminLogs", () => ({
     followingSeen.audit = following;
     return { rows: auditRows, isLoading: false, isFetching: false, refetch: vi.fn() };
   },
+  // The server counts the whole range: more than the three lines loaded.
+  useLogCounts: () => ({ all: 548, debug: 0, info: 499, warn: 48, error: 1 }),
 }));
 
 function renderPanel(path = "/admin/logs") {
@@ -59,6 +61,11 @@ describe("LogsPanel", () => {
     const req = within(table).getByText("/api/v1/calls").closest("tr")!;
     expect(within(req).getByText("200")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Error" })).toHaveTextContent("1");
+    // Chip counts are the server's totals for the range, not a tally of the
+    // loaded lines (which hold no warning at all).
+    const levels = screen.getByRole("radiogroup", { name: "Level" });
+    expect(within(levels).getByRole("radio", { name: "Warn" })).toHaveTextContent("48");
+    expect(within(levels).getByRole("radio", { name: "All" })).toHaveTextContent("548");
     expect(within(row).getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Following" })).toHaveAttribute("aria-pressed", "true");
     expect(followingSeen.server).toBe(true);

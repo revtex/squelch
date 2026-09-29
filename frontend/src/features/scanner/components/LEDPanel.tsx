@@ -6,14 +6,12 @@ import {
   Info,
   KeyRound,
   Palette,
-  Sun,
   Star,
   Volume2,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/shared/hooks/useTheme";
-import { useLcdBrightness } from "../hooks/useLcdBrightness";
 import { useKeypadBeeps } from "../hooks/useKeypadBeeps";
 import { ThemePicker } from "./ThemePicker";
 import { KeypadBeepsPicker } from "./KeypadBeepsPicker";
@@ -34,7 +32,6 @@ interface LEDPanelProps {
 
 export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
   const { label: themeLabel } = useTheme();
-  const { brightness, setBrightness } = useLcdBrightness();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const token = useAppSelector(selectToken);
@@ -53,7 +50,6 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
-  const [brightnessOpen, setBrightnessOpen] = useState(false);
   const [beepsOpen, setBeepsOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -197,11 +193,6 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
               </button>
             </li>
             <li>
-              <button onClick={closeMenuAnd(() => setBrightnessOpen(true))}>
-                <Sun className="w-4 h-4" /> Display brightness
-              </button>
-            </li>
-            <li>
               <button onClick={closeMenuAnd(() => setBeepsOpen(true))}>
                 <Volume2 className="w-4 h-4" /> Keypad beeps
                 <span className="ml-auto text-xs text-base-content-dim">
@@ -262,38 +253,6 @@ export function LEDPanel({ onToggleBookmarks }: LEDPanelProps = {}) {
         onSelect={setBeepStyle}
         onClose={() => setBeepsOpen(false)}
       />
-
-      {/* Brightness modal */}
-      {brightnessOpen && (
-        <dialog
-          className="modal modal-open"
-          onClick={() => setBrightnessOpen(false)}
-        >
-          <div
-            className="modal-box max-w-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-bold text-lg mb-4">Display brightness</h3>
-            <input
-              type="range"
-              min={20}
-              max={120}
-              value={brightness}
-              onChange={(e) => setBrightness(Number(e.target.value))}
-              className="range range-sm range-primary w-full"
-              aria-label="Display brightness"
-            />
-            <div className="modal-action">
-              <button
-                className="btn btn-sm"
-                onClick={() => setBrightnessOpen(false)}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </dialog>
-      )}
 
       {/* About modal */}
       {aboutOpen && (

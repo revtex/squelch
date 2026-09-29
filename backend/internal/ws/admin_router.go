@@ -35,6 +35,7 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"activity.chart":          c.adaptClientOp(c.opActivityChart),
 		"activity.top-talkgroups": c.adaptClientOp(c.opTopTalkgroups),
 		"logs.query":              c.adaptClientOp(c.opLogsQuery),
+		"logs.counts":             c.adaptClientOp(c.opLogsCounts),
 		"logs.level":              c.adaptClientOp(c.opLogsLevel),
 		"logs.audit":              o.LogsAudit,
 

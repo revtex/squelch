@@ -162,7 +162,7 @@ Local-only design notes (in the gitignored `docs/plans/` working directory) may 
 
 - **Dark only** — seven DaisyUI themes shared with the mobile app (Squelch classic default). Block themes draw the display's head (clock, tag, talkgroup name) as a solid ink block over a dithered edge; `squelch-classic` keeps the original pale LCD with scanlines. Fonts are bundled (SIL OFL, licences in `src/assets/fonts/`): Selawik for chrome, JetBrains Mono for the display, Big Shoulders Display Black for the talkgroup name, and IBM Plex Sans and Mono for the admin only
 - **Scanner page** — vertically-stacked single column, max-width 672px, 24px padding, laid out like the mobile app:
-  - LED bar: branding (left), LED, ⋮ menu (Theme, Display brightness, Bookmarks, Admin, Change password, About, Sign in/out)
+  - LED bar: branding (left), LED, ⋮ menu (Theme, Keypad beeps, Bookmarks, Admin, Change password, About, Sign in/out)
   - Display panel: ink-block head (clock, counts, system + tag chip, group · label, auto-sized TG name), dither strip, then frequency/TGID, site/unit, and a badge row (HOLD/AVOID/PATCH, E/S chip, bookmark/share, call clock). Type steps up from the phone sizes at `sm`
   - Transcript: inside the display (when `liveTranscriptDisplay` is on) — header with line/speaker count, a duration-weighted timeline, and a three-line window that follows playback
   - Transport: volume (left), replay / play-pause (primary, 64px) / skip, centred
