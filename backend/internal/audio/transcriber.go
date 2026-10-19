@@ -349,6 +349,27 @@ func (p *TranscriberPool) doTranscribe(ctx context.Context, job TranscriptionJob
 	}, nil
 }
 
+// sidecarUnreachable reports whether a job failed without reaching go-whisper
+// at all: nothing listening, the host or network gone, or a connection that
+// could not be opened in time. A request that reached it and then failed,
+// such as a reset mid-transcription, does not count, and neither does an
+// address the server refuses to call.
+func sidecarUnreachable(err error) bool {
+	if err == nil || errors.Is(err, safehttp.ErrBlockedAddress) {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "dial" {
+		return true
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection refused") || strings.Contains(s, "no route to host") ||
+		strings.Contains(s, "network is unreachable")
+}
+
 // isTransientError returns true for network errors caused by go-whisper being
 // temporarily unavailable (crash/restart, connection refused, EOF, reset).
 //

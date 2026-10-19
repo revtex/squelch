@@ -250,6 +250,13 @@ model must be downloaded and in use. The **Recent jobs** tab shows what happened
 to each call, with the failure reason in words and a **Retry**. Setup is in
 [Transcription](deployment-guide.md#transcription-optional).
 
+**Transcripts stopped while go-whisper was down.**
+Nothing needs to be saved again. Transcription stays on, calls wait in the
+queue, and Squelch checks the sidecar every 30 seconds; once it answers, the
+waiting calls go out and the ones that failed because it was unreachable are
+retried on their own. Beyond 10,000 waiting calls, new ones are listed as
+skipped ("transcription queue full"); retry those from **Recent jobs**.
+
 **Transcripts arrive minutes late.**
 Whisper on CPU is slow enough to fall behind a busy system. GPU acceleration is
 the fix; see

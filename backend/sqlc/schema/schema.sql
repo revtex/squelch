@@ -285,7 +285,8 @@ CREATE TABLE IF NOT EXISTS transcription_jobs (
     model       TEXT,
     duration_ms INTEGER,
     created_at  INTEGER NOT NULL,
-    finished_at INTEGER
+    finished_at INTEGER,
+    auto_retries INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_transcription_jobs_status_created ON transcription_jobs(status, created_at);

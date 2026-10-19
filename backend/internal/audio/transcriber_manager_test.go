@@ -52,19 +52,34 @@ func TestTranscriberManager_Reload_DisabledToEnabled(t *testing.T) {
 	}
 }
 
-func TestTranscriberManager_Reload_UnreachableServer_DisablesManager(t *testing.T) {
+// A go-whisper that does not answer leaves transcription on, waiting for it,
+// instead of off until an admin saves the settings again.
+func TestTranscriberManager_Reload_UnreachableServer_StaysOnAndWaits(t *testing.T) {
 	srv := newFakeWhisper(t, http.StatusInternalServerError)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	m := audio.NewTranscriberManager(ctx, nil, nil)
 
-	ok := m.Reload(true, srv.URL, "ggml-base", "", false)
-	if ok {
-		t.Fatal("Reload against 500-returning server must return false")
+	if ok := m.Reload(true, srv.URL, "ggml-base", "", false); !ok {
+		t.Fatal("Reload against a 500-returning server = false, want the pool kept")
+	}
+	if !m.Enabled() || m.Answering() {
+		t.Fatalf("Enabled() = %v Answering() = %v, want on and not answering", m.Enabled(), m.Answering())
+	}
+}
+
+// Settings that cannot make a pool at all still turn transcription off.
+func TestTranscriberManager_Reload_BadURL_Disables(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	m := audio.NewTranscriberManager(ctx, nil, nil)
+
+	if ok := m.Reload(true, "ftp://whisper.local", "ggml-base", "", false); ok {
+		t.Fatal("Reload with an ftp URL = true")
 	}
 	if m.Enabled() {
-		t.Fatal("Enabled() = true after failed Reload")
+		t.Fatal("Enabled() = true after a Reload that made no pool")
 	}
 }
 

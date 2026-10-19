@@ -10,6 +10,15 @@ import (
 	"database/sql"
 )
 
+const addTranscriptionJobAutoRetry = `-- name: AddTranscriptionJobAutoRetry :exec
+UPDATE transcription_jobs SET auto_retries = auto_retries + 1 WHERE call_id = ?
+`
+
+func (q *Queries) AddTranscriptionJobAutoRetry(ctx context.Context, callID int64) error {
+	_, err := q.db.ExecContext(ctx, addTranscriptionJobAutoRetry, callID)
+	return err
+}
+
 const countTranscriptionJobs = `-- name: CountTranscriptionJobs :one
 SELECT
     CAST(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS INTEGER) AS queued,
@@ -69,7 +78,7 @@ func (q *Queries) FinishTranscriptionJob(ctx context.Context, arg FinishTranscri
 }
 
 const getTranscriptionJob = `-- name: GetTranscriptionJob :one
-SELECT id, call_id, status, error, model, duration_ms, created_at, finished_at FROM transcription_jobs WHERE call_id = ? LIMIT 1
+SELECT id, call_id, status, error, model, duration_ms, created_at, finished_at, auto_retries FROM transcription_jobs WHERE call_id = ? LIMIT 1
 `
 
 func (q *Queries) GetTranscriptionJob(ctx context.Context, callID int64) (TranscriptionJob, error) {
@@ -84,8 +93,94 @@ func (q *Queries) GetTranscriptionJob(ctx context.Context, callID int64) (Transc
 		&i.DurationMs,
 		&i.CreatedAt,
 		&i.FinishedAt,
+		&i.AutoRetries,
 	)
 	return i, err
+}
+
+const listAutoRetryTranscriptionJobs = `-- name: ListAutoRetryTranscriptionJobs :many
+SELECT j.call_id, c.audio_path
+FROM transcription_jobs j
+JOIN calls c ON c.id = j.call_id
+WHERE j.status = 'failed'
+  AND j.error IN ('sidecar not reachable', 'sidecar host unreachable')
+  AND j.auto_retries < ?1
+ORDER BY j.call_id DESC
+LIMIT ?2
+`
+
+type ListAutoRetryTranscriptionJobsParams struct {
+	MaxRetries int64 `db:"max_retries" json:"max_retries"`
+	Limit      int64 `db:"limit" json:"limit"`
+}
+
+type ListAutoRetryTranscriptionJobsRow struct {
+	CallID    int64  `db:"call_id" json:"call_id"`
+	AudioPath string `db:"audio_path" json:"audio_path"`
+}
+
+// Failed calls go-whisper never saw because it could not be reached, newest
+// first, that still have automatic retries left. The error texts are the
+// ones admin.plainJobError writes for an unreachable sidecar.
+func (q *Queries) ListAutoRetryTranscriptionJobs(ctx context.Context, arg ListAutoRetryTranscriptionJobsParams) ([]ListAutoRetryTranscriptionJobsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAutoRetryTranscriptionJobs, arg.MaxRetries, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAutoRetryTranscriptionJobsRow{}
+	for rows.Next() {
+		var i ListAutoRetryTranscriptionJobsRow
+		if err := rows.Scan(&i.CallID, &i.AudioPath); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQueuedTranscriptionJobs = `-- name: ListQueuedTranscriptionJobs :many
+SELECT j.call_id, c.audio_path
+FROM transcription_jobs j
+JOIN calls c ON c.id = j.call_id
+WHERE j.status = 'queued'
+ORDER BY j.call_id
+`
+
+type ListQueuedTranscriptionJobsRow struct {
+	CallID    int64  `db:"call_id" json:"call_id"`
+	AudioPath string `db:"audio_path" json:"audio_path"`
+}
+
+// Calls recorded as queued, oldest first. Read at startup, before anything
+// is queued, it is the calls a previous run took but never transcribed.
+func (q *Queries) ListQueuedTranscriptionJobs(ctx context.Context) ([]ListQueuedTranscriptionJobsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listQueuedTranscriptionJobs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQueuedTranscriptionJobsRow{}
+	for rows.Next() {
+		var i ListQueuedTranscriptionJobsRow
+		if err := rows.Scan(&i.CallID, &i.AudioPath); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listTranscriptionJobs = `-- name: ListTranscriptionJobs :many

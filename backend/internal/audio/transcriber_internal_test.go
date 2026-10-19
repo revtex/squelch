@@ -4,13 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/revtex/squelch/internal/safehttp"
 )
 
 // A host that is off the network fails every dial, often only after a few
@@ -113,7 +120,7 @@ func TestTranscriberManager_SubmitSkipsWhenTheBacklogIsFull(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p := stuckPool(ctx)
-	m := newTranscriberManager(ctx, p, cancel, 1)
+	m := newTranscriberManager(ctx, p, cancel, 1, time.Hour)
 	rec := &jobLog{}
 	m.SetRecorder(rec)
 
@@ -149,7 +156,7 @@ func TestTranscriberManager_WaitingCallsAreSkippedWhenTurnedOff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	poolCtx, stopPool := context.WithCancel(ctx)
-	m := newTranscriberManager(ctx, stuckPool(poolCtx), stopPool, 4)
+	m := newTranscriberManager(ctx, stuckPool(poolCtx), stopPool, 4, time.Hour)
 	rec := &jobLog{}
 	m.SetRecorder(rec)
 
@@ -165,5 +172,178 @@ func TestTranscriberManager_WaitingCallsAreSkippedWhenTurnedOff(t *testing.T) {
 	}
 	if err := m.Submit(ctx, TranscriptionJob{CallID: 3}); err != nil {
 		t.Errorf("Submit while off = %v, want nil", err)
+	}
+}
+
+// A go-whisper that is down when transcription starts leaves it on: calls
+// wait in the backlog rather than being sent to fail, and they go out by
+// themselves once the probe finds it answering.
+func TestTranscriberManager_StaysOnAndResumesWhenGoWhisperComesBack(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var up atomic.Bool
+	var pings, sent atomic.Int32
+	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/whisper/model":
+			pings.Add(1)
+		case "/api/whisper/transcribe":
+			sent.Add(1)
+		}
+		if !up.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/api/whisper/transcribe" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"language":"en","segments":[{"text":"engine 1 respond"}]}`)
+		}
+	}))
+	defer sidecar.Close()
+	clip := filepath.Join(t.TempDir(), "clip.m4a")
+	if err := os.WriteFile(clip, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newTranscriberManager(ctx, nil, nil, 16, 5*time.Millisecond)
+	if !m.Reload(true, sidecar.URL, "ggml-base", "en", false) {
+		t.Fatal("Reload turned transcription off because go-whisper did not answer")
+	}
+	if !m.Enabled() || m.Answering() || m.BaseURL() != sidecar.URL {
+		t.Fatalf("enabled = %v answering = %v url = %q", m.Enabled(), m.Answering(), m.BaseURL())
+	}
+	if err := m.Submit(ctx, TranscriptionJob{CallID: 7, AudioPath: clip}); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, "the probe has asked again", func() bool { return pings.Load() >= 3 })
+	if n := sent.Load(); n != 0 {
+		t.Fatalf("%d calls sent while go-whisper was down", n)
+	}
+	if got := m.QueueDepth(); got != 1 {
+		t.Fatalf("queue depth = %d, want the call waiting", got)
+	}
+
+	up.Store(true)
+	select {
+	case res := <-m.Results():
+		if res.CallID != 7 || res.Err != nil || res.Result.Text != "engine 1 respond" {
+			t.Fatalf("result = %+v", res)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting call was not sent once go-whisper answered")
+	}
+	if !m.Answering() {
+		t.Error("Answering() = false after go-whisper came back")
+	}
+}
+
+// A job that could not reach go-whisper at all marks it as not answering,
+// so the calls behind it wait instead of failing too; a job that reached it
+// and failed does not.
+func TestTranscriberManager_UnreachableResultHoldsTheCallsBehindIt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	poolCtx, stopPool := context.WithCancel(ctx)
+	p := stuckPool(poolCtx)
+	p.results = make(chan TranscriptionJobResult)
+	m := newTranscriberManager(ctx, p, stopPool, 4, time.Hour)
+
+	p.results <- TranscriptionJobResult{CallID: 1, Err: errors.New("go-whisper returned status 500: model not loaded")}
+	<-m.Results()
+	if !m.Answering() {
+		t.Fatal("a go-whisper that answered with an error was marked as not answering")
+	}
+	refused := fmt.Errorf("go-whisper request: %w", &net.OpError{
+		Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED},
+	})
+	p.results <- TranscriptionJobResult{CallID: 2, Err: refused}
+	<-m.Results()
+	if m.Answering() {
+		t.Fatal("Answering() = true after a job could not reach go-whisper")
+	}
+
+	if err := m.Submit(ctx, TranscriptionJob{CallID: 3}); err != nil {
+		t.Fatalf("Submit while go-whisper is down = %v", err)
+	}
+	select {
+	case j := <-p.jobs:
+		t.Fatalf("call %d sent while go-whisper is down", j.CallID)
+	case <-time.After(50 * time.Millisecond):
+	}
+	m.setAnswering(p, true, nil) // what the probe does once it answers
+	select {
+	case j := <-p.jobs:
+		if j.CallID != 3 {
+			t.Fatalf("pool got call %d, want 3", j.CallID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting call was not sent once go-whisper answered")
+	}
+}
+
+// A requeued call goes to the pool only when no submitted call is waiting.
+func TestTranscriberManager_RequeueWaitsBehindLiveCalls(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	poolCtx, stopPool := context.WithCancel(ctx)
+	p := stuckPool(poolCtx)
+	m := newTranscriberManager(ctx, p, stopPool, 8, time.Hour)
+
+	if err := m.Submit(ctx, TranscriptionJob{CallID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, "the dispatcher holds call 1", func() bool { return len(m.backlog) == 0 })
+	requeued := make(chan error, 1)
+	go func() { requeued <- m.Requeue(ctx, 100, "/rec/old.m4a") }()
+	for id := int64(2); id <= 3; id++ {
+		if err := m.Submit(ctx, TranscriptionJob{CallID: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, want := range []int64{1, 2, 3, 100} {
+		select {
+		case j := <-p.jobs:
+			if j.CallID != want {
+				t.Fatalf("pool got call %d, want %d", j.CallID, want)
+			}
+			if want == 100 && (!j.Force || j.AudioPath != "/rec/old.m4a") {
+				t.Errorf("requeued job = %+v", j)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no call %d", want)
+		}
+	}
+	if err := <-requeued; err != nil {
+		t.Errorf("Requeue = %v", err)
+	}
+
+	off := newTranscriberManager(ctx, nil, nil, 1, time.Hour)
+	if err := off.Requeue(ctx, 5, "/rec/x.m4a"); !errors.Is(err, ErrTranscriptionOff) {
+		t.Errorf("Requeue while off = %v, want ErrTranscriptionOff", err)
+	}
+}
+
+func TestSidecarUnreachable(t *testing.T) {
+	dial := func(err error) error {
+		return fmt.Errorf("go-whisper request: %w", &net.OpError{Op: "dial", Net: "tcp", Err: err})
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"connection refused", dial(&os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED}), true},
+		{"no route to host", dial(&os.SyscallError{Syscall: "connect", Err: syscall.EHOSTUNREACH}), true},
+		{"dial timeout", dial(errors.New("i/o timeout")), true},
+		{"no route to host, as text", errors.New("dial tcp 192.168.101.11:8081: connect: no route to host"), true},
+		{"blocked address", dial(safehttp.ErrBlockedAddress), false},
+		{"reset mid-request", fmt.Errorf("go-whisper request: %w", &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}), false},
+		{"server error", errors.New("go-whisper returned status 500: boom"), false},
+		{"EOF", fmt.Errorf("go-whisper request: %w", io.EOF), false},
+	} {
+		if got := sidecarUnreachable(tc.err); got != tc.want {
+			t.Errorf("%s: sidecarUnreachable = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

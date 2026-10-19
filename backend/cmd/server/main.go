@@ -863,42 +863,18 @@ func (p *program) run() {
 		}
 	}
 
-	// Set up transcription pool (go-whisper HTTP API).
-	// Set up transcription manager (go-whisper HTTP API, hot-reloadable).
-	var initialPool *audio.TranscriberPool
-	var poolCancel context.CancelFunc
+	// Set up the transcription manager (go-whisper HTTP API, hot-reloadable).
+	// A go-whisper that is down at startup leaves transcription on: calls
+	// wait until it answers, as they do when it goes down later.
+	transcriberMgr := audio.NewTranscriberManager(ctx, nil, nil)
 	hasWhisper := false
 	if tEnabled, _ := queries.GetSetting(context.Background(), "transcriptionEnabled"); tEnabled.Value == "true" {
 		tURL, _ := queries.GetSetting(context.Background(), "transcriptionUrl")
 		tModel, _ := queries.GetSetting(context.Background(), "transcriptionModel")
 		tLang, _ := queries.GetSetting(context.Background(), "transcriptionLanguage")
 		tDiarize, _ := queries.GetSetting(context.Background(), "transcriptionDiarize")
-
-		baseURL := tURL.Value
-		if baseURL == "" {
-			baseURL = "http://localhost:8081"
-		}
-		model := tModel.Value
-		if model == "" {
-			model = "ggml-base"
-		}
-
-		poolCtx, pCancel := context.WithCancel(ctx)
-		tp, err := audio.NewTranscriberPool(poolCtx, 2, baseURL, model, tLang.Value, tDiarize.Value == "true")
-		if err != nil {
-			pCancel()
-			slog.Warn("transcription pool creation failed, disabling", "error", err)
-		} else if err := tp.Ping(poolCtx); err != nil {
-			pCancel()
-			slog.Warn("go-whisper unreachable, disabling transcription", "url", baseURL, "error", err)
-		} else {
-			initialPool = tp
-			poolCancel = pCancel
-			hasWhisper = true
-			slog.Info("transcription enabled", "url", baseURL, "model", model, "diarize", tDiarize.Value == "true")
-		}
+		hasWhisper = transcriberMgr.Reload(true, tURL.Value, tModel.Value, tLang.Value, tDiarize.Value == "true")
 	}
-	transcriberMgr := audio.NewTranscriberManager(ctx, initialPool, poolCancel)
 	admin.ApplyTranscriptionMinDuration(ctx, queries, transcriberMgr)
 
 	// Start background call pruner.
@@ -1007,7 +983,22 @@ func (p *program) run() {
 
 	// The job history needs the hub so admin pages hear about each job; it
 	// is set before anything can hand the transcriber a call.
-	transcriberMgr.SetRecorder(admin.TranscriptionJobRecorder{Queries: queries, Events: hub})
+	jobRecorder := admin.TranscriptionJobRecorder{Queries: queries, Events: hub}
+	transcriberMgr.SetRecorder(jobRecorder)
+	// Calls a previous run queued but never transcribed are read before
+	// anything new is queued, then handed back behind live calls; calls that
+	// failed because go-whisper was unreachable are retried the same way.
+	recovery := admin.TranscriptionRecovery{
+		Queries:       queries,
+		Transcriber:   transcriberMgr,
+		Recorder:      jobRecorder,
+		RecordingsDir: cfg.RecordingsDir,
+	}
+	stale, err := recovery.Stale(ctx)
+	if err != nil {
+		slog.Error("transcription: failed to read calls left queued", "error", err)
+	}
+	go recovery.Run(ctx, stale)
 	dwService := dirmonitor.NewService(queries, processor, hub, forwarders, transcriberMgr)
 	dwService.Start(ctx)
 	hub.SetDirMonitorReloader(dwService)

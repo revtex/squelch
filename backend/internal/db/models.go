@@ -224,14 +224,15 @@ type Transcription struct {
 }
 
 type TranscriptionJob struct {
-	ID         int64          `db:"id" json:"id"`
-	CallID     int64          `db:"call_id" json:"call_id"`
-	Status     string         `db:"status" json:"status"`
-	Error      sql.NullString `db:"error" json:"error"`
-	Model      sql.NullString `db:"model" json:"model"`
-	DurationMs sql.NullInt64  `db:"duration_ms" json:"duration_ms"`
-	CreatedAt  int64          `db:"created_at" json:"created_at"`
-	FinishedAt sql.NullInt64  `db:"finished_at" json:"finished_at"`
+	ID          int64          `db:"id" json:"id"`
+	CallID      int64          `db:"call_id" json:"call_id"`
+	Status      string         `db:"status" json:"status"`
+	Error       sql.NullString `db:"error" json:"error"`
+	Model       sql.NullString `db:"model" json:"model"`
+	DurationMs  sql.NullInt64  `db:"duration_ms" json:"duration_ms"`
+	CreatedAt   int64          `db:"created_at" json:"created_at"`
+	FinishedAt  sql.NullInt64  `db:"finished_at" json:"finished_at"`
+	AutoRetries int64          `db:"auto_retries" json:"auto_retries"`
 }
 
 type Unit struct {

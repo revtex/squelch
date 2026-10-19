@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Transcription comes back by itself after a go-whisper outage.** If
+  go-whisper did not answer when the server started, or when transcription
+  settings were saved, transcription turned off until an admin saved the
+  settings again. It now stays on: new calls wait in the queue instead of
+  being sent to fail, Squelch checks the sidecar every 30 seconds, and the
+  waiting calls go out once it answers. The Transcription page still shows
+  it as not connected meanwhile.
+- **Calls that failed because go-whisper was unreachable are retried
+  automatically.** Once the sidecar answers again, calls that failed with
+  "sidecar not reachable" or "sidecar host unreachable" are sent again, up to
+  three times each and newest first. They go out only when no new call is
+  waiting, so live calls are never held up. This includes calls that failed
+  before this release and are still in the 30-day job history.
+- **Calls queued for transcription are no longer lost when the server
+  restarts.** The queue lives in memory, so calls waiting in it at a restart
+  were never transcribed and stayed "queued" in Recent jobs forever. They are
+  now queued again at startup, behind new calls. If transcription is off,
+  they are listed as skipped ("server restarted before it was transcribed").
 - **A slow or unreachable go-whisper no longer holds up call uploads.** The
   upload reply waited until the transcriber had room for the call, and its
   queue holds only a few, so while go-whisper was down every upload took as

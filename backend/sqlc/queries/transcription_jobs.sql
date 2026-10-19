@@ -42,5 +42,30 @@ SELECT
     CAST(SUM(CASE WHEN status = 'skipped' AND finished_at >= @since THEN 1 ELSE 0 END) AS INTEGER) AS skipped_recent
 FROM transcription_jobs;
 
+-- name: ListQueuedTranscriptionJobs :many
+-- Calls recorded as queued, oldest first. Read at startup, before anything
+-- is queued, it is the calls a previous run took but never transcribed.
+SELECT j.call_id, c.audio_path
+FROM transcription_jobs j
+JOIN calls c ON c.id = j.call_id
+WHERE j.status = 'queued'
+ORDER BY j.call_id;
+
+-- name: ListAutoRetryTranscriptionJobs :many
+-- Failed calls go-whisper never saw because it could not be reached, newest
+-- first, that still have automatic retries left. The error texts are the
+-- ones admin.plainJobError writes for an unreachable sidecar.
+SELECT j.call_id, c.audio_path
+FROM transcription_jobs j
+JOIN calls c ON c.id = j.call_id
+WHERE j.status = 'failed'
+  AND j.error IN ('sidecar not reachable', 'sidecar host unreachable')
+  AND j.auto_retries < @max_retries
+ORDER BY j.call_id DESC
+LIMIT @limit;
+
+-- name: AddTranscriptionJobAutoRetry :exec
+UPDATE transcription_jobs SET auto_retries = auto_retries + 1 WHERE call_id = ?;
+
 -- name: DeleteTranscriptionJobsBefore :execrows
 DELETE FROM transcription_jobs WHERE status <> 'queued' AND created_at < ?;

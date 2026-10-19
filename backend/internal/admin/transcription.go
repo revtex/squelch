@@ -789,9 +789,10 @@ func plainJobError(err error) string {
 	s := err.Error()
 	switch {
 	case strings.Contains(s, "connection refused"):
-		return "sidecar not reachable"
-	case strings.Contains(s, "no route to host") || strings.Contains(s, "network is unreachable"):
-		return "sidecar host unreachable"
+		return jobErrSidecarDown
+	case strings.Contains(s, "no route to host") || strings.Contains(s, "network is unreachable"),
+		strings.Contains(s, "dial tcp") && strings.Contains(s, "timeout"):
+		return jobErrSidecarHostDown
 	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "Timeout"):
 		return "sidecar timed out"
 	case strings.Contains(s, "no such file"):
