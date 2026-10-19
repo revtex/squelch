@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,10 +135,15 @@ func TestTranscriptionDownload_StreamsProgressThenDone(t *testing.T) {
 	}
 }
 
-// fakeTranscriber stands in for the live pool.
+// fakeTranscriber stands in for the live pool. Retry runs on the background
+// hand-over goroutine, so retried is guarded; gate, when set, holds each
+// Retry until the test lets it through.
 type fakeTranscriber struct {
 	enabled bool
 	minMs   int64
+	gate    chan struct{}
+
+	mu      sync.Mutex
 	retried []string
 }
 
@@ -150,8 +156,39 @@ func (f *fakeTranscriber) Workers() int                                   { retu
 func (f *fakeTranscriber) MinDurationMs() int64                           { return f.minMs }
 func (f *fakeTranscriber) SetMinDurationMs(ms int64)                      { f.minMs = ms }
 func (f *fakeTranscriber) Retry(_ context.Context, _ int64, path string) error {
+	if f.gate != nil {
+		<-f.gate
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.retried = append(f.retried, path)
 	return nil
+}
+
+func (f *fakeTranscriber) retriedPaths() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.retried...)
+}
+
+// waitForRetryHandover waits until a retry's background hand-over is done.
+func waitForRetryHandover(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for retryHandover.Load() {
+		if time.Now().After(deadline) {
+			t.Fatal("the retry hand-over never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// pointAtWhisper sets transcriptionUrl to a go-whisper stand-in.
+func pointAtWhisper(t *testing.T, q *db.Queries, url string) {
+	t.Helper()
+	if err := q.UpsertSetting(context.Background(), db.UpsertSettingParams{Key: "transcriptionUrl", Value: url}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTranscriptionJobs_HistoryStatsAndRetry(t *testing.T) {
@@ -211,12 +248,16 @@ func TestTranscriptionJobs_HistoryStatsAndRetry(t *testing.T) {
 		t.Errorf("retry while off: %v", err)
 	}
 	fake.enabled = true
+	srv := whisperStub(t)
+	defer srv.Close()
+	pointAtWhisper(t, q, srv.URL)
 	res, err = o.TranscriptionRetry(context.Background(), params(t, map[string]any{"callIds": []int64{c, 99999}}), 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.(map[string]any)["retried"] != 1 || len(fake.retried) != 1 || fake.retried[0] != "/rec/x/c.m4a" {
-		t.Errorf("retry = %v, paths %v", res, fake.retried)
+	waitForRetryHandover(t)
+	if paths := fake.retriedPaths(); res.(map[string]any)["retried"] != 1 || len(paths) != 1 || paths[0] != "/rec/x/c.m4a" {
+		t.Errorf("retry = %v, paths %v", res, paths)
 	}
 	if msg := lastLogMessage(t, o); !strings.HasSuffix(msg, "1 transcription retried by user #1") {
 		t.Errorf("audit = %q", msg)
@@ -313,5 +354,102 @@ func TestTranscriptionModels_BareArrayAndReadableError(t *testing.T) {
 	var ue UserError
 	if !errors.As(err, &ue) || !strings.Contains(err.Error(), "not a go-whisper model list") {
 		t.Errorf("err = %#v", err)
+	}
+}
+
+// retryCalls makes n calls to retry.
+func retryCalls(t *testing.T, o *Operations, q *db.Queries, n int) []int64 {
+	t.Helper()
+	sysID := createSystem(t, o, 1, "Lake")
+	tgID := createTalkgroup(t, o, sysID, 101, "Disp")
+	ids := make([]int64, 0, n)
+	for i := 0; i < n; i++ {
+		id, err := q.CreateCall(context.Background(), db.CreateCallParams{
+			AudioPath: fmt.Sprintf("x/%d.m4a", i), AudioName: "c.m4a", AudioType: "audio/mp4",
+			DateTime: time.Now().Unix(), Duration: sql.NullInt64{Int64: 4000, Valid: true},
+			SystemID: sysID, TalkgroupID: sql.NullInt64{Int64: tgID, Valid: true},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// A retry while go-whisper is down queues nothing: the calls would only fail
+// again, and the admin is told why instead.
+func TestTranscriptionRetry_RefusedWhileTheSidecarIsDown(t *testing.T) {
+	o, q := newTestOperations(t, "")
+	fake := &fakeTranscriber{enabled: true}
+	o.Deps.TranscriberReload = fake
+	ids := retryCalls(t, o, q, 3)
+	down := httptest.NewServer(http.NotFoundHandler())
+	down.Close() // nothing listens here now
+	pointAtWhisper(t, q, down.URL)
+
+	_, err := o.TranscriptionRetry(context.Background(), params(t, map[string]any{"callIds": ids}), 1)
+	if err == nil || !strings.Contains(err.Error(), "nothing was queued") {
+		t.Fatalf("retry with the sidecar down: %v", err)
+	}
+	if retryHandover.Load() {
+		t.Error("a refused retry left the hand-over marked as running")
+	}
+	if got := fake.retriedPaths(); len(got) != 0 {
+		t.Errorf("calls were queued anyway: %v", got)
+	}
+}
+
+// The reply comes back while the calls are still being handed over, and a
+// second retry is turned away until the first is done.
+func TestTranscriptionRetry_AnswersBeforeTheHandOverFinishes(t *testing.T) {
+	o, q := newTestOperations(t, "")
+	fake := &fakeTranscriber{enabled: true, gate: make(chan struct{})}
+	o.Deps.TranscriberReload = fake
+	// Let the hand-over finish even if the test fails first, so it cannot
+	// leave the next retry test facing "still being queued".
+	var openGate sync.Once
+	letThrough := func() { openGate.Do(func() { close(fake.gate) }) }
+	t.Cleanup(func() { letThrough(); waitForRetryHandover(t) })
+	srv := whisperStub(t)
+	defer srv.Close()
+	pointAtWhisper(t, q, srv.URL)
+	ids := retryCalls(t, o, q, 20)
+
+	done := make(chan error, 1)
+	go func() {
+		res, err := o.TranscriptionRetry(context.Background(), params(t, map[string]any{"callIds": ids}), 1)
+		if err == nil && res.(map[string]any)["retried"] != 20 {
+			err = fmt.Errorf("retried = %v", res)
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the retry waited for the hand-over before answering")
+	}
+
+	if _, err := o.TranscriptionRetry(context.Background(), params(t, map[string]any{"callIds": ids}), 1); err == nil || !strings.Contains(err.Error(), "still being queued") {
+		t.Errorf("second retry during the hand-over: %v", err)
+	}
+
+	letThrough()
+	waitForRetryHandover(t)
+	if got := fake.retriedPaths(); len(got) != 20 {
+		t.Errorf("handed over %d calls, want 20", len(got))
+	}
+}
+
+func TestPlainJobError_UnreachableHost(t *testing.T) {
+	err := errors.New(`go-whisper request: Post "http://192.168.101.11:8081/api/whisper/transcribe": dial tcp 192.168.101.11:8081: connect: no route to host`)
+	if got := plainJobError(err); got != "sidecar host unreachable" {
+		t.Errorf("plainJobError = %q", got)
+	}
+	if got := plainNetError(err); got != "the host is unreachable" {
+		t.Errorf("plainNetError = %q", got)
 	}
 }

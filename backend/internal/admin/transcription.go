@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/revtex/squelch/internal/db"
@@ -172,6 +173,8 @@ func plainNetError(err error) string {
 		return "nothing is listening at that address"
 	case strings.Contains(s, "no such host"):
 		return "the host name does not resolve"
+	case strings.Contains(s, "no route to host") || strings.Contains(s, "network is unreachable"):
+		return "the host is unreachable"
 	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(s, "deadline exceeded") || strings.Contains(s, "Timeout"):
 		return "no answer within 5 seconds"
 	}
@@ -552,7 +555,17 @@ func (o *Operations) TranscriptionJobs(ctx context.Context, params json.RawMessa
 	return out, nil
 }
 
+// retryHandover is set while a retry's calls are still being handed to the
+// pool, so a second click cannot stack another batch behind the first.
+var retryHandover atomic.Bool
+
 // TranscriptionRetry hands calls to the transcriber again.
+//
+// It answers as soon as the batch is checked and does the handing over in the
+// background. The pool's queue is short, so queuing hundreds of calls waits on
+// the workers, and an admin request that waits that long holds up every other
+// request on the same socket. It also refuses outright when go-whisper does
+// not answer, rather than re-queuing calls only for them to fail again.
 func (o *Operations) TranscriptionRetry(ctx context.Context, params json.RawMessage, callerID int64) (any, error) {
 	var req struct {
 		CallID  int64   `json:"callId"`
@@ -575,7 +588,29 @@ func (o *Operations) TranscriptionRetry(ctx context.Context, params json.RawMess
 	if tr == nil || !tr.Enabled() {
 		return nil, UserError("transcription is off; turn it on first")
 	}
-	retried := 0
+	if !retryHandover.CompareAndSwap(false, true) {
+		return nil, UserError("the last retry is still being queued; try again when it has finished")
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			retryHandover.Store(false)
+		}
+	}()
+
+	baseURL, err := o.transcriptionBaseURL(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if p := probeWhisper(ctx, baseURL); !p.OK {
+		return nil, UserError("go-whisper is not answering (" + p.Error + "), so nothing was queued; retry once it is back")
+	}
+
+	type retryJob struct {
+		callID int64
+		path   string
+	}
+	jobs := make([]retryJob, 0, len(ids))
 	for _, id := range ids {
 		call, err := o.Queries.GetCall(ctx, id)
 		if err != nil {
@@ -584,13 +619,25 @@ func (o *Operations) TranscriptionRetry(ctx context.Context, params json.RawMess
 			}
 			return nil, fmt.Errorf("load call %d: %w", id, err)
 		}
-		if err := tr.Retry(ctx, id, filepath.Join(o.Deps.RecordingsDir, call.AudioPath)); err != nil {
-			return nil, UserError(err.Error())
-		}
-		retried++
+		jobs = append(jobs, retryJob{callID: id, path: filepath.Join(o.Deps.RecordingsDir, call.AudioPath)})
 	}
-	o.audit(ctx, fmt.Sprintf("%s retried by %s", pluralWord(retried, "transcription"), o.callerName(ctx, callerID)))
-	return map[string]any{"ok": true, "retried": retried}, nil
+
+	// Detached from the request: the hand-over outlives the reply, and the
+	// admin closing the page should not cut it short.
+	bg := context.WithoutCancel(ctx)
+	handedOff = true
+	go func() {
+		defer retryHandover.Store(false)
+		for _, j := range jobs {
+			if err := tr.Retry(bg, j.callID, j.path); err != nil {
+				slog.Warn("transcription: retry hand-over stopped", "call_id", j.callID, "error", err)
+				return
+			}
+		}
+	}()
+
+	o.audit(ctx, fmt.Sprintf("%s retried by %s", pluralWord(len(jobs), "transcription"), o.callerName(ctx, callerID)))
+	return map[string]any{"ok": true, "retried": len(jobs)}, nil
 }
 
 // TranscriptionStats aggregates the transcription table, the job history
@@ -743,6 +790,8 @@ func plainJobError(err error) string {
 	switch {
 	case strings.Contains(s, "connection refused"):
 		return "sidecar not reachable"
+	case strings.Contains(s, "no route to host") || strings.Contains(s, "network is unreachable"):
+		return "sidecar host unreachable"
 	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "Timeout"):
 		return "sidecar timed out"
 	case strings.Contains(s, "no such file"):

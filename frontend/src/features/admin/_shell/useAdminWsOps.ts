@@ -604,12 +604,18 @@ export function useTranscriptionTestMutation() {
   return useWsMutation<TranscriptionTestResult, { url?: string }>("transcription.test");
 }
 
+/**
+ * Every job that is queued or finishes raises transcription.jobs.updated, so
+ * a failing batch sends hundreds of them in a burst. The list refetches once
+ * the burst settles; the 15 s poll keeps it current while one is still going.
+ */
 export function useTranscriptionJobsQuery(status?: TranscriptionJobStatus, limit = 100) {
   return useWsQuery<TranscriptionJob[]>(
     "transcription.jobs",
     { status: status ?? "", limit },
     "transcription.jobs.updated",
     15_000,
+    { debounceMs: 2_000 },
   );
 }
 
@@ -623,6 +629,7 @@ export function useTranscriptionStatsQuery() {
     undefined,
     "transcription.jobs.updated",
     30_000, // Auto-refresh every 30 seconds
+    { debounceMs: 2_000 }, // job events come in bursts; see useTranscriptionJobsQuery
   );
 }
 

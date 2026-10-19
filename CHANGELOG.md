@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Retrying failed transcriptions no longer freezes the admin.** Retry
+  queued every call itself before answering, and the transcriber's queue
+  holds only a few, so retrying a hundred calls while go-whisper was
+  unreachable took minutes. The page gave up with "Admin WS request timed
+  out", the queuing carried on regardless, and every other admin request on
+  that tab, Logs included, waited behind it. Retry now answers at once and
+  queues in the background, refuses while go-whisper does not answer
+  ("nothing was queued"), and turns away a second click until the first
+  batch is queued.
+- **An unreachable go-whisper host fails fast.** "No route to host" was
+  retried three times per call like a restarting sidecar, holding a worker
+  for at least 12 seconds of back-off plus four failed connection attempts. It now fails at once and reads "sidecar
+  host unreachable" in the jobs list, and "the host is unreachable" in the
+  connection banner.
+- **The Transcription page keeps up with a burst of failures.** The jobs list
+  and stats refetched on every job event, hundreds of them when a batch
+  fails together; they now refetch once the burst settles.
+
 ## [3.1.0] — 2026-09-29
 
 ### Added

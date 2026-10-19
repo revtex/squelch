@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -177,15 +179,27 @@ func (r *recordingJobs) Skipped(_ context.Context, id int64, _, reason string) {
 func TestTranscriberManager_SkipsShortCallsUnlessForced(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// The pool's worker is stopped at once, so what is queued stays counted.
+	// The sidecar holds every request until the test ends, so the pool's one
+	// worker takes the first job and what is queued behind it stays counted.
+	taken := make(chan struct{}, 4)
+	release := make(chan struct{})
+	sidecar := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		taken <- struct{}{}
+		<-release
+	}))
+	defer sidecar.Close()
+	defer close(release)
 	poolCtx, stopPool := context.WithCancel(ctx)
-	pool, err := audio.NewTranscriberPool(poolCtx, 1, "http://127.0.0.1:1", "ggml-base", "en", false)
+	pool, err := audio.NewTranscriberPool(poolCtx, 1, sidecar.URL, "ggml-base", "en", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stopPool()
-	time.Sleep(20 * time.Millisecond)
 	m := audio.NewTranscriberManager(ctx, pool, stopPool)
+	// The worker opens the file before it calls the sidecar.
+	clip := filepath.Join(t.TempDir(), "clip.m4a")
+	if err := os.WriteFile(clip, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	rec := &recordingJobs{}
 	m.SetRecorder(rec)
 	m.SetMinDurationMs(1500)
@@ -193,19 +207,20 @@ func TestTranscriberManager_SkipsShortCallsUnlessForced(t *testing.T) {
 	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 1, DurationMs: 900}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 2, DurationMs: 3000}); err != nil {
+	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 2, AudioPath: clip, DurationMs: 3000}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 3}); err != nil { // unknown length: kept
+	if err := m.Submit(ctx, audio.TranscriptionJob{CallID: 3, AudioPath: clip}); err != nil { // unknown length: kept
 		t.Fatal(err)
 	}
-	if err := m.Retry(ctx, 4, "/rec/short.m4a"); err != nil {
+	if err := m.Retry(ctx, 4, clip); err != nil {
 		t.Fatal(err)
 	}
 	if rec.skipped[1] != "shorter than 1.5 s" || len(rec.skipped) != 1 {
 		t.Errorf("skipped = %v", rec.skipped)
 	}
-	if len(rec.queued) != 3 || m.QueueDepth() != 3 || m.Workers() != 1 {
+	<-taken // one job is with the worker; the other two wait in the queue
+	if len(rec.queued) != 3 || m.QueueDepth() != 2 || m.Workers() != 1 {
 		t.Errorf("queued = %v depth = %d workers = %d", rec.queued, m.QueueDepth(), m.Workers())
 	}
 }

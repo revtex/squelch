@@ -72,7 +72,14 @@ type TranscriberPool struct {
 	diarize  bool
 	workers  int
 	wg       sync.WaitGroup // tracks worker goroutines so results can be closed safely
+	// stopped closes when the pool's context ends, so a Submit blocked on a
+	// full queue gives up instead of waiting on workers that are gone.
+	stopped <-chan struct{}
 }
+
+// ErrTranscriberStopped is returned by Submit once the pool has been
+// stopped, for instance by a settings reload.
+var ErrTranscriberStopped = errors.New("transcriber stopped")
 
 // maxResponseSize caps go-whisper response bodies at 10 MB.
 const maxResponseSize = 10 << 20
@@ -103,6 +110,7 @@ func NewTranscriberPool(ctx context.Context, numWorkers int, baseURL, model, lan
 		language: language,
 		diarize:  diarize,
 		workers:  numWorkers,
+		stopped:  ctx.Done(),
 	}
 
 	p.wg.Add(numWorkers)
@@ -137,12 +145,15 @@ func NewTranscriberPool(ctx context.Context, numWorkers int, baseURL, model, lan
 }
 
 // Submit enqueues a transcription job. Returns ctx.Err() if the context is
-// cancelled before the job can be queued.
+// cancelled before the job can be queued, and ErrTranscriberStopped if the
+// pool stops first.
 func (p *TranscriberPool) Submit(ctx context.Context, job TranscriptionJob) error {
 	slog.Debug("transcriber: submitting job", "call_id", job.CallID, "audio_path", job.AudioPath)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-p.stopped:
+		return ErrTranscriberStopped
 	case p.jobs <- job:
 		return nil
 	}
@@ -340,11 +351,19 @@ func (p *TranscriberPool) doTranscribe(ctx context.Context, job TranscriptionJob
 
 // isTransientError returns true for network errors caused by go-whisper being
 // temporarily unavailable (crash/restart, connection refused, EOF, reset).
+//
+// An unreachable host or network is not transient in that sense: the machine
+// is off or gone from the network, not restarting, and each dial can take
+// seconds to fail. Retrying it only holds a worker for longer.
 func isTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
 	s := err.Error()
+	if errors.Is(err, syscall.EHOSTUNREACH) || errors.Is(err, syscall.ENETUNREACH) ||
+		strings.Contains(s, "no route to host") || strings.Contains(s, "network is unreachable") {
+		return false
+	}
 	// Fast path: common substrings in wrapped network errors.
 	if strings.Contains(s, "connection refused") ||
 		strings.Contains(s, "connection reset") ||
