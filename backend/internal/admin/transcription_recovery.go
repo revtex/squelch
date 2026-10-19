@@ -12,8 +12,9 @@ import (
 )
 
 // Job errors plainJobError writes when go-whisper could not be reached at
-// all. ListAutoRetryTranscriptionJobs matches on these texts, so they are
-// what decides that a failed call is retried on its own.
+// all. ListAutoRetryTranscriptionJobs matches on these texts (and on the raw
+// dial errors older releases stored), so they are what decides that a
+// failed call is retried on its own.
 const (
 	jobErrSidecarDown     = "sidecar not reachable"
 	jobErrSidecarHostDown = "sidecar host unreachable"

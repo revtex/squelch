@@ -53,13 +53,20 @@ ORDER BY j.call_id;
 
 -- name: ListAutoRetryTranscriptionJobs :many
 -- Failed calls go-whisper never saw because it could not be reached, newest
--- first, that still have automatic retries left. The error texts are the
--- ones admin.plainJobError writes for an unreachable sidecar.
+-- first, that still have automatic retries left. The first two texts are
+-- the ones admin.plainJobError writes for an unreachable sidecar; the
+-- patterns match the raw dial errors older releases stored instead.
 SELECT j.call_id, c.audio_path
 FROM transcription_jobs j
 JOIN calls c ON c.id = j.call_id
 WHERE j.status = 'failed'
-  AND j.error IN ('sidecar not reachable', 'sidecar host unreachable')
+  AND (
+    j.error IN ('sidecar not reachable', 'sidecar host unreachable')
+    OR j.error LIKE '%connection refused%'
+    OR j.error LIKE '%no route to host%'
+    OR j.error LIKE '%network is unreachable%'
+    OR (j.error LIKE '%dial tcp%' AND j.error LIKE '%timeout%')
+  )
   AND j.auto_retries < @max_retries
 ORDER BY j.call_id DESC
 LIMIT @limit;

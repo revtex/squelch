@@ -135,8 +135,9 @@ type Querier interface {
 	ListAllTalkgroups(ctx context.Context) ([]Talkgroup, error)
 	ListAllUnits(ctx context.Context) ([]Unit, error)
 	// Failed calls go-whisper never saw because it could not be reached, newest
-	// first, that still have automatic retries left. The error texts are the
-	// ones admin.plainJobError writes for an unreachable sidecar.
+	// first, that still have automatic retries left. The first two texts are
+	// the ones admin.plainJobError writes for an unreachable sidecar; the
+	// patterns match the raw dial errors older releases stored instead.
 	ListAutoRetryTranscriptionJobs(ctx context.Context, arg ListAutoRetryTranscriptionJobsParams) ([]ListAutoRetryTranscriptionJobsRow, error)
 	ListBookmarkCallIDsByUser(ctx context.Context, userID sql.NullInt64) ([]int64, error)
 	ListBookmarkCallsByUser(ctx context.Context, userID sql.NullInt64) ([]ListBookmarkCallsByUserRow, error)

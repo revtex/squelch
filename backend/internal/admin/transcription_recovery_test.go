@@ -153,3 +153,47 @@ func TestTranscriptionRecovery_RetriesCallsGoWhisperNeverReached(t *testing.T) {
 		t.Errorf("timed-out call: %s %q", j.Status, j.Error.String)
 	}
 }
+
+// Releases before the job errors were put in words stored the raw dial
+// error, and the outage backlog in production is all in that form; those
+// calls are retried too.
+func TestTranscriptionRecovery_RetriesRawDialErrorsFromOlderReleases(t *testing.T) {
+	ctx := context.Background()
+	r, fake, call, q := recoveryFixture(t)
+	failRaw := func(id int64, text string) {
+		r.Recorder.Queued(ctx, id, "ggml-base")
+		if err := q.FinishTranscriptionJob(ctx, db.FinishTranscriptionJobParams{
+			CallID: id, Status: "failed", Error: optStr(text),
+			DurationMs: sql.NullInt64{Int64: 114000, Valid: true},
+			FinishedAt: sql.NullInt64{Int64: time.Now().Unix(), Valid: true},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const post = `go-whisper request: Post "http://192.168.101.11:8081/api/whisper/transcribe": `
+	noRoute, refused, netDown, dialTimeout, serverErr, slow :=
+		call("a.m4a"), call("b.m4a"), call("c.m4a"), call("d.m4a"), call("e.m4a"), call("f.m4a")
+	failRaw(noRoute, post+"dial tcp 192.168.101.11:8081: connect: no route to host")
+	failRaw(refused, post+"dial tcp 192.168.101.11:8081: connect: connection refused")
+	failRaw(netDown, post+"dial tcp 192.168.101.11:8081: connect: network is unreachable")
+	failRaw(dialTimeout, post+"dial tcp 192.168.101.11:8081: i/o timeout")
+	failRaw(serverErr, "go-whisper returned status 500: model not loaded")
+	failRaw(slow, post+"context deadline exceeded (Client.Timeout exceeded while awaiting headers)")
+
+	fake.enabled, fake.answering = true, true
+	r.retryUnreachable(ctx)
+	want := []int64{dialTimeout, netDown, refused, noRoute}
+	if len(fake.sent) != len(want) {
+		t.Fatalf("retried %v, want %v", fake.sent, want)
+	}
+	for i, id := range want {
+		if fake.sent[i] != id {
+			t.Fatalf("retried %v, want %v", fake.sent, want)
+		}
+	}
+	for _, id := range []int64{serverErr, slow} {
+		if j := jobStatus(t, q, id); j.Status != "failed" {
+			t.Errorf("call %d that reached go-whisper was retried: %s", id, j.Status)
+		}
+	}
+}
