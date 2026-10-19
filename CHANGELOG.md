@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A slow or unreachable go-whisper no longer holds up call uploads.** The
+  upload reply waited until the transcriber had room for the call, and its
+  queue holds only a few, so while go-whisper was down every upload took as
+  long as a failed transcription. A recorder that sends one call at a time,
+  like Trunk-Recorder's Squelch uploader, fell days behind, then flooded the
+  server — and hit the per-key rate limit — once go-whisper came back. Uploads
+  now reply as soon as the call is stored; transcription is queued behind
+  them, up to 10,000 calls. Beyond that, calls are listed as skipped ("transcription
+  queue full") and can be retried from the Transcription page.
 - **Retrying failed transcriptions no longer freezes the admin.** Retry
   queued every call itself before answering, and the transcriber's queue
   holds only a few, so retrying a hundred calls while go-whisper was

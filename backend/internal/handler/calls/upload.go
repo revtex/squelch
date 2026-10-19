@@ -637,14 +637,16 @@ func (h *Handler) PostCallUpload(c *gin.Context) {
 		slog.Debug("call-upload: downstream notify queued", "call_id", callID)
 	}
 
-	// Enqueue transcription (non-blocking, after response is sent).
+	// Enqueue transcription. The reply above is only flushed once this
+	// handler returns, so Submit must not wait — it queues without waiting
+	// on go-whisper.
 	if h.transcriber != nil {
 		absPath := filepath.Join(h.processor.RecordingsDir(), relPath)
 		if err := h.transcriber.Submit(ctx, audio.TranscriptionJob{
 			CallID:     callID,
 			AudioPath:  absPath,
 			DurationMs: duration.Int64,
-		}); err != nil {
+		}); err != nil && !errors.Is(err, audio.ErrTranscriptionBacklogFull) {
 			slog.Warn("call-upload: failed to enqueue transcription", "call_id", callID, "error", err)
 		}
 	}

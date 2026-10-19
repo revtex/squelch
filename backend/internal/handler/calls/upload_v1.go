@@ -582,13 +582,15 @@ func (h *Handler) PostCallUploadV1(c *gin.Context) {
 			TalkerAlias:    talkerAliasCol.String,
 		})
 	}
+	// The reply above is only flushed once this handler returns, so nothing
+	// here may wait: Submit queues without waiting on go-whisper.
 	if h.transcriber != nil {
 		absPath := filepath.Join(h.processor.RecordingsDir(), relPath)
 		if err := h.transcriber.Submit(ctx, audio.TranscriptionJob{
 			CallID:     callID,
 			AudioPath:  absPath,
 			DurationMs: duration.Int64,
-		}); err != nil {
+		}); err != nil && !errors.Is(err, audio.ErrTranscriptionBacklogFull) {
 			slog.Warn("v1 upload: failed to enqueue transcription",
 				"call_id", callID, "error", err)
 		}

@@ -42,6 +42,12 @@ func init() {
 // contract tests. Same wiring; only renamed for clarity.
 func engineV1(t *testing.T) (*gin.Engine, *db.Queries) {
 	t.Helper()
+	return engineV1WithTranscriber(t, nil)
+}
+
+// engineV1WithTranscriber is engineV1 with transcription wired in.
+func engineV1WithTranscriber(t *testing.T, tr audio.Transcriber) (*gin.Engine, *db.Queries) {
+	t.Helper()
 	sqlDB, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
@@ -60,6 +66,7 @@ func engineV1(t *testing.T) (*gin.Engine, *db.Queries) {
 		Queries:     q,
 		RateLimiter: rl,
 		Processor:   proc,
+		Transcriber: tr,
 		Version:     "test",
 	})
 	return r, q
@@ -144,6 +151,59 @@ func TestPostV1Calls_HappyPath(t *testing.T) {
 	}
 	if resp.ID <= 0 {
 		t.Errorf("id = %d, want > 0", resp.ID)
+	}
+}
+
+// TestPostV1Calls_RepliesWhileTranscriptionIsStuck — the upload reply must
+// not wait on go-whisper. With a sidecar that never answers, one worker and a
+// pool queue of four, the handler used to hang on the sixth call; a recorder
+// that uploads one call at a time then fell behind for as long as the
+// sidecar was down.
+func TestPostV1Calls_RepliesWhileTranscriptionIsStuck(t *testing.T) {
+	const apiKey = "v1-bearer-key"
+	release := make(chan struct{})
+	sidecar := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	t.Cleanup(sidecar.Close)
+	t.Cleanup(func() { close(release) })
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	poolCtx, stopPool := context.WithCancel(ctx)
+	pool, err := audio.NewTranscriberPool(poolCtx, 1, sidecar.URL, "ggml-base", "en", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, q := engineV1WithTranscriber(t, audio.NewTranscriberManager(ctx, pool, stopPool))
+	seedV1APIKey(t, q, apiKey)
+	seedV1Settings(t, q)
+
+	const calls = 10
+	codes := make(chan int, calls)
+	go func() {
+		for i := 0; i < calls; i++ {
+			body, ct := buildV1Upload(t, map[string]string{
+				"systemId":    "1",
+				"talkgroupId": "100",
+				"startedAt":   time.Now().UTC().Add(time.Duration(i) * time.Second).Format(time.RFC3339),
+			}, true)
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/calls", body)
+			req.Header.Set("Content-Type", ct)
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+			w := httptest.NewRecorder()
+			engine.ServeHTTP(w, req)
+			codes <- w.Code
+		}
+	}()
+	for i := 0; i < calls; i++ {
+		select {
+		case code := <-codes:
+			if code != http.StatusOK {
+				t.Fatalf("upload %d: status = %d, want 200", i+1, code)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("upload %d did not get a reply while transcription was stuck", i+1)
+		}
 	}
 }
 

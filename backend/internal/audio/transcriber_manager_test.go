@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -220,7 +221,76 @@ func TestTranscriberManager_SkipsShortCallsUnlessForced(t *testing.T) {
 		t.Errorf("skipped = %v", rec.skipped)
 	}
 	<-taken // one job is with the worker; the other two wait in the queue
-	if len(rec.queued) != 3 || m.QueueDepth() != 2 || m.Workers() != 1 {
-		t.Errorf("queued = %v depth = %d workers = %d", rec.queued, m.QueueDepth(), m.Workers())
+	// Submitted calls reach the pool through the backlog, so give the
+	// dispatcher a moment to hand the last one over.
+	deadline := time.After(5 * time.Second)
+	for m.QueueDepth() != 2 {
+		select {
+		case <-deadline:
+			t.Fatalf("depth = %d, want 2", m.QueueDepth())
+		default:
+			runtime.Gosched()
+		}
+	}
+	if len(rec.queued) != 3 || m.Workers() != 1 {
+		t.Errorf("queued = %v workers = %d", rec.queued, m.Workers())
+	}
+}
+
+// Submit returns at once even when go-whisper takes no jobs at all, so call
+// ingest never waits on transcription; the calls are transcribed in order
+// once the sidecar answers again.
+func TestTranscriberManager_SubmitDoesNotWaitForTheSidecar(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	release := make(chan struct{})
+	var once sync.Once
+	sidecar := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	t.Cleanup(sidecar.Close)
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	poolCtx, stopPool := context.WithCancel(ctx)
+	pool, err := audio.NewTranscriberPool(poolCtx, 1, sidecar.URL, "ggml-base", "en", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := audio.NewTranscriberManager(ctx, pool, stopPool)
+	clip := filepath.Join(t.TempDir(), "clip.m4a")
+	if err := os.WriteFile(clip, []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// One worker and a pool queue of four: the old Submit blocked on call 6.
+	const calls = 20
+	done := make(chan error, 1)
+	go func() {
+		for id := int64(1); id <= calls; id++ {
+			if err := m.Submit(ctx, audio.TranscriptionJob{CallID: id, AudioPath: clip}); err != nil {
+				done <- err
+				return
+			}
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Submit waited on a sidecar that is not answering")
+	}
+
+	once.Do(func() { close(release) })
+	for want := int64(1); want <= calls; want++ {
+		select {
+		case res := <-m.Results():
+			if res.CallID != want {
+				t.Fatalf("result for call %d, want %d", res.CallID, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no result for call %d", want)
+		}
 	}
 }

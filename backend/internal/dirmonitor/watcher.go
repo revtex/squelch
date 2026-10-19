@@ -842,7 +842,7 @@ func (s *Service) ingestCall(ctx context.Context, dw db.Dirmonitor, parsed *Pars
 			CallID:     callID,
 			AudioPath:  absPath,
 			DurationMs: dur.Int64,
-		}); err != nil {
+		}); err != nil && !errors.Is(err, audio.ErrTranscriptionBacklogFull) {
 			slog.Warn("dirmonitor: failed to enqueue transcription", "call_id", callID, "error", err)
 		}
 	}
