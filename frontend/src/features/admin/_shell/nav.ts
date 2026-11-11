@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  BellRing,
   Cable,
   Folder,
   FolderSearch,
@@ -104,6 +105,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Transcription",
         icon: Mic,
         keywords: "whisper models speech",
+      },
+      {
+        to: "/admin/keyword-alerts",
+        label: "Keyword alerts",
+        short: "Keywords",
+        icon: BellRing,
+        keywords: "keyword match transcript slack display esp alert 413",
       },
     ],
   },

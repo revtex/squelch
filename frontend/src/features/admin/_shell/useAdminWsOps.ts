@@ -57,6 +57,13 @@ import type {
   TranscriptionJobStatus,
   TranscriptionStats,
   ActivityStats,
+  AdminKeywordRule,
+  AdminKeywordRuleInput,
+  AdminKeywordRuleUpdate,
+  AdminKeywordTarget,
+  AdminKeywordTargetInput,
+  AdminKeywordTargetUpdate,
+  KeywordAlertDryRunResult,
 } from "@/types";
 
 // ─── Payload types ──────────────────────────────────────────────────────────
@@ -491,6 +498,67 @@ export function useTestWebhookMutation() {
   return useWsMutation<DeliveryResult, number>("webhooks.test", {
     transformArg: (id) => ({ id }),
   });
+}
+
+// ─── Keyword alerts ─────────────────────────────────────────────────────────
+
+export function useListKeywordRulesQuery() {
+  return useWsQuery<AdminKeywordRule[]>(
+    "keywordAlerts.rules.list",
+    undefined,
+    "keywordAlerts.updated",
+    30_000,
+  );
+}
+
+export function useCreateKeywordRuleMutation() {
+  return useWsMutation<AdminKeywordRule, AdminKeywordRuleInput>("keywordAlerts.rules.create");
+}
+
+export function useUpdateKeywordRuleMutation() {
+  return useWsMutation<AdminKeywordRule, AdminKeywordRuleUpdate>("keywordAlerts.rules.update");
+}
+
+export function useDeleteKeywordRuleMutation() {
+  return useWsMutation<void, number>("keywordAlerts.rules.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useListKeywordTargetsQuery() {
+  return useWsQuery<AdminKeywordTarget[]>(
+    "keywordAlerts.targets.list",
+    undefined,
+    "keywordAlerts.updated",
+    30_000,
+  );
+}
+
+export function useCreateKeywordTargetMutation() {
+  return useWsMutation<AdminKeywordTarget, AdminKeywordTargetInput>("keywordAlerts.targets.create");
+}
+
+export function useUpdateKeywordTargetMutation() {
+  return useWsMutation<AdminKeywordTarget, AdminKeywordTargetUpdate>("keywordAlerts.targets.update");
+}
+
+export function useDeleteKeywordTargetMutation() {
+  return useWsMutation<void, number>("keywordAlerts.targets.delete", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useTestKeywordTargetMutation() {
+  return useWsMutation<DeliveryResult, number>("keywordAlerts.targets.test", {
+    transformArg: (id) => ({ id }),
+  });
+}
+
+export function useKeywordAlertDryRunMutation() {
+  return useWsMutation<
+    KeywordAlertDryRunResult,
+    { text: string; systemId: number; talkgroupId: number }
+  >("keywordAlerts.test");
 }
 
 // ─── Config ─────────────────────────────────────────────────────────────────

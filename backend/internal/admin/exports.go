@@ -40,8 +40,10 @@ func (o *Operations) exportConfigData(ctx context.Context) (map[string]any, erro
 		"apiKeys":     flattenAPIKeys(live.APIKeys),
 		"dirmonitors": live.DirMonitors,
 		"downstreams": flattenDownstreams(live.Downstreams),
-		"webhooks":    flattenWebhooks(live.Webhooks),
-		"trInstances": flattenTRInstances(live.TRInstances),
+		"webhooks":       flattenWebhooks(live.Webhooks),
+		"keywordRules":   flattenKeywordRules(live.KeywordRules),
+		"keywordTargets": flattenKeywordTargets(live.KeywordTargets),
+		"trInstances":    flattenTRInstances(live.TRInstances),
 	}, nil
 }
 

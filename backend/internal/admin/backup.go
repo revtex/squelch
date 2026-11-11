@@ -46,14 +46,17 @@ type backupFile struct {
 	APIKeys     []importAPIKey     `json:"apiKeys"`
 	DirMonitors []db.Dirmonitor    `json:"dirmonitors"`
 	Downstreams []importDownstream `json:"downstreams"`
-	Webhooks    []importWebhook    `json:"webhooks"`
-	TRInstances []importTRInstance `json:"trInstances"`
+	Webhooks       []importWebhook       `json:"webhooks"`
+	KeywordRules   []importKeywordRule   `json:"keywordRules"`
+	KeywordTargets []importKeywordTarget `json:"keywordTargets"`
+	TRInstances    []importTRInstance    `json:"trInstances"`
 }
 
 func (f backupFile) empty() bool {
 	return f.Settings == nil && f.Users == nil && f.Groups == nil && f.Tags == nil && f.Systems == nil &&
 		f.Talkgroups == nil && f.Units == nil && f.APIKeys == nil && f.DirMonitors == nil &&
-		f.Downstreams == nil && f.Webhooks == nil && f.TRInstances == nil
+		f.Downstreams == nil && f.Webhooks == nil && f.KeywordRules == nil && f.KeywordTargets == nil &&
+		f.TRInstances == nil
 }
 
 // parseBackup reads a backup file, with the optional restore mode beside
@@ -391,9 +394,11 @@ type liveConfig struct {
 	Units       []db.Unit
 	APIKeys     []db.ApiKey
 	DirMonitors []db.Dirmonitor
-	Downstreams []db.Downstream
-	Webhooks    []db.Webhook
-	TRInstances []db.TrInstance
+	Downstreams    []db.Downstream
+	Webhooks       []db.Webhook
+	KeywordRules   []db.KeywordRule
+	KeywordTargets []db.KeywordTarget
+	TRInstances    []db.TrInstance
 }
 
 func (o *Operations) loadLiveConfig(ctx context.Context) (liveConfig, error) {
@@ -432,6 +437,12 @@ func (o *Operations) loadLiveConfig(ctx context.Context) (liveConfig, error) {
 	if l.Webhooks, err = o.Queries.ListWebhooks(ctx); err != nil {
 		return l, fmt.Errorf("failed to list webhooks: %w", err)
 	}
+	if l.KeywordRules, err = o.Queries.ListKeywordRules(ctx); err != nil {
+		return l, fmt.Errorf("failed to list keyword rules: %w", err)
+	}
+	if l.KeywordTargets, err = o.Queries.ListKeywordTargets(ctx); err != nil {
+		return l, fmt.Errorf("failed to list keyword targets: %w", err)
+	}
 	if l.TRInstances, err = o.Queries.ListTRInstances(ctx); err != nil {
 		return l, fmt.Errorf("failed to list Trunk Recorder brokers: %w", err)
 	}
@@ -461,6 +472,49 @@ func flattenWebhooks(ws []db.Webhook) []importWebhook {
 	for i, w := range ws {
 		out[i] = importWebhook{ID: w.ID, Url: w.Url, Type: w.Type, Secret: nullStr(w.Secret), SystemsJson: nullStr(w.SystemsJson),
 			Disabled: w.Disabled, Order: w.Order, Label: w.Label}
+	}
+	return out
+}
+
+func flattenKeywordRules(rs []db.KeywordRule) []importKeywordRule {
+	out := make([]importKeywordRule, len(rs))
+	for i, r := range rs {
+		out[i] = importKeywordRule{
+			ID: r.ID, Label: r.Label, PatternsJson: r.PatternsJson, SystemsJson: nullStr(r.SystemsJson),
+			TalkgroupsJson: nullStr(r.TalkgroupsJson), CooldownSec: r.CooldownSec, Disabled: r.Disabled,
+			Order: r.Order, CreatedAt: r.CreatedAt,
+		}
+	}
+	return out
+}
+
+func flattenKeywordTargets(ts []db.KeywordTarget) []importKeywordTarget {
+	out := make([]importKeywordTarget, len(ts))
+	for i, t := range ts {
+		out[i] = importKeywordTarget{
+			ID: t.ID, Label: t.Label, Type: t.Type, Url: t.Url, Secret: nullStr(t.Secret),
+			RulesJson: nullStr(t.RulesJson), Disabled: t.Disabled, Order: t.Order,
+		}
+	}
+	return out
+}
+
+func keywordRuleRows(rs []importKeywordRule) []keyedRow {
+	out := make([]keyedRow, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, keyedRow{key: r.Label, name: r.Label, print: joinPrint(r.Label, strconv.FormatInt(r.Disabled, 10), strconv.FormatInt(r.Order, 10))})
+	}
+	return out
+}
+
+func keywordTargetRows(ts []importKeywordTarget) []keyedRow {
+	out := make([]keyedRow, 0, len(ts))
+	for _, t := range ts {
+		name := t.Label
+		if name == "" {
+			name = t.Url
+		}
+		out = append(out, keyedRow{key: t.Type + "|" + t.Url, name: name, print: joinPrint(t.Label, strconv.FormatInt(t.Disabled, 10), strconv.FormatInt(t.Order, 10))})
 	}
 	return out
 }
@@ -503,6 +557,8 @@ func (o *Operations) previewBackup(ctx context.Context, f backupFile) (BackupPre
 		diffRows("dirmonitors", "Folder monitors", dirMonitorRows(f.DirMonitors), dirMonitorRows(live.DirMonitors), f.DirMonitors != nil),
 		diffRows("downstreams", "Forwarding targets", downstreamRows(f.Downstreams), downstreamRows(flattenDownstreams(live.Downstreams)), f.Downstreams != nil),
 		diffRows("webhooks", "Webhooks", webhookRows(f.Webhooks), webhookRows(flattenWebhooks(live.Webhooks)), f.Webhooks != nil),
+		diffRows("keywordRules", "Keyword rules", keywordRuleRows(f.KeywordRules), keywordRuleRows(flattenKeywordRules(live.KeywordRules)), f.KeywordRules != nil),
+		diffRows("keywordTargets", "Keyword targets", keywordTargetRows(f.KeywordTargets), keywordTargetRows(flattenKeywordTargets(live.KeywordTargets)), f.KeywordTargets != nil),
 		diffRows("trInstances", "Trunk Recorder brokers", trInstanceRows(f.TRInstances), trInstanceRows(flattenTRInstances(live.TRInstances)), f.TRInstances != nil),
 	)
 
