@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Go (installed directly to avoid Podman /tmp tmpfs issues with devcontainer features)
+ARG TARGETARCH
 ARG GO_VERSION=1.26.4
-RUN curl -sSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+RUN curl -sSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local
 ENV PATH="/usr/local/go/bin:/home/vscode/go/bin:${PATH}"
 ENV GOPATH="/home/vscode/go"
@@ -26,12 +27,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
 
 # sqlc
 ARG SQLC_VERSION=1.27.0
-RUN curl -sSL "https://github.com/sqlc-dev/sqlc/releases/download/v${SQLC_VERSION}/sqlc_${SQLC_VERSION}_linux_amd64.tar.gz" \
+RUN curl -sSL "https://github.com/sqlc-dev/sqlc/releases/download/v${SQLC_VERSION}/sqlc_${SQLC_VERSION}_linux_${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin sqlc
 
 # golang-migrate
 ARG MIGRATE_VERSION=4.18.1
-RUN curl -sSL "https://github.com/golang-migrate/migrate/releases/download/v${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" \
+RUN curl -sSL "https://github.com/golang-migrate/migrate/releases/download/v${MIGRATE_VERSION}/migrate.linux-${TARGETARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin migrate
 
 # golangci-lint (installed from source to match Go version)
