@@ -368,6 +368,28 @@ A webhook posts a message to a URL for every accepted call. Each one has a **lab
 
 ---
 
+## Keyword alerts
+
+**Keyword alerts** match text after a call is transcribed and post to URLs you choose. They are separate from **Forwarding** webhooks, which fire when the audio is accepted and have no transcript yet.
+
+The page has two tabs: **Rules** and **Targets**.
+
+### Rules
+
+A rule has a **label**, one or more **patterns** (one per line — digit forms like `413` and spoken forms like `four thirteen` both work), optional **systems** and **talkgroups** (none means all), a **cooldown** in seconds so the same talkgroup and rule do not fire again immediately, and an **Enabled** switch. **Try a transcript** runs the active rules against sample text without sending anything.
+
+### Targets
+
+A target has a **label**, a **type**, a **URL**, an optional secret, optional **rules** (none means every rule), and an **Enabled** switch.
+
+- **Slack** posts a markdown message to an incoming webhook URL.
+- **Display** posts JSON (`talkgroup`, `talkgroup_label`, `transcript`, `matched_terms`) with an `X-Alert-Token` header when a secret is set — the shape used by a Waveshare-style alert screen.
+- **Generic JSON** posts an `event: "keyword"` body with the call, rule and transcript fields.
+
+**Test** posts a sample alert so you can confirm the URL before a real match. Secrets are stored encrypted when an encryption key is configured, never shown again, and never sent to the browser.
+
+---
+
 ## Shared Links
 
 Lists every call a listener has shared by link, newest first: the talkgroup and system, when the call was recorded and how long it is, who shared it and when, how many times the public page has been opened, and when the link expires. Expired links are dimmed and labelled. Search by talkgroup, system or user, and filter to **Active** or **Expired**.

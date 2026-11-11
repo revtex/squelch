@@ -50,6 +50,29 @@ type importWebhook struct {
 	Label       string  `json:"label"`
 }
 
+type importKeywordRule struct {
+	ID             int64   `json:"id"`
+	Label          string  `json:"label"`
+	PatternsJson   string  `json:"patterns_json"`
+	SystemsJson    *string `json:"systems_json"`
+	TalkgroupsJson *string `json:"talkgroups_json"`
+	CooldownSec     int64   `json:"cooldown_sec"`
+	Disabled       int64   `json:"disabled"`
+	Order          int64   `json:"order"`
+	CreatedAt      int64   `json:"created_at"`
+}
+
+type importKeywordTarget struct {
+	ID        int64   `json:"id"`
+	Label     string  `json:"label"`
+	Type      string  `json:"type"`
+	Url       string  `json:"url"`
+	Secret    *string `json:"secret"`
+	RulesJson *string `json:"rules_json"`
+	Disabled  int64   `json:"disabled"`
+	Order     int64   `json:"order"`
+}
+
 // RestoreResult says what a restore did.
 type RestoreResult struct {
 	OK      bool   `json:"ok"`
@@ -463,6 +486,96 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 		res.Created++
 	}
 
+	// Keyword rules: matched by label.
+	ruleRemap := map[int64]int64{}
+	ruleKeep := map[int64]bool{}
+	if f.KeywordRules != nil {
+		liveRules, err := qtx.ListKeywordRules(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list keyword rules: %w", err)
+		}
+		ruleByLabel := make(map[string]db.KeywordRule, len(liveRules))
+		for _, r := range liveRules {
+			ruleByLabel[r.Label] = r
+		}
+		for _, r := range f.KeywordRules {
+			if strings.TrimSpace(r.Label) == "" {
+				continue
+			}
+			cooldown := r.CooldownSec
+			if cooldown <= 0 {
+				cooldown = 120
+			}
+			created := r.CreatedAt
+			if created == 0 {
+				created = now
+			}
+			params := db.CreateKeywordRuleParams{
+				Label: r.Label, PatternsJson: r.PatternsJson, SystemsJson: ptrToNullStr(r.SystemsJson),
+				TalkgroupsJson: ptrToNullStr(r.TalkgroupsJson), CooldownSec: cooldown, Disabled: r.Disabled,
+				Order: r.Order, CreatedAt: created,
+			}
+			if existing, ok := ruleByLabel[r.Label]; ok {
+				if err := qtx.UpdateKeywordRule(ctx, db.UpdateKeywordRuleParams{
+					ID: existing.ID, Label: params.Label, PatternsJson: params.PatternsJson,
+					SystemsJson: params.SystemsJson, TalkgroupsJson: params.TalkgroupsJson,
+					CooldownSec: params.CooldownSec, Disabled: params.Disabled, Order: params.Order,
+				}); err != nil {
+					return nil, fmt.Errorf("failed to update keyword rule %q: %w", r.Label, err)
+				}
+				ruleRemap[r.ID] = existing.ID
+				ruleKeep[existing.ID] = true
+				continue
+			}
+			id, err := qtx.CreateKeywordRule(ctx, params)
+			if err != nil {
+				return nil, fmt.Errorf("failed to restore keyword rules: %w", err)
+			}
+			ruleRemap[r.ID] = id
+			ruleKeep[id] = true
+			res.Created++
+		}
+	}
+
+	// Keyword targets: matched by type and URL.
+	targetKeep := map[int64]bool{}
+	if f.KeywordTargets != nil {
+		liveTargets, err := qtx.ListKeywordTargets(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list keyword targets: %w", err)
+		}
+		targetByKey := make(map[string]db.KeywordTarget, len(liveTargets))
+		for _, t := range liveTargets {
+			targetByKey[t.Type+"|"+t.Url] = t
+		}
+		for _, t := range f.KeywordTargets {
+			if !validHTTPURL(t.Url) {
+				slog.Warn("restore: skipping keyword target with invalid URL", "url", t.Url)
+				continue
+			}
+			rulesJSON := remapIDJSON(t.RulesJson, ruleRemap)
+			if existing, ok := targetByKey[t.Type+"|"+t.Url]; ok {
+				if err := qtx.UpdateKeywordTarget(ctx, db.UpdateKeywordTargetParams{
+					ID: existing.ID, Label: t.Label, Type: t.Type, Url: t.Url, Secret: ptrToNullStr(t.Secret),
+					RulesJson: rulesJSON, Disabled: t.Disabled, Order: t.Order,
+				}); err != nil {
+					return nil, fmt.Errorf("failed to update keyword target %q: %w", t.Url, err)
+				}
+				targetKeep[existing.ID] = true
+				continue
+			}
+			id, err := qtx.CreateKeywordTarget(ctx, db.CreateKeywordTargetParams{
+				Label: t.Label, Type: t.Type, Url: t.Url, Secret: ptrToNullStr(t.Secret),
+				RulesJson: rulesJSON, Disabled: t.Disabled, Order: t.Order,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to restore keyword targets: %w", err)
+			}
+			targetKeep[id] = true
+			res.Created++
+		}
+	}
+
 	// Trunk Recorder brokers: matched by label.
 	trKeep, err := restoreTRInstances(ctx, qtx, f.TRInstances, now, &res)
 	if err != nil {
@@ -473,6 +586,36 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 		removed, err := o.removeAbsent(ctx, qtx, f, systemKeep, tgKeep, unitKeep, groupKeep, tagKeep, userKeep, apiKeyKeep, monitorKeep, downstreamKeep, webhookKeep)
 		if err != nil {
 			return nil, err
+		}
+		if f.KeywordRules != nil {
+			liveRules, err := qtx.ListKeywordRules(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list keyword rules: %w", err)
+			}
+			for _, r := range liveRules {
+				if ruleKeep[r.ID] {
+					continue
+				}
+				if err := qtx.DeleteKeywordRule(ctx, r.ID); err != nil {
+					return nil, fmt.Errorf("failed to delete keyword rule %d: %w", r.ID, err)
+				}
+				removed++
+			}
+		}
+		if f.KeywordTargets != nil {
+			liveTargets, err := qtx.ListKeywordTargets(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to list keyword targets: %w", err)
+			}
+			for _, t := range liveTargets {
+				if targetKeep[t.ID] {
+					continue
+				}
+				if err := qtx.DeleteKeywordTarget(ctx, t.ID); err != nil {
+					return nil, fmt.Errorf("failed to delete keyword target %d: %w", t.ID, err)
+				}
+				removed++
+			}
 		}
 		if f.TRInstances != nil {
 			n, err := removeAbsentTR(ctx, qtx, trKeep)
@@ -506,13 +649,17 @@ func (o *Operations) ImportConfig(ctx context.Context, params json.RawMessage, c
 	if o.Deps.DownstreamReload != nil && (f.Downstreams != nil || replace) {
 		o.Deps.DownstreamReload.Reload()
 	}
+	if f.KeywordRules != nil || f.KeywordTargets != nil || replace {
+		o.reloadKeywordAlerts()
+	}
 	if f.TRInstances != nil {
 		o.syncTRInstances(ctx, trBefore)
 	}
 
 	for _, topic := range []string{
 		"groups.updated", "tags.updated", "systems.updated", "talkgroups.updated", "units.updated", "users.updated",
-		"apikeys.updated", "dirmonitors.updated", "downstreams.updated", "webhooks.updated", "trinstances.updated",
+		"apikeys.updated", "dirmonitors.updated", "downstreams.updated", "webhooks.updated",
+		"keywordAlerts.updated", "trinstances.updated",
 	} {
 		o.broadcastAdminEvent(topic, nil)
 	}

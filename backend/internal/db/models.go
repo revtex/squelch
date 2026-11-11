@@ -119,6 +119,34 @@ type IpBlock struct {
 	ExpiresAt sql.NullInt64 `db:"expires_at" json:"expires_at"`
 }
 
+type KeywordRule struct {
+	ID             int64          `db:"id" json:"id"`
+	Label          string         `db:"label" json:"label"`
+	PatternsJson   string         `db:"patterns_json" json:"patterns_json"`
+	SystemsJson    sql.NullString `db:"systems_json" json:"systems_json"`
+	TalkgroupsJson sql.NullString `db:"talkgroups_json" json:"talkgroups_json"`
+	CooldownSec    int64          `db:"cooldown_sec" json:"cooldown_sec"`
+	Disabled       int64          `db:"disabled" json:"disabled"`
+	Order          int64          `db:"order" json:"order"`
+	CreatedAt      int64          `db:"created_at" json:"created_at"`
+}
+
+type KeywordTarget struct {
+	ID         int64          `db:"id" json:"id"`
+	Label      string         `db:"label" json:"label"`
+	Type       string         `db:"type" json:"type"`
+	Url        string         `db:"url" json:"url"`
+	Secret     sql.NullString `db:"secret" json:"secret"`
+	RulesJson  sql.NullString `db:"rules_json" json:"rules_json"`
+	Disabled   int64          `db:"disabled" json:"disabled"`
+	Order      int64          `db:"order" json:"order"`
+	LastAt     sql.NullInt64  `db:"last_at" json:"last_at"`
+	LastOk     int64          `db:"last_ok" json:"last_ok"`
+	LastStatus int64          `db:"last_status" json:"last_status"`
+	LastError  string         `db:"last_error" json:"last_error"`
+	LastOkAt   sql.NullInt64  `db:"last_ok_at" json:"last_ok_at"`
+}
+
 type Log struct {
 	ID       int64  `db:"id" json:"id"`
 	DateTime int64  `db:"date_time" json:"date_time"`

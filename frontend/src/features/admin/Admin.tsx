@@ -49,6 +49,7 @@ import OverviewPanel, {
 import { TrunkRecorderPanel } from "@/features/admin/trunk-recorder";
 import SharedLinksPanel from "@/features/admin/shared-links";
 import TranscriptionPanel from "@/features/admin/transcription";
+import KeywordAlertsPanel from "@/features/admin/keyword-alerts";
 
 /** Follows a nav link unless the page has unsaved changes. */
 function useGuardedNavigate() {
@@ -438,6 +439,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             />
             <Route path="shared-links" element={<SharedLinksPanel />} />
             <Route path="transcription" element={<TranscriptionPanel />} />
+            <Route path="keyword-alerts" element={<KeywordAlertsPanel />} />
             <Route path="settings" element={<SettingsPanel />} />
             <Route path="options" element={<Navigate to="/admin/settings" replace />} />
             <Route path="logs" element={<LogsPanel />} />

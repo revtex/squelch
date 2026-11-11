@@ -60,6 +60,14 @@ JSON, or a Discord embed) rather than the Call itself. Table `webhooks`,
 package `internal/webhook`. Downstreams and Webhooks together are
 **Forwarding** in the admin.
 
+**Keyword rule** — a named set of transcript patterns, with optional System
+and Talkgroup scope and a cooldown. Matched after a Call's transcription is
+stored. Table `keyword_rules`, package `internal/keywordalert`.
+
+**Keyword target** — a URL that receives a message when a Keyword rule
+matches (Slack incoming webhook, ESP display JSON, or generic JSON). Table
+`keyword_targets`, package `internal/keywordalert`.
+
 ## Listening
 
 **Selection** — the set of Talkgroups a Listener has chosen to hear. Stored

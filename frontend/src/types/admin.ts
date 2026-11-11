@@ -264,6 +264,70 @@ export interface WebhookSample {
   headers: Record<string, string>;
 }
 
+export type KeywordTargetType = "generic" | "slack" | "display";
+
+/** A transcript match rule for keyword alerts. */
+export interface AdminKeywordRule {
+  id: number;
+  label: string;
+  patternsJson: string;
+  systemsJson: string | null;
+  talkgroupsJson: string | null;
+  cooldownSec: number;
+  disabled: number;
+  order: number;
+  createdAt: number;
+}
+
+export interface AdminKeywordRuleInput {
+  label: string;
+  patternsJson: string;
+  systemsJson: string | null;
+  talkgroupsJson: string | null;
+  cooldownSec: number;
+  disabled: number;
+  order: number;
+}
+
+export interface AdminKeywordRuleUpdate extends AdminKeywordRuleInput {
+  id: number;
+}
+
+/** Where a keyword match is posted. */
+export interface AdminKeywordTarget {
+  id: number;
+  label: string;
+  type: KeywordTargetType;
+  url: string;
+  hasSecret: boolean;
+  rulesJson: string | null;
+  disabled: number;
+  order: number;
+  last: DeliveryResult | null;
+  lastOkAt: number | null;
+  sent24h: number;
+  failed24h: number;
+}
+
+export interface AdminKeywordTargetInput {
+  label: string;
+  type: KeywordTargetType;
+  url: string;
+  secret?: string;
+  clearSecret?: boolean;
+  rulesJson: string | null;
+  disabled: number;
+  order: number;
+}
+
+export interface AdminKeywordTargetUpdate extends AdminKeywordTargetInput {
+  id: number;
+}
+
+export interface KeywordAlertDryRunResult {
+  matched: string[];
+}
+
 export interface AdminSetting {
   key: string;
   value: string;

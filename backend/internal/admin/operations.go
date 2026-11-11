@@ -98,6 +98,9 @@ type Deps struct {
 	// state and tests; nil reports nothing and refuses tests.
 	Downstreams Forwarder
 	Webhooks    Forwarder
+	// KeywordAlerts matches transcripts and delivers to configured targets;
+	// nil reports nothing and refuses tests.
+	KeywordAlerts Forwarder
 	// DirMonitors reports what each folder monitor is doing; nil reports
 	// nothing.
 	DirMonitors MonitorStatus

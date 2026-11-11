@@ -126,6 +126,18 @@ func (c *Client) adminOpHandlers() map[string]adminOp {
 		"webhooks.test":   o.WebhooksTest,
 		"webhooks.sample": o.WebhooksSample,
 
+		// Keyword alerts
+		"keywordAlerts.rules.list":     o.KeywordRulesList,
+		"keywordAlerts.rules.create":   o.KeywordRulesCreate,
+		"keywordAlerts.rules.update":   o.KeywordRulesUpdate,
+		"keywordAlerts.rules.delete":   o.KeywordRulesDelete,
+		"keywordAlerts.targets.list":   o.KeywordTargetsList,
+		"keywordAlerts.targets.create": o.KeywordTargetsCreate,
+		"keywordAlerts.targets.update": o.KeywordTargetsUpdate,
+		"keywordAlerts.targets.delete": o.KeywordTargetsDelete,
+		"keywordAlerts.targets.test":   o.KeywordTargetsTest,
+		"keywordAlerts.test":           o.KeywordAlertsTest,
+
 		// Shared Links
 		"shared-links.list":           o.SharedLinksList,
 		"shared-links.delete":         o.SharedLinksDelete,

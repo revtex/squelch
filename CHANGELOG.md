@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Keyword alerts after transcription.** Configure rules (patterns, optional
+  systems and talkgroups, cooldown) and targets (Slack, ESP-style display, or
+  generic JSON) under **Admin → Keyword alerts**. When a transcript is stored,
+  matching rules post to those targets so a separate Whisper sidecar is not
+  required for keyword matching. Rules and targets are included in
+  configuration backup and restore.
+
 ### Fixed
 
 - **Transcription comes back by itself after a go-whisper outage.** If

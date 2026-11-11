@@ -38,6 +38,8 @@ type Querier interface {
 	CreateDownstream(ctx context.Context, arg CreateDownstreamParams) (int64, error)
 	CreateGroup(ctx context.Context, label string) (int64, error)
 	CreateIPBlock(ctx context.Context, arg CreateIPBlockParams) (int64, error)
+	CreateKeywordRule(ctx context.Context, arg CreateKeywordRuleParams) (int64, error)
+	CreateKeywordTarget(ctx context.Context, arg CreateKeywordTargetParams) (int64, error)
 	CreateLog(ctx context.Context, arg CreateLogParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSharedLink(ctx context.Context, arg CreateSharedLinkParams) (SharedLink, error)
@@ -61,6 +63,8 @@ type Querier interface {
 	DeleteExpiredRefreshTokens(ctx context.Context, expiresAt int64) error
 	DeleteGroup(ctx context.Context, id int64) error
 	DeleteIPBlock(ctx context.Context, id int64) error
+	DeleteKeywordRule(ctx context.Context, id int64) error
+	DeleteKeywordTarget(ctx context.Context, id int64) error
 	DeleteLogsBefore(ctx context.Context, before int64) (int64, error)
 	DeleteSharedLink(ctx context.Context, id int64) error
 	DeleteSharedLinkByCallID(ctx context.Context, callID int64) error
@@ -94,6 +98,8 @@ type Querier interface {
 	GetGroup(ctx context.Context, id int64) (Group, error)
 	GetGroupByLabel(ctx context.Context, label string) (Group, error)
 	GetIPBlock(ctx context.Context, id int64) (IpBlock, error)
+	GetKeywordRule(ctx context.Context, id int64) (KeywordRule, error)
+	GetKeywordTarget(ctx context.Context, id int64) (KeywordTarget, error)
 	GetOldestActiveRefreshTokenFamily(ctx context.Context, arg GetOldestActiveRefreshTokenFamilyParams) (string, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
@@ -128,6 +134,8 @@ type Querier interface {
 	ListActiveDownstreams(ctx context.Context) ([]Downstream, error)
 	// Every block still in force, newest first, with who added it.
 	ListActiveIPBlocks(ctx context.Context, now sql.NullInt64) ([]ListActiveIPBlocksRow, error)
+	ListActiveKeywordRules(ctx context.Context) ([]KeywordRule, error)
+	ListActiveKeywordTargets(ctx context.Context) ([]KeywordTarget, error)
 	// One row per signed-in device: the newest unrevoked, unexpired token of
 	// each family. user_id NULL lists every account.
 	ListActiveSessions(ctx context.Context, arg ListActiveSessionsParams) ([]ListActiveSessionsRow, error)
@@ -150,6 +158,8 @@ type Querier interface {
 	ListEnabledTRInstances(ctx context.Context) ([]TrInstance, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListGroupsWithUsage(ctx context.Context) ([]ListGroupsWithUsageRow, error)
+	ListKeywordRules(ctx context.Context) ([]KeywordRule, error)
+	ListKeywordTargets(ctx context.Context) ([]KeywordTarget, error)
 	// level_pattern and query_pattern are LIKE patterns; "%" matches anything.
 	ListLogs(ctx context.Context, arg ListLogsParams) ([]Log, error)
 	// Calls recorded as queued, oldest first. Read at startup, before anything
@@ -175,6 +185,7 @@ type Querier interface {
 	MoveTalkgroupsToTag(ctx context.Context, arg MoveTalkgroupsToTagParams) error
 	OldestCallTime(ctx context.Context) (int64, error)
 	RecordDownstreamDelivery(ctx context.Context, arg RecordDownstreamDeliveryParams) error
+	RecordKeywordTargetDelivery(ctx context.Context, arg RecordKeywordTargetDeliveryParams) error
 	RecordWebhookDelivery(ctx context.Context, arg RecordWebhookDeliveryParams) error
 	RestoreSharedLink(ctx context.Context, arg RestoreSharedLinkParams) error
 	RevokeAllRefreshTokensForUser(ctx context.Context, userID int64) error
@@ -199,6 +210,8 @@ type Querier interface {
 	UpdateDirMonitor(ctx context.Context, arg UpdateDirMonitorParams) error
 	UpdateDownstream(ctx context.Context, arg UpdateDownstreamParams) error
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) error
+	UpdateKeywordRule(ctx context.Context, arg UpdateKeywordRuleParams) error
+	UpdateKeywordTarget(ctx context.Context, arg UpdateKeywordTargetParams) error
 	UpdateSystem(ctx context.Context, arg UpdateSystemParams) error
 	UpdateSystemBlacklists(ctx context.Context, arg UpdateSystemBlacklistsParams) error
 	UpdateSystemOrder(ctx context.Context, arg UpdateSystemOrderParams) error

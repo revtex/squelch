@@ -49,6 +49,7 @@ import (
 	"github.com/revtex/squelch/internal/handler/routes"
 	streamhandler "github.com/revtex/squelch/internal/handler/stream"
 	"github.com/revtex/squelch/internal/ipblock"
+	"github.com/revtex/squelch/internal/keywordalert"
 	"github.com/revtex/squelch/internal/logging"
 	"github.com/revtex/squelch/internal/middleware"
 	"github.com/revtex/squelch/internal/secrets"
@@ -914,6 +915,8 @@ func (p *program) run() {
 	dsService.Start(ctx)
 	whService := webhook.NewService(queries, cfg.EncryptionKey, config.Version)
 	whService.Start(ctx)
+	kaService := keywordalert.NewService(queries, cfg.EncryptionKey, config.Version)
+	kaService.Start(ctx)
 	// Every accepted call goes to both forwarding services.
 	forwarders := callFanout{dsService, whService}
 
@@ -934,6 +937,7 @@ func (p *program) run() {
 		LegacyUsage:       middleware.DefaultLegacyUsageStore,
 		Downstreams:       dsService,
 		Webhooks:          whService,
+		KeywordAlerts:     kaService,
 		MaskTester:        dirmonitor.ParseMask,
 	})
 	// Every live connection — listener and admin sockets, audio streams —
@@ -1039,7 +1043,7 @@ func (p *program) run() {
 	}()
 
 	// Start transcription result consumer (stores results in DB, broadcasts TRN).
-	go consumeTranscriptionResults(ctx, queries, hub, transcriberMgr)
+	go consumeTranscriptionResults(ctx, queries, hub, transcriberMgr, kaService)
 
 	routes.RegisterRoutes(router, routes.Deps{
 		Queries:            queries,
@@ -1310,7 +1314,7 @@ func formatTRMqttErr(err error) string {
 
 // consumeTranscriptionResults reads completed transcription jobs, stores them
 // in the database, and broadcasts TRN events to WebSocket clients.
-func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *ws.Hub, mgr *audio.TranscriberManager) {
+func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *ws.Hub, mgr *audio.TranscriberManager, alerts *keywordalert.Service) {
 	recorder := admin.TranscriptionJobRecorder{Queries: queries, Events: hub}
 	for {
 		select {
@@ -1362,6 +1366,26 @@ func consumeTranscriptionResults(ctx context.Context, queries *db.Queries, hub *
 				continue
 			}
 			hub.BroadcastTRN(res.CallID, call.SystemID, call.TalkgroupID.Int64, res.Result.Text, res.Result.Segments)
+
+			if alerts != nil {
+				meta := keywordalert.CallMeta{
+					CallID:      call.ID,
+					SystemID:    call.SystemID,
+					TalkgroupID: call.TalkgroupID.Int64,
+				}
+				if sys, err := queries.GetSystem(ctx, call.SystemID); err == nil {
+					meta.SystemLabel = sys.Label
+				}
+				if call.TalkgroupID.Valid {
+					if tg, err := queries.GetTalkgroup(ctx, call.TalkgroupID.Int64); err == nil {
+						meta.TalkgroupNumber = tg.TalkgroupID
+						if tg.Label.Valid {
+							meta.TalkgroupLabel = tg.Label.String
+						}
+					}
+				}
+				alerts.Evaluate(ctx, meta, res.Result.Text)
+			}
 		}
 	}
 }
