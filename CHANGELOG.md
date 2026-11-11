@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Keyword alert "Try a transcript" finds matches on scoped rules.** Match
+  was sending system and talkgroup `0`, so rules limited to real systems or
+  talkgroups never matched in the admin dry-run. Pattern checks now ignore
+  scope when those ids are unset; live alerts still honour the scope.
+
 - **Transcription comes back by itself after a go-whisper outage.** If
   go-whisper did not answer when the server started, or when transcription
   settings were saved, transcription turned off until an admin saved the

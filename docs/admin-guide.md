@@ -376,7 +376,7 @@ The page has two tabs: **Rules** and **Targets**.
 
 ### Rules
 
-A rule has a **label**, one or more **patterns** (one per line — digit forms like `413` and spoken forms like `four thirteen` both work), optional **systems** and **talkgroups** (none means all), a **cooldown** in seconds so the same talkgroup and rule do not fire again immediately, and an **Enabled** switch. **Try a transcript** runs the active rules against sample text without sending anything.
+A rule has a **label**, one or more **patterns** (one per line — digit forms like `413` and spoken forms like `four thirteen` both work), optional **systems** and **talkgroups** (none means all), a **cooldown** in seconds so the same talkgroup and rule do not fire again immediately, and an **Enabled** switch. **Try a transcript** checks patterns only (it ignores system and talkgroup scope) and does not send anything.
 
 ### Targets
 

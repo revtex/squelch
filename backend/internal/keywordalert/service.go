@@ -197,13 +197,16 @@ func (s *Service) Test(ctx context.Context, targetID int64) (delivery.Result, er
 }
 
 // DryRun reports which rule labels would match text for the given scope.
+// systemID and talkgroupID both zero means "patterns only" — used by the
+// admin Try-a-transcript control, which does not pick a system or talkgroup.
 func (s *Service) DryRun(systemID, talkgroupID int64, text string) []string {
 	s.mu.RLock()
 	rules := append([]db.KeywordRule(nil), s.rules...)
 	s.mu.RUnlock()
+	skipScope := systemID == 0 && talkgroupID == 0
 	var labels []string
 	for _, rule := range rules {
-		if !ruleApplies(rule, systemID, talkgroupID) {
+		if !skipScope && !ruleApplies(rule, systemID, talkgroupID) {
 			continue
 		}
 		patterns, err := parseStringSlice(rule.PatternsJson)
