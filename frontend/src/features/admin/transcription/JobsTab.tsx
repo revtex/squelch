@@ -12,7 +12,7 @@ import {
   type Column,
 } from "@/features/admin/_shell";
 import type { TranscriptionJob, TranscriptionJobStatus } from "@/types";
-import { JOB_STATUS_LABEL, formatSecs, jobTitle } from "./transcription";
+import { JOB_STATUS_LABEL, formatSecs, isRetryableJob, jobTitle } from "./transcription";
 
 export interface JobsTabProps {
   initialFilter: TranscriptionJobStatus | "all";
@@ -34,7 +34,7 @@ function statusBadge(j: TranscriptionJob) {
   return <span className={`badge ${tone[j.status]}`}>{JOB_STATUS_LABEL[j.status]}</span>;
 }
 
-/** What happened to recent calls, with a retry for the ones that failed. */
+/** What happened to recent calls, with a retry for failures and stuck queued ones. */
 export default function JobsTab({ initialFilter, failed24h, queued, transcribing, onChanged }: JobsTabProps) {
   const toast = useToast();
   const hour12 = useHour12();
@@ -58,7 +58,7 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
     }
   };
 
-  const retryable = rows.filter((j) => j.status === "failed" || j.status === "skipped");
+  const retryable = rows.filter((j) => isRetryableJob(j));
   const columns: Column<TranscriptionJob>[] = [
     { id: "call", header: "Call", phone: "title", sortValue: jobTitle, cell: (j) => <span className="font-medium">{jobTitle(j)}</span> },
     { id: "when", header: "When", phone: "show", sortValue: (j) => j.callTime, cell: (j) => formatWhen(j.callTime, { hour12 }) },
@@ -81,12 +81,18 @@ export default function JobsTab({ initialFilter, failed24h, queued, transcribing
       align: "right",
       phone: "show",
       cell: (j) =>
-        j.status === "failed" || j.status === "skipped" ? (
+        isRetryableJob(j) ? (
           <button
             type="button"
             className="btn btn-sm btn-ghost"
             disabled={busy != null || !transcribing}
-            title={transcribing ? undefined : "Turn transcription on first"}
+            title={
+              !transcribing
+                ? "Turn transcription on first"
+                : j.status === "queued"
+                  ? "Queued for over 15 minutes — send again"
+                  : undefined
+            }
             onClick={() => void doRetry([j.callId], j.callId)}
           >
             Retry

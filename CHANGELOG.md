@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stuck queued transcriptions can be retried from the Jobs page.** Failed
+  and skipped calls already had a Retry button; a call that stayed
+  `queued` (for example after an enqueue was cancelled while Whisper was
+  busy) did not, even though the same retry operation works for it. Queued
+  jobs older than 15 minutes now show Retry, including in the bulk action,
+  so fresh waiting calls are left alone.
 - **Transcription comes back by itself after a go-whisper outage.** If
   go-whisper did not answer when the server started, or when transcription
   settings were saved, transcription turned off until an admin saved the

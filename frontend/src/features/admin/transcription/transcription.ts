@@ -130,6 +130,16 @@ export const JOB_STATUS_LABEL: Record<TranscriptionJobStatus, string> = {
   skipped: "skipped",
 };
 
+/** Queued jobs older than this are treated as stuck and can be retried. */
+export const STUCK_QUEUED_AFTER_SEC = 15 * 60;
+
+/** Failed and skipped always; queued only after it has sat long enough to look stuck. */
+export function isRetryableJob(j: TranscriptionJob, nowSec = Math.floor(Date.now() / 1000)): boolean {
+  if (j.status === "failed" || j.status === "skipped") return true;
+  if (j.status === "queued") return nowSec - j.createdAt >= STUCK_QUEUED_AFTER_SEC;
+  return false;
+}
+
 /** The queue's direction, from two readings a few seconds apart. */
 export function queueTrend(now: number, before: number | null): "growing" | "shrinking" | "steady" {
   if (before == null || now === before) return "steady";

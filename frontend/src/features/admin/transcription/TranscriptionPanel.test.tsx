@@ -119,6 +119,8 @@ describe("TranscriptionPanel", () => {
       { callId: 1, status: "failed", error: "sidecar timed out", model: "ggml-small.en-tdrz", durationMs: 30000, createdAt: now - 60, finishedAt: now - 30, callTime: now - 120, callDurationMs: 48000, systemLabel: "Lake", talkgroupNumber: 101, talkgroupLabel: "LCSO Disp" },
       { callId: 2, status: "done", error: "", model: "ggml-small.en-tdrz", durationMs: 1700, createdAt: now - 50, finishedAt: now - 48, callTime: now - 100, callDurationMs: 6000, systemLabel: "Lake", talkgroupNumber: 102, talkgroupLabel: "LC FD Disp" },
       { callId: 3, status: "skipped", error: "shorter than 1.0 s", model: "ggml-small.en-tdrz", durationMs: 0, createdAt: now - 40, finishedAt: now - 40, callTime: now - 90, callDurationMs: 800, systemLabel: "Lake", talkgroupNumber: null, talkgroupLabel: "" },
+      { callId: 4, status: "queued", error: "", model: "ggml-small.en-tdrz", durationMs: 0, createdAt: now - 30, finishedAt: null, callTime: now - 40, callDurationMs: 5000, systemLabel: "Lake", talkgroupNumber: 103, talkgroupLabel: "Waiting" },
+      { callId: 5, status: "queued", error: "", model: "ggml-small.en-tdrz", durationMs: 0, createdAt: now - 20 * 60, finishedAt: null, callTime: now - 21 * 60, callDurationMs: 9000, systemLabel: "Lake", talkgroupNumber: 104, talkgroupLabel: "Stuck Queue" },
     ];
   });
 
@@ -249,6 +251,27 @@ describe("TranscriptionPanel", () => {
     const all = screen.getByRole("table", { name: "Recent transcription jobs" });
     expect(within(all).getByText("Lake · 0:01")).toBeInTheDocument();
     expect(within(all).getByText("shorter than 1.0 s")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry 2 calls" })).toBeInTheDocument();
+    // failed + skipped + stuck queued (not the fresh queued row)
+    expect(screen.getByRole("button", { name: "Retry 3 calls" })).toBeInTheDocument();
+    const fresh = within(all).getByText("Waiting · 0:05").closest("tr")!;
+    expect(within(fresh).queryByRole("button", { name: "Retry" })).toBeNull();
+    const stuck = within(all).getByText("Stuck Queue · 0:09").closest("tr")!;
+    expect(within(stuck).getByRole("button", { name: "Retry" })).toHaveAttribute(
+      "title",
+      "Queued for over 15 minutes — send again",
+    );
+  });
+
+  it("retries a stuck queued job from the Queued filter", async () => {
+    const user = userEvent.setup();
+    ops.retry.mockResolvedValue({ ok: true, retried: 1 });
+    renderPanel("/admin/transcription?tab=jobs&status=queued");
+    const table = screen.getByRole("table", { name: "Recent transcription jobs" });
+    expect(within(table).getByText("Waiting · 0:05")).toBeInTheDocument();
+    expect(within(table).getByText("Stuck Queue · 0:09")).toBeInTheDocument();
+    expect(within(table).queryByRole("button", { name: "Retry 2 calls" })).toBeNull();
+    const stuck = within(table).getByText("Stuck Queue · 0:09").closest("tr")!;
+    await user.click(within(stuck).getByRole("button", { name: "Retry" }));
+    expect(ops.retry).toHaveBeenCalledWith({ callId: 5 });
   });
 });
