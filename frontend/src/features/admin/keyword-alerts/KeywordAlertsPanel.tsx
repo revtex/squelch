@@ -25,6 +25,8 @@ import SystemsPicker from "@/features/admin/forwarding/SystemsPicker";
 import type {
   AdminKeywordRule,
   AdminKeywordTarget,
+  AdminSystem,
+  AdminTalkgroup,
   KeywordTargetType,
 } from "@/types";
 
@@ -263,7 +265,7 @@ export default function KeywordAlertsPanel() {
     <div className="space-y-4">
       <PageHeader
         title="Keyword alerts"
-        description="After a call is transcribed, match terms and post to Slack, a display, or any URL."
+        subtitle="After a call is transcribed, match terms and post to Slack, a display, or any URL."
       />
       <div className="flex flex-wrap items-center gap-2">
         <FilterChips
@@ -412,8 +414,8 @@ function RuleForm({
   onSave,
 }: {
   initial: AdminKeywordRule | null;
-  systems: { id: number; label: string; order: number }[];
-  talkgroups: { id: number; systemId: number; talkgroupId: number; label: string | null }[];
+  systems: AdminSystem[];
+  talkgroups: AdminTalkgroup[];
   busy: boolean;
   onCancel: () => void;
   onSave: (v: {
